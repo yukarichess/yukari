@@ -2,7 +2,7 @@ use std::io::{self};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use yukari::engine::{TimeControl, TimeMode};
-use yukari::{Search, self};
+use yukari::{self, Search, is_repetition_draw};
 use yukari_movegen::{Board, Move, Square, Zobrist};
 use tinyvec::ArrayVec;
 
@@ -88,8 +88,9 @@ impl Yukari {
         let mut s = Search::new(Some(stop_after), &self.zobrist);
         // clone another to use inside the loop
         // Use a seperate backing data to record the current move set
+        let mut depth = 1;
         let mut pv: ArrayVec<[Move; 32]> = ArrayVec::new();
-        for depth in 0..=20 {
+        while depth < 20 {
             pv.set_len(0);
             // FIXME: We want to search one depth without time controls
             let score = s.search_root(&self.board, depth, &mut pv, &mut self.keystack);
@@ -111,10 +112,15 @@ impl Yukari {
                 print!("{} ", m);
             }
             println!();
+            depth += 1;
         }
         println!(
             "# QS: {:.3}%",
             (100 * s.qnodes()) as f64 / (s.nodes() as f64 + s.qnodes() as f64)
+        );
+        println!(
+            "# Branching factor: {:.3}",
+            ((s.nodes() + s.qnodes()) as f64).powf(1.0 / depth as f64)
         );
         self.tc.increment_moves();
     }
@@ -147,7 +153,7 @@ fn main() -> io::Result<()> {
                 // v1 won't send this anyway and we need v2
                 assert_eq!(args, "2");
                 // Do features individually
-                println!("feature myname=\"Yukari 17072021\"");
+                println!("feature myname=\"Yukari 20072021\"");
                 // No signals support
                 println!("feature sigint=0 sigterm=0");
                 // Don't currently understand enough to reuse the engine for next game
@@ -171,7 +177,7 @@ fn main() -> io::Result<()> {
             // Hard would turn on thinking during opponent's time, easy would turn it off
             // we don't do it, so it's unimportant
             "hard" | "easy" => {}
-            "quit" => { todo!("Quit is not finished") },
+            "quit" => { break; },
             // Feature replies are just ignored since we don't turn anything off yet
             // TODO: Handle rejects we can't tolerate and abort early
             "accepted" | "rejected" => {},
@@ -200,9 +206,12 @@ fn main() -> io::Result<()> {
                 // Choose the top move
                 let m = pv[0];
                 // We must actually make the move locally too
-                engine.keystack.push(engine.board.hash());
                 engine.board = engine.board.make(m, &engine.zobrist);
                 println!("move {}", m);
+                if is_repetition_draw(&engine.keystack, engine.board.hash()) {
+                    println!("1/2-1/2 {{Draw by repetition}}");
+                }
+                engine.keystack.push(engine.board.hash());
             }
             "force" => engine.mode = Mode::Force,
             _ => {
@@ -216,8 +225,11 @@ fn main() -> io::Result<()> {
                         Mode::Normal => {
                             // Find the move in the list
                             let m = engine.find_move(from, dest).expect("Attempted move not found!?");
-                            engine.keystack.push(engine.board.hash());
                             engine.board = engine.board.make(m, &engine.zobrist);
+                            if is_repetition_draw(&engine.keystack, engine.board.hash()) {
+                                println!("1/2-1/2 {{Draw by repetition}}");
+                            }
+                            engine.keystack.push(engine.board.hash());
                             // Find the next move to make
                             // TODO: Cleanups
                             let pv: [Move; 32] = [Move::default(); 32];
@@ -228,13 +240,19 @@ fn main() -> io::Result<()> {
                             let m = pv[0];
                             // We must actually make the move locally too
                             engine.board = engine.board.make(m, &engine.zobrist);
-                            engine.keystack.push(engine.board.hash());
                             println!("move {}", m);
+                            if is_repetition_draw(&engine.keystack, engine.board.hash()) {
+                                println!("1/2-1/2 {{Draw by repetition}}");
+                            }
+                            engine.keystack.push(engine.board.hash());
                         }
                         Mode::Force => {
                             let m = engine.find_move(from, dest).expect("Attempted move not found!?");
-                            engine.keystack.push(engine.board.hash());
                             engine.board = engine.board.make(m, &engine.zobrist);
+                            if is_repetition_draw(&engine.keystack, engine.board.hash()) {
+                                println!("1/2-1/2 {{Draw by repetition}}");
+                            }
+                            engine.keystack.push(engine.board.hash());
                         }
                     }
                 } else {
@@ -244,4 +262,5 @@ fn main() -> io::Result<()> {
             }
         }
     }
+    Ok(())
 }

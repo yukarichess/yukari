@@ -6,4 +6,5 @@ mod tune;
 pub mod engine;
 
 pub use search::Search;
+pub use search::is_repetition_draw;
 pub use tune::Tune;

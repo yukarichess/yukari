@@ -371,12 +371,12 @@ impl Board {
                     let rook_from = m.dest.east().unwrap();
                     let rook_to = m.dest.west().unwrap();
                     b.data.move_piece(rook_from, rook_to);
-                    b.hash ^= zobrist.piece[b.side as usize][Piece::Rook as usize][rook_from.into_inner() as usize] ^ zobrist.piece[b.side as usize][Piece::Rook as usize][rook_from.into_inner() as usize];
+                    b.hash ^= zobrist.piece[b.side as usize][Piece::Rook as usize][rook_from.into_inner() as usize] ^ zobrist.piece[b.side as usize][Piece::Rook as usize][rook_to.into_inner() as usize];
                 } else {
                     let rook_from = m.dest.west().unwrap().west().unwrap();
                     let rook_to = m.dest.east().unwrap();
                     b.data.move_piece(rook_from, rook_to);
-                    b.hash ^= zobrist.piece[b.side as usize][Piece::Rook as usize][rook_from.into_inner() as usize] ^ zobrist.piece[b.side as usize][Piece::Rook as usize][rook_from.into_inner() as usize];
+                    b.hash ^= zobrist.piece[b.side as usize][Piece::Rook as usize][rook_from.into_inner() as usize] ^ zobrist.piece[b.side as usize][Piece::Rook as usize][rook_to.into_inner() as usize];
                 }
                 b.data.move_piece(m.from, m.dest);
                 b.hash ^= zobrist.piece[b.side as usize][Piece::King as usize][m.from.into_inner() as usize] ^ zobrist.piece[b.side as usize][Piece::King as usize][m.dest.into_inner() as usize];

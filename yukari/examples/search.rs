@@ -37,4 +37,12 @@ fn main() {
         "# QS: {:.3}%",
         (100 * s.qnodes()) as f64 / (s.nodes() as f64 + s.qnodes() as f64)
     );
+    println!(
+        "# Branching factor: {:.3}",
+        ((s.nodes() + s.qnodes()) as f64).powf(0.1)
+    );
+    println!(
+        "# Nullmove success: {:.3}%",
+        s.nullmove_success()
+    );
 }

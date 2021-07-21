@@ -264,12 +264,12 @@ impl<'a> Tune<'a> {
 
         print!("mat_mg: [");
         for (index, w) in self.weights[0..6].iter().enumerate() {
-            print!("{:>4.0}, ", w.value() + mean_mg[index]);
+            print!("{:>4.0}, ", w.value());
         }
         println!("],");
         print!("mat_eg: [");
         for (index, w) in self.weights[6..12].iter().enumerate() {
-            print!("{:>4.0}, ", w.value() + mean_eg[index]);
+            print!("{:>4.0}, ", w.value());
         }
         println!("],");
         println!("pst_mg: [");
@@ -278,7 +278,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[12+rank*8..20+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_mg[0]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -288,7 +288,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[75+rank*8..83+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_mg[1]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -298,7 +298,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[139+rank*8..147+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_mg[2]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -308,7 +308,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[203+rank*8..211+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_mg[3]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -318,7 +318,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[267+rank*8..275+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_mg[4]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -328,7 +328,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[331+rank*8..339+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_mg[5]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -340,7 +340,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[395+rank*8..403+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_eg[0]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -350,7 +350,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[459+rank*8..467+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_eg[1]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -360,7 +360,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[523+rank*8..531+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_eg[2]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -370,7 +370,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[587+rank*8..595+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_eg[3]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -380,7 +380,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[651+rank*8..659+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_eg[4]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -390,7 +390,7 @@ impl<'a> Tune<'a> {
         for rank in 0_usize..8 {
             print!("        ");
             for w in &self.weights[715+rank*8..723+rank*8] {
-                print!("{:>4.0}, ", w.value() - mean_eg[5]);
+                print!("{:>4.0}, ", w.value());
             }
             println!();
         }
@@ -428,7 +428,11 @@ impl<'a> Tune<'a> {
         let mut last_pv = ArrayVec::new();
         last_pv.set_len(0);
 
-        scores.push(eval.gradient(&board, tape));
+        let mut score = eval.gradient(&board, tape);
+        if board.side() == Colour::Black {
+            score = -score;
+        }
+        scores.push(score);
         diffs.push(tape.var(0.0));
 
         for _position in 0..12 {
@@ -446,22 +450,23 @@ impl<'a> Tune<'a> {
                 pv_board = pv_board.make(m, zobrist);
             }
 
-            if pv.is_empty() {
+            let mut score = if pv.is_empty() {
                 match score.cmp(&0) {
-                    Ordering::Less => scores.push(tape.var(-1.0)),
-                    Ordering::Equal => scores.push(tape.var(0.0)),
-                    Ordering::Greater => scores.push(tape.var(1.0)),
+                    Ordering::Less => tape.var(-1.0),
+                    Ordering::Equal => tape.var(0.0),
+                    Ordering::Greater => tape.var(1.0),
                 }
             } else {
-                let mut score = eval.gradient(&pv_board, tape);
-                if board.side() == Colour::Black {
-                    score = -score;
-                }
-                scores.push(score);
+                eval.gradient(&pv_board, tape)
+            };
+
+            if board.side() == Colour::Black {
+                score = -score;
             }
+            scores.push(score);
 
             let diff = scores[scores.len() - 2] - scores[scores.len() - 1];
-            if diff.value() > 0.0 && !last_pv.is_empty() && pv[0] != last_pv[1] {
+            if diff.value() > 0.0 && !pv.is_empty() && !last_pv.is_empty() && pv[0] != last_pv[1] {
                 // Last move was a blunder; don't learn from it.
                 diffs.push(tape.var(0.0));
             } else {

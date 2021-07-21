@@ -7,10 +7,17 @@ use crate::eval::{Eval, EvalState};
 
 const MATE_VALUE: i32 = 10_000;
 
+// TODO: when 50-move rule is implemented, this can be limited to searching from the last irreversible move.
+pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
+    keystack.iter().filter(|key| **key == hash).count() >= 3
+}
+
 pub struct Search<'a> {
     eval: Eval,
     nodes: u64,
     qnodes: u64,
+    nullmove_attempts: u64,
+    nullmove_success: u64,
     stop_after: Option<Instant>,
     zobrist: &'a Zobrist,
 }
@@ -21,6 +28,8 @@ impl<'a> Search<'a> {
             eval: Eval::new(),
             nodes: 0,
             qnodes: 0,
+            nullmove_attempts: 0,
+            nullmove_success: 0,
             stop_after,
             zobrist,
         }
@@ -74,7 +83,10 @@ impl<'a> Search<'a> {
             let score = -self.search(&board, depth - 1 - R, -beta, -beta + 1, eval, &mut child_pv, mate, keystack);
             keystack.pop();
 
+            self.nullmove_attempts += 1;
+
             if score >= beta {
+                self.nullmove_success += 1;
                 return beta;
             }
         }
@@ -95,7 +107,7 @@ impl<'a> Search<'a> {
         }
 
         // Is this a repetition draw?
-        if keystack.iter().filter(|hash| **hash == board.hash()).count() >= 2 {
+        if is_repetition_draw(keystack, board.hash()) {
             pv.set_len(0);
             return 0;
         }
@@ -151,6 +163,10 @@ impl<'a> Search<'a> {
 
     pub fn qnodes(&self) -> u64 {
         self.qnodes
+    }
+
+    pub fn nullmove_success(&self) -> f64 {
+        100.0 * (self.nullmove_success as f64) / (self.nullmove_attempts as f64)
     }
 
     pub fn from_tuning_weights(&mut self, weights: &[i32]) {
