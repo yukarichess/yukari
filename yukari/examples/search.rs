@@ -38,7 +38,9 @@ fn main() {
         (100 * s.qnodes()) as f64 / (s.nodes() as f64 + s.qnodes() as f64)
     );
     println!(
-        "# Branching factor: {:.3}",
+        "# Branching factor: {:.3} (AB); {:.3} (QS); {:.3} overall",
+        (s.nodes() as f64).powf(0.1),
+        (s.qnodes() as f64).powf(0.1),
         ((s.nodes() + s.qnodes()) as f64).powf(0.1)
     );
     println!(

@@ -973,6 +973,10 @@ impl Board {
     pub fn generate_captures_incremental<F: FnMut(Move) -> bool>(&self, mut f: F) {
         let pininfo = self.discover_pinned_pieces();
 
+        let mut minor_mask = Bitlist::new();
+        let mut rook_mask = Bitlist::new();
+        let mut queen_mask = Bitlist::new();
+
         let mut try_move = |from: Square,
         dest: Square,
         kind: MoveType,
@@ -993,7 +997,7 @@ impl Board {
             f(Move::new(from, dest, kind, promotion_piece))
         };
 
-        let mut find_attackers = |dest: Square| -> bool {
+        let mut find_attackers = |dest: Square, victim_type: Piece, minor_mask: Bitlist, rook_mask: Bitlist, queen_mask: Bitlist| -> bool {
             let attacks = self.data.attacks_to(dest, self.side);
             for capturer in attacks & self.data.pawns() {
                 let from = self.data.square_of_piece(capturer);
@@ -1008,7 +1012,6 @@ impl Board {
                         return false;
                     }
                     if !try_move(
-
                         from,
                         dest,
                         MoveType::CapturePromotion,
@@ -1018,7 +1021,6 @@ impl Board {
                         return false;
                     }
                     if !try_move(
-
                         from,
                         dest,
                         MoveType::CapturePromotion,
@@ -1028,7 +1030,6 @@ impl Board {
                         return false;
                     }
                     if !try_move(
-
                         from,
                         dest,
                         MoveType::CapturePromotion,
@@ -1037,31 +1038,37 @@ impl Board {
                     ) {
                         return false;
                     }
-                } else if !try_move( from, dest, MoveType::Capture, None, &pininfo) {
+                } else if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
                     return false;
                 }
             }
-            for capturer in attacks & self.data.knights() {
+            for capturer in attacks & (self.data.knights() | self.data.bishops()) {
                 let from = self.data.square_of_piece(capturer);
-                if !try_move( from, dest, MoveType::Capture, None, &pininfo) {
-                    return false;
+                if victim_type < Piece::Bishop && !(self.data.attacks_to(dest, !self.side) & minor_mask).empty() {
+                    // This is a bad capture.
+                    continue;
                 }
-            }
-            for capturer in attacks & self.data.bishops() {
-                let from = self.data.square_of_piece(capturer);
-                if !try_move( from, dest, MoveType::Capture, None, &pininfo) {
+                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
                     return false;
                 }
             }
             for capturer in attacks & self.data.rooks() {
                 let from = self.data.square_of_piece(capturer);
-                if !try_move( from, dest, MoveType::Capture, None, &pininfo) {
+                if victim_type < Piece::Rook && !(self.data.attacks_to(dest, !self.side) & rook_mask).empty() {
+                    // This is a bad capture.
+                    continue;
+                }
+                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
                     return false;
                 }
             }
             for capturer in attacks & self.data.queens() {
                 let from = self.data.square_of_piece(capturer);
-                if !try_move( from, dest, MoveType::Capture, None, &pininfo) {
+                if victim_type < Piece::Queen && !(self.data.attacks_to(dest, !self.side) & queen_mask).empty() {
+                    // This is a bad capture.
+                    continue;
+                }
+                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
                     return false;
                 }
             }
@@ -1071,35 +1078,43 @@ impl Board {
                     // Moving into check is illegal.
                     continue;
                 }
-                if !try_move( from, dest, MoveType::Capture, None, &pininfo) {
+                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
                     return false;
                 }
             }
             true
         };
 
+        minor_mask |= self.data.pieces_of_colour(!self.side) & self.data.pawns();
+        rook_mask |= self.data.pieces_of_colour(!self.side) & self.data.pawns();
+        queen_mask |= self.data.pieces_of_colour(!self.side) & self.data.pawns();
+
         for victim in self.data.pieces_of_colour(!self.side) & self.data.queens() {
-            if !find_attackers(self.square_of_piece(victim)) {
+            if !find_attackers(self.square_of_piece(victim), Piece::Queen, minor_mask, rook_mask, queen_mask) {
                 return;
             }
         }
+
+        queen_mask |= self.data.pieces_of_colour(!self.side) & (self.data.knights() | self.data.bishops());
+
         for victim in self.data.pieces_of_colour(!self.side) & self.data.rooks() {
-            if !find_attackers(self.square_of_piece(victim)) {
+            if !find_attackers(self.square_of_piece(victim), Piece::Rook, minor_mask, rook_mask, queen_mask) {
                 return;
             }
         }
-        for victim in self.data.pieces_of_colour(!self.side) & self.data.bishops() {
-            if !find_attackers(self.square_of_piece(victim)) {
+
+        queen_mask |= self.data.pieces_of_colour(!self.side) & self.data.rooks();
+
+        for victim in self.data.pieces_of_colour(!self.side) & (self.data.knights() | self.data.bishops()) {
+            if !find_attackers(self.square_of_piece(victim), Piece::Bishop, minor_mask, rook_mask, queen_mask) {
                 return;
             }
         }
-        for victim in self.data.pieces_of_colour(!self.side) & self.data.knights() {
-            if !find_attackers(self.square_of_piece(victim)) {
-                return;
-            }
-        }
+
+        rook_mask |= self.data.pieces_of_colour(!self.side) & (self.data.knights() | self.data.bishops());
+
         for victim in self.data.pieces_of_colour(!self.side) & self.data.pawns() {
-            if !find_attackers(self.square_of_piece(victim)) {
+            if !find_attackers(self.square_of_piece(victim), Piece::Pawn, minor_mask, rook_mask, queen_mask) {
                 return;
             }
         }
