@@ -213,9 +213,14 @@ impl BoardData {
                 }
             }
 
-            for dest in Square16x8::from_square(square).ray_attacks(dir) {
-                update(bitlist, dest);
-                if index[dest].is_some() {
+            let mut sq = square.travel(dir);
+
+            let mut iters = 0;
+            while let Some(square) = sq {
+                update(bitlist, square);
+                sq = square.travel(dir).filter(|_| index[square].is_none());
+                iters += 1;
+                if iters > 6 {
                     break;
                 }
             }

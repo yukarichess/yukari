@@ -1,4 +1,4 @@
-# Chapter 1: Board Representation
+# Chapter 1, Part 1: Board Representation
 
 > I would like to thank:
 > - Andrew Tridgell for [his post](https://groups.google.com/g/rec.games.chess.computer/c/g0-jwnP6__4/m/1AyOjo4ybE0J) about how KnightCap's board representation works.
