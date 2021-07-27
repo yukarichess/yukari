@@ -1,11 +1,8 @@
-use std::{cmp::Ordering, convert::TryInto};
+use std::convert::TryInto;
 
-use yukari_movegen::{Board, Colour, Move, Piece, Square, Zobrist};
-use rand::prelude::*;
-use revad::tape::{Grad, Tape, Var};
-use tinyvec::ArrayVec;
-
-use crate::Search;
+use yukari_movegen::{Board, Colour, Piece, Square};
+use revad::tape::{Tape, Var};
+use argmin::{prelude::*, solver::{linesearch::{ArmijoCondition, BacktrackingLineSearch, MoreThuenteLineSearch}, quasinewton::LBFGS}};
 
 #[derive(Clone)]
 pub struct EvalState<'a> {
@@ -34,19 +31,17 @@ impl<'a> EvalState<'a> {
 
     pub fn add_piece(&mut self, eval: &'a Eval, piece: Piece, square: Square, colour: Colour) {
         if colour == Colour::White {
-            self.pst_mg = self.pst_mg + eval.pst_mg[piece as usize][square.into_inner() as usize] + eval.mat_mg[piece as usize];
-            self.pst_eg = self.pst_eg + eval.pst_eg[piece as usize][square.into_inner() as usize] + eval.mat_eg[piece as usize];
+            self.pst_mg = self.pst_mg + eval.pst_mg[piece as usize][square.into_inner() as usize];
+            self.pst_eg = self.pst_eg + eval.pst_eg[piece as usize][square.into_inner() as usize];
         } else {
-            self.pst_mg = self.pst_mg - eval.pst_mg[piece as usize][square.flip().into_inner() as usize] - eval.mat_mg[piece as usize];
-            self.pst_eg = self.pst_eg - eval.pst_eg[piece as usize][square.flip().into_inner() as usize] - eval.mat_eg[piece as usize];
+            self.pst_mg = self.pst_mg - eval.pst_mg[piece as usize][square.flip().into_inner() as usize];
+            self.pst_eg = self.pst_eg - eval.pst_eg[piece as usize][square.flip().into_inner() as usize];
         }
         self.phase = self.phase + eval.phase[piece as usize];
     }
 }
 
 pub struct Eval<'a> {
-    pub mat_mg: [Var<'a>; 6],
-    pub mat_eg: [Var<'a>; 6],
     pub pst_mg: [[Var<'a>; 64]; 6],
     pub pst_eg: [[Var<'a>; 64]; 6],
     pub phase: [Var<'a>; 6],
@@ -55,35 +50,33 @@ pub struct Eval<'a> {
 impl<'a> Eval<'a> {
     pub fn from_tuning_weights(tape: &'a Tape, weights: &'a [Var<'a>]) -> Self {
         Self {
-            mat_mg: weights[0..=5].try_into().unwrap(),
-            mat_eg: weights[6..=11].try_into().unwrap(),
             pst_mg: [
                 // Pawn
-                weights[11..75].try_into().unwrap(),
+                weights[0..64].try_into().unwrap(),
                 // Knight
-                weights[75..139].try_into().unwrap(),
+                weights[64..128].try_into().unwrap(),
                 // Bishop
-                weights[139..203].try_into().unwrap(),
+                weights[128..192].try_into().unwrap(),
                 // Rook
-                weights[203..267].try_into().unwrap(),
+                weights[192..256].try_into().unwrap(),
                 // Queen
-                weights[267..331].try_into().unwrap(),
+                weights[256..320].try_into().unwrap(),
                 // King
-                weights[331..395].try_into().unwrap()
+                weights[320..384].try_into().unwrap()
             ],
             pst_eg: [
                 // Pawn
-                weights[395..459].try_into().unwrap(),
+                weights[384..448].try_into().unwrap(),
                 // Knight
-                weights[459..523].try_into().unwrap(),
+                weights[448..512].try_into().unwrap(),
                 // Bishop
-                weights[523..587].try_into().unwrap(),
+                weights[512..576].try_into().unwrap(),
                 // Rook
-                weights[587..651].try_into().unwrap(),
+                weights[576..640].try_into().unwrap(),
                 // Queen
-                weights[651..715].try_into().unwrap(),
+                weights[640..704].try_into().unwrap(),
                 // King
-                weights[715..779].try_into().unwrap()
+                weights[704..768].try_into().unwrap()
             ],
             phase: [tape.var(0.0), tape.var(1.0), tape.var(1.0), tape.var(2.0), tape.var(4.0), tape.var(0.0)]
         }
@@ -101,422 +94,103 @@ impl<'a> Eval<'a> {
     }
 }
 
-pub struct Tune<'a> {
-    learning_rate: f64,
-    weights: [Var<'a>; 780]
+#[derive(Clone)]
+pub struct Tune {
+    boards: Vec<(Board, f64)>,
 }
 
-impl<'a> Tune<'a> {
-    pub fn new(tape: &'a Tape) -> Self {
-        let weights = [
-            // Midgame Material
-            tape.var(100_f64), tape.var(300_f64), tape.var(300_f64), tape.var(500_f64), tape.var(900_f64),  tape.var(0_f64),
-            // Endgame Material
-            tape.var(100_f64), tape.var(300_f64), tape.var(300_f64), tape.var(500_f64),  tape.var(900_f64),  tape.var(0_f64),
-            // Midgame PST
-                // Pawns
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Knights
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Bishops
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Rooks
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Queens
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Kings
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-            // Endgame PST
-                // Pawns
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Knights
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Bishops
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Rooks
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Queens
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                // Kings
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-                tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0), tape.var(0.0),
-            // Phase
-            //tape.var(0_f64), tape.var(1_f64), tape.var(1_f64), tape.var(2_f64), tape.var(4_f64), tape.var(0_f64),
-        ];
+impl ArgminOp for Tune {
+    type Param = Vec<f64>;
 
+    type Output = f64;
+
+    type Hessian = Vec<Vec<f64>>;
+
+    type Jacobian = ();
+
+    type Float = f64;
+
+    fn apply(&self, param: &Self::Param) -> Result<Self::Output, Error> {
+        let tape = Tape::new();
+
+        let mut weights = Vec::with_capacity(param.len());
+
+        for param in param {
+            weights.push(tape.var(*param));
+        }
+
+        let eval = Eval::from_tuning_weights(&tape, &weights);
+        let size = 1.0 / self.boards.len() as f64;
+
+        let mut loss = 0.0;
+
+        for (board, result) in &self.boards {
+            let eval = eval.gradient(board, &tape).value();
+            let diff = eval - *result;
+            loss += 0.5 * size * diff * diff;
+        }
+
+        println!("{:.8}", loss);
+
+        Ok(loss)
+    }
+
+    fn gradient(&self, param: &Self::Param) -> Result<Self::Param, Error> {
+        let tape = Tape::new();
+
+        let mut weights = Vec::with_capacity(param.len());
+
+        for param in param {
+            weights.push(tape.var(*param));
+        }
+
+        let eval = Eval::from_tuning_weights(&tape, &weights);
+
+        let mut loss = tape.var(0.0);
+        let size = tape.var(1.0 / self.boards.len() as f64);
+        let a_half = tape.var(0.5);
+
+        for (board, result) in &self.boards {
+            let eval = eval.gradient(board, &tape);
+            let diff = eval - tape.var(*result);
+            loss = loss + (a_half * size * diff * diff);
+        }
+
+        let derivs = loss.grad();
+        let mut gradients = vec![0.0; param.len()];
+
+        for (index, gradient) in gradients.iter_mut().enumerate() {
+            let deriv = derivs.wrt(weights[index]);
+            *gradient = deriv;
+        }
+
+        Ok(gradients)
+    }
+}
+
+impl Tune {
+    pub fn new(boards: Vec<(Board, f64)>) -> Self {
         Self {
-            learning_rate: 0.7,
-            weights
+            boards
         }
     }
 
-    pub fn get_state(&self) -> [Var<'a>; 780] {
-        self.weights
-    }
+    pub fn tune(&self) -> Result<(), Error> {
+        let init_param = vec![0.0; 768];
 
-    pub fn set_state(&mut self, tape: &'a Tape, weights: &[f64]) {
-        for (i, weight) in weights.iter().enumerate().take(self.weights.len()) {
-            self.weights[i] = tape.var(*weight);
-        }
-    }
+        //let cond = ArmijoCondition::new(0.5)?;
+        //let linesearch = BacktrackingLineSearch::new(cond).rho(0.9)?;
+        let linesearch = MoreThuenteLineSearch::new();
+        let solver = LBFGS::new(linesearch, 7);
+        let res = Executor::new(self.clone(), solver, init_param)
+        .add_observer(ArgminSlogLogger::term(), ObserverMode::Always)
+        .max_iters(100)
+        .run()?;
 
-    pub fn dump(&self) {
-        // Discover and remove means
-        let mut mean_mg = [0.0; 6];
-        let mut mean_eg = [0.0; 6];
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
-        mean_mg[0] = self.weights[12..75].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[1] = self.weights[75..139].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[2] = self.weights[139..203].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[3] = self.weights[203..267].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[4] = self.weights[267..331].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[5] = self.weights[331..395].iter().map(|v| v.value()).sum::<f64>() / 64.0;
+        println!("{}", res);
 
-        mean_eg[0] = self.weights[395..459].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[1] = self.weights[459..523].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[2] = self.weights[523..587].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[3] = self.weights[587..651].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[4] = self.weights[651..715].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[5] = self.weights[715..779].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-
-        print!("mat_mg: [");
-        for (index, w) in self.weights[0..6].iter().enumerate() {
-            print!("{:>4.0}, ", w.value());
-        }
-        println!("],");
-        print!("mat_eg: [");
-        for (index, w) in self.weights[6..12].iter().enumerate() {
-            print!("{:>4.0}, ", w.value());
-        }
-        println!("],");
-        println!("pst_mg: [");
-        println!("// Pawns");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[11+rank*8..19+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Knights");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[75+rank*8..83+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Bishops");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[139+rank*8..147+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Rooks");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[203+rank*8..211+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Queens");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[267+rank*8..275+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Kings");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[331+rank*8..339+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("],");
-        println!("pst_eg: [");
-        println!("// Pawns");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[395+rank*8..403+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Knights");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[459+rank*8..467+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Bishops");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[523+rank*8..531+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Rooks");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[587+rank*8..595+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Queens");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[651+rank*8..659+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("// Kings");
-        println!("    [");
-        for rank in 0_usize..8 {
-            print!("        ");
-            for w in &self.weights[715+rank*8..723+rank*8] {
-                print!("{:>4.0}, ", w.value());
-            }
-            println!();
-        }
-        println!("    ],");
-        println!("],");
-    }
-
-    pub fn tune(&mut self, tape: &'a Tape, boards: &[Board], zobrist: &Zobrist) -> Vec<(Grad, f64)> {
-        let board = boards.iter().choose(&mut thread_rng()).unwrap();
-
-        //println!("{}", board);
-
-        // Make a random legal move on the board
-        let mut keystack = Vec::new();
-        let moves: [Move; 256] = [Move::default(); 256];
-        let mut moves = ArrayVec::from(moves);
-        moves.set_len(0);
-        board.generate(&mut moves);
-        let m = *moves.iter().choose(&mut thread_rng()).unwrap();
-        keystack.push(board.hash());
-        let mut board = board.make(m, zobrist);
-
-        // Initialise the search.
-        let mut weights = Vec::new();
-        for w in &mut self.weights {
-            weights.push(w.value() as i32);
-        }
-        let mut s = Search::new(None, zobrist);
-        s.from_tuning_weights(&weights);
-
-        // Then collect temporal differences.
-        let eval = Eval::from_tuning_weights(tape, &self.weights);
-
-        let mut scores = Vec::new();
-        let mut diffs = Vec::new();
-
-        let mut last_pv = ArrayVec::new();
-        last_pv.set_len(0);
-
-        let mut score = eval.gradient(&board, tape);
-        if board.side() == Colour::Black {
-            score = -score;
-        }
-        scores.push(score);
-        diffs.push(tape.var(0.0));
-
-        //print!("{} ({}) ", m, score.value());
-
-        for _position in 0..24 {
-            let mut pv = ArrayVec::new();
-            pv.set_len(0);
-            let score = s.search_root(&board, 2, &mut pv, &mut keystack);
-
-            let mut pv_board = board.clone();
-            for m in pv {
-                pv_board = pv_board.make(m, zobrist);
-            }
-
-            let mut score = if pv.is_empty() {
-                match score.cmp(&0) {
-                    Ordering::Less => tape.var(-1.0),
-                    Ordering::Equal => tape.var(0.0),
-                    Ordering::Greater => tape.var(1.0),
-                }
-            } else {
-                eval.gradient(&pv_board, tape)
-            };
-
-            if board.side() == Colour::Black {
-                score = -score;
-            }
-            scores.push(score);
-
-            /*if !pv.is_empty() {
-                print!("{} ({}) ", pv[0], score.value());
-            } else {
-                match score.value().partial_cmp(&0.0) {
-                    Some(Ordering::Less) => print!("0-1 ({})", score.value()),
-                    Some(Ordering::Greater) => print!("1-0 ({})", score.value()),
-                    _ => print!("1/2-1/2 ({})", score.value()),
-                }
-            }*/
-
-            let diff = scores[scores.len() - 1] - scores[scores.len() - 2];
-            if diff.value() > 0.0 && !pv.is_empty() && !last_pv.is_empty() && pv[0] != last_pv[1] {
-                // Last move was a blunder; don't learn from it.
-                diffs.push(tape.var(0.0));
-            } else {
-                diffs.push(diff);
-            }
-
-            if pv.is_empty() {
-                break;
-            }
-
-            keystack.push(board.hash());
-            board = board.make(pv[0], zobrist);
-            last_pv = pv;
-        }
-
-        /*println!();
-
-        print!("diffs: [");
-        for diff in &diffs {
-            print!("{}, ", diff.value());
-        }
-        println!("]");*/
-
-        let mut discounts = vec![0.0; scores.len()];
-
-        for (n, discount) in discounts.iter_mut().enumerate().skip(1) {
-            let mut learning_rate = self.learning_rate;
-            for diff in diffs.iter().skip(n) {
-                *discount += diff.value() * learning_rate;
-                learning_rate *= self.learning_rate;
-            }
-        }
-
-        //println!("discounts: {:?}", discounts);
-
-        let mut grads = Vec::new();
-
-        for (index, score) in scores.iter().enumerate() {
-            grads.push((score.grad(), discounts[index]));
-        }
-
-        grads
+        Ok(())
     }
 }
