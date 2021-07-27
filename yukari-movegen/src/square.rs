@@ -633,7 +633,39 @@ impl Square {
     /// Return the `Square` in a given `Direction`, if one exists.
     #[must_use]
     pub fn travel(self, direction: Direction) -> Option<Self> {
-        Square16x8::from_square(self).add_dir(direction).to_square()
+        let file = self.into_inner() % 8;
+        let rank = self.into_inner() / 8;
+        let north_ok = rank < 7;
+        let east_ok = file < 7;
+        let south_ok = rank > 0;
+        let west_ok = file > 0;
+        match direction {
+            Direction::North => {
+                north_ok.then(|| unsafe { Self::from_u8_unchecked(self.into_inner() + 8) })
+            },
+            Direction::NorthEast => {
+                (north_ok && east_ok).then(|| unsafe { Self::from_u8_unchecked(self.into_inner() + 9) })
+            }
+            Direction::East => {
+                east_ok.then(|| unsafe { Self::from_u8_unchecked(self.into_inner() + 1) })
+            },
+            Direction::SouthEast => {
+                (south_ok && east_ok).then(|| unsafe { Self::from_u8_unchecked(self.into_inner() - 7) })
+            },
+            Direction::South => {
+                south_ok.then(|| unsafe { Self::from_u8_unchecked(self.into_inner() - 8) })
+            },
+            Direction::SouthWest => {
+                (south_ok && west_ok).then(|| unsafe { Self::from_u8_unchecked(self.into_inner() - 9) })
+            },
+            Direction::West => {
+                west_ok.then(|| unsafe { Self::from_u8_unchecked(self.into_inner() - 1) })
+            },
+            Direction::NorthWest => {
+                (north_ok && west_ok).then(|| unsafe { Self::from_u8_unchecked(self.into_inner() + 7) })
+            },
+            _ => Square16x8::from_square(self).add_dir(direction).to_square()
+        }
     }
 
     #[must_use]

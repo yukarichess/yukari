@@ -87,7 +87,7 @@ impl PieceIndexArray {
     }
 
     /// Remove a `PieceIndex` from a `Square`. Panics if the square is empty or contains a different `PieceIndex`.
-    pub fn remove_piece(&mut self, piece_index: PieceIndex, square: Square) {
+    pub fn remove_piece(&mut self, _piece_index: PieceIndex, square: Square) {
         self[square] = None;
         /*match self[square] {
             None => panic!("attempted to remove piece from empty square"),
