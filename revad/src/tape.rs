@@ -116,7 +116,7 @@ impl<'t> Var<'t> {
             tape: self.tape,
             value: self.value.tanh(),
             index: self.tape.push1(
-                self.index, 1.0 / self.value * self.value,
+                self.index, 1.0 - self.value * self.value,
             ),
         }
     }

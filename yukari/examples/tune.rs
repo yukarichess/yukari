@@ -56,9 +56,7 @@ fn main() {
         for (index, weight) in weights_var.iter().enumerate().skip(12) {
             let mut gradient = 0.0;
             for (grad, discount) in &grads {
-                if !grad.wrt(*weight).is_nan() {
-                    gradient += grad.wrt(*weight) * discount;
-                }
+                gradient += grad.wrt(*weight) * discount;
             }
 
             // TD-Leaf update rule:
