@@ -90,7 +90,7 @@ impl<'a> Eval<'a> {
             score.add_piece(self, board.piece_from_bit(piece), square, piece.colour());
         }
 
-        (tape.var(0.00255) * score.get(tape, board.side())).tanh()
+        (tape.var(0.43) * score.get(tape, Colour::White)).tanh()
     }
 }
 
@@ -120,14 +120,14 @@ impl ArgminOp for Tune {
         }
 
         let eval = Eval::from_tuning_weights(&tape, &weights);
-        let size = 1.0 / self.boards.len() as f64;
+        let size = 0.5 / self.boards.len() as f64;
 
         let mut loss = 0.0;
 
         for (board, result) in &self.boards {
             let eval = eval.gradient(board, &tape).value();
             let diff = eval - *result;
-            loss += 0.5 * size * diff * diff;
+            loss += size * diff * diff;
         }
 
         println!("{:.8}", loss);
@@ -147,13 +147,12 @@ impl ArgminOp for Tune {
         let eval = Eval::from_tuning_weights(&tape, &weights);
 
         let mut loss = tape.var(0.0);
-        let size = tape.var(1.0 / self.boards.len() as f64);
-        let a_half = tape.var(0.5);
+        let size = tape.var(0.5 / self.boards.len() as f64);
 
         for (board, result) in &self.boards {
             let eval = eval.gradient(board, &tape);
             let diff = eval - tape.var(*result);
-            loss = loss + (a_half * size * diff * diff);
+            loss = loss + (size * diff * diff);
         }
 
         let derivs = loss.grad();
@@ -176,7 +175,7 @@ impl Tune {
     }
 
     pub fn tune(&self) -> Result<(), Error> {
-        let init_param = vec![0.0; 768];
+        let init_param = vec![1.0; 768];
 
         //let cond = ArmijoCondition::new(0.5)?;
         //let linesearch = BacktrackingLineSearch::new(cond).rho(0.9)?;
