@@ -277,7 +277,7 @@ impl<'a> Tune<'a> {
         println!("    [");
         for rank in 0_usize..8 {
             print!("        ");
-            for w in &self.weights[12+rank*8..20+rank*8] {
+            for w in &self.weights[11+rank*8..19+rank*8] {
                 print!("{:>4.0}, ", w.value());
             }
             println!();
@@ -401,6 +401,8 @@ impl<'a> Tune<'a> {
     pub fn tune(&mut self, tape: &'a Tape, boards: &[Board], zobrist: &Zobrist) -> Vec<(Grad, f64)> {
         let board = boards.iter().choose(&mut thread_rng()).unwrap();
 
+        //println!("{}", board);
+
         // Make a random legal move on the board
         let mut keystack = Vec::new();
         let moves: [Move; 256] = [Move::default(); 256];
@@ -435,15 +437,12 @@ impl<'a> Tune<'a> {
         scores.push(score);
         diffs.push(tape.var(0.0));
 
-        for _position in 0..12 {
+        //print!("{} ({}) ", m, score.value());
+
+        for _position in 0..24 {
             let mut pv = ArrayVec::new();
             pv.set_len(0);
-            let mut score = s.search_root(&board, 2, &mut pv, &mut keystack);
-
-            // Translate scores to be strictly White's point of view.
-            if board.side() == Colour::Black {
-                score = -score;
-            }
+            let score = s.search_root(&board, 2, &mut pv, &mut keystack);
 
             let mut pv_board = board.clone();
             for m in pv {
@@ -465,6 +464,16 @@ impl<'a> Tune<'a> {
             }
             scores.push(score);
 
+            /*if !pv.is_empty() {
+                print!("{} ({}) ", pv[0], score.value());
+            } else {
+                match score.value().partial_cmp(&0.0) {
+                    Some(Ordering::Less) => print!("0-1 ({})", score.value()),
+                    Some(Ordering::Greater) => print!("1-0 ({})", score.value()),
+                    _ => print!("1/2-1/2 ({})", score.value()),
+                }
+            }*/
+
             let diff = scores[scores.len() - 2] - scores[scores.len() - 1];
             if diff.value() > 0.0 && !pv.is_empty() && !last_pv.is_empty() && pv[0] != last_pv[1] {
                 // Last move was a blunder; don't learn from it.
@@ -481,6 +490,8 @@ impl<'a> Tune<'a> {
             board = board.make(pv[0], zobrist);
             last_pv = pv;
         }
+
+        //println!();
 
         let mut discounts = vec![0.0; scores.len()];
 

@@ -36,15 +36,17 @@ fn main() {
     };
 
     for epoch in 1..=EPOCHS {
-        if epoch % 10000 == 0 {
-            println!("iter: {}", epoch);
-        }
-
         let tape = Tape::new();
         let mut tune = Tune::new(&tape);
         tune.set_state(&tape, &weights);
 
         let grads = tune.tune(&tape, &boards, &zobrist);
+
+        let td = grads.iter().map(|(_, td)| td.abs()).sum::<f64>();
+
+        if epoch % 100 == 0 {
+            println!("iter: {:>6} |td|: {:.6}", epoch, td);
+        }
 
         const ALPHA: f64 = 1.0;
         if epoch == EPOCHS {
