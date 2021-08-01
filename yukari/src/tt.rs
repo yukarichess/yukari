@@ -30,6 +30,12 @@ impl<T> TranspositionTable<T> {
         let idx = (key & (self.0.len() - 1) as u64) as usize;
         self.0[idx] = (key, entry);
     }
+
+    pub fn clear(&mut self) {
+        for i in 0..self.0.len() {
+            self.0[i].0 = 0;
+        }
+    }
 }
 
 #[cfg(test)]
