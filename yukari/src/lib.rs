@@ -3,7 +3,7 @@
 mod eval;
 mod search;
 mod tune;
-mod tt;
+pub mod tt;
 pub mod engine;
 
 pub use search::Search;
