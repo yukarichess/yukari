@@ -474,7 +474,7 @@ impl<'a> Tune<'a> {
                 }
             }*/
 
-            let diff = scores[scores.len() - 2] - scores[scores.len() - 1];
+            let diff = scores[scores.len() - 1] - scores[scores.len() - 2];
             if diff.value() > 0.0 && !pv.is_empty() && !last_pv.is_empty() && pv[0] != last_pv[1] {
                 // Last move was a blunder; don't learn from it.
                 diffs.push(tape.var(0.0));
@@ -491,7 +491,13 @@ impl<'a> Tune<'a> {
             last_pv = pv;
         }
 
-        //println!();
+        /*println!();
+
+        print!("diffs: [");
+        for diff in &diffs {
+            print!("{}, ", diff.value());
+        }
+        println!("]");*/
 
         let mut discounts = vec![0.0; scores.len()];
 
@@ -502,6 +508,8 @@ impl<'a> Tune<'a> {
                 learning_rate *= self.learning_rate;
             }
         }
+
+        //println!("discounts: {:?}", discounts);
 
         let mut grads = Vec::new();
 

@@ -219,4 +219,19 @@ mod tests {
         assert!((grad.wrt(x) - (y.value + x.value.cos())).abs() <= 1e-15);
         assert!((grad.wrt(y) - x.value).abs() <= 1e-15);
     }
+
+    #[test]
+    fn tanh_within_bounds() {
+        let t = Tape::new();
+        let mut x = t.var(-1.0);
+        while x.value < 1.0 {
+            let y = x.tanh();
+            let grad = y.grad();
+
+            assert!((y.value - x.value.tanh()).abs() <= 1e-15);
+            assert!((grad.wrt(x) - (1.0 - x.value.tanh() * x.value.tanh())).abs() <= 1e-15);
+
+            x = t.var(x.value + 0.1);
+        }
+    }
 }

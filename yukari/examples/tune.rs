@@ -55,7 +55,7 @@ fn main() {
 
         let weights_var = tune.get_state();
 
-        for (index, weight) in weights_var.iter().enumerate().skip(12) {
+        for (index, weight) in weights_var.iter().enumerate() {
             let mut gradient = 0.0;
             for (grad, discount) in &grads {
                 gradient += grad.wrt(*weight) * discount;
