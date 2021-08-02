@@ -1,4 +1,4 @@
-use std::{boxed::Box};
+use std::{boxed::Box, mem::size_of};
 
 // Entry in the table, hash and value
 type Entry<T> = (u64, T);
@@ -7,11 +7,18 @@ type Entry<T> = (u64, T);
 pub struct TranspositionTable<T>(Box<[Entry<T>]>);
 
 impl<T: Default + Clone> TranspositionTable<T> {
+
+    /// Creates a new transposition table of the given size in bytes
+    /// size will be rounded down to closest power of two
     pub fn new(size: usize) -> Self {
-        assert!(size.count_ones() == 1);
+        let entry_size = size_of::<Entry<T>>();
+        // We can only store an integral number of entries
+        // and we want to round down to a power of two to make key wrapping fast
+        let count = (size / entry_size).next_power_of_two() >> 1;
+        // Then we have to compute the number of them we can fit i
         Self({
             let empty = (0, T::default());
-            vec![empty; size].into_boxed_slice()
+            vec![empty; count].into_boxed_slice()
         })
     }
 }
