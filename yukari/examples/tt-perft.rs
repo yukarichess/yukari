@@ -42,7 +42,7 @@ fn main() {
     let zobrist = Zobrist::new();
     let startpos = Board::startpos(&zobrist); //Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", &zobrist).unwrap();
     let depth = 6;
-    let mut tt = TranspositionTable::new(1024*16);
+    let mut tt = TranspositionTable::new(1024*1024*20);
     let nodes = perft(&startpos, &zobrist, &mut tt, depth);
     println!("Perft {}: {}", depth, nodes);
 }
