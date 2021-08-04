@@ -68,7 +68,7 @@ impl<'a> Search<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn search(&mut self, board: &Board, depth: i32, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32, keystack: &mut Vec<u64>) -> i32 {
+    fn search(&mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32, keystack: &mut Vec<u64>) -> i32 {
         if depth <= 0 {
             pv.set_len(0);
             return self.quiesce(board, alpha, beta, eval);
@@ -110,6 +110,11 @@ impl<'a> Search<'a> {
         if is_repetition_draw(keystack, board.hash()) {
             pv.set_len(0);
             return 0;
+        }
+
+        // Check extension
+        if board.in_check() {
+            depth += 1;
         }
 
         keystack.push(board.hash());
