@@ -1123,7 +1123,7 @@ impl Board {
     /// Generate a vector of moves on the board.
     ///
     /// # Panics
-    /// Panics when Lofty writes shitty code.
+    /// Panics when Lofty does something too cute
     #[allow(clippy::missing_inline_in_public_items)]
     pub fn generate(&self, v: &mut ArrayVec<[Move; 256]>) {
         // Unless something has gone very badly wrong we have to have a king.
