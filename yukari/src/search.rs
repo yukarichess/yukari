@@ -20,7 +20,7 @@ pub struct Search<'a> {
     nullmove_success: u64,
     stop_after: Option<Instant>,
     zobrist: &'a Zobrist,
-    tt: TranspositionTable<(i32, i32, i32)>
+    tt: TranspositionTable<(i8, i32, i8)>
 }
 
 impl<'a> Search<'a> {
@@ -114,6 +114,19 @@ impl<'a> Search<'a> {
             return 0;
         }
 
+        // Attempt to look up the move in the transposition table
+        if let Some(&(tt_depth, tt_score, bound)) = self.tt.get(board.hash()) {
+            if tt_depth as i32 >= depth {
+                if bound == 0 {
+                    return tt_score;
+                } else if bound == 1 && tt_score <= alpha {
+                    return alpha;
+                } else if bound == 2 && tt_score >= beta {
+                    return beta;
+                }
+            }
+        }
+
         // Check extension
         if board.in_check() {
             depth += 1;
@@ -121,29 +134,21 @@ impl<'a> Search<'a> {
 
         keystack.push(board.hash());
 
+        let mut is_exact_score = false;
+
         for m in moves {
             self.nodes += 1;
 
             let mut child_pv = ArrayVec::new();
             let eval = self.eval.update_eval(board, &m, eval);
             let board = board.make(m, self.zobrist);
-            // Attempt to look up the move in the transposition table
-            let mut score = 0;
-            let mut found_tt = false;
-            if let Some(&(tt_depth, tt_score, _)) = self.tt.get(board.hash()) {
-                if tt_depth == depth - 1 {
-                    found_tt = true;
-                    score = -tt_score
-                }
-            }
-            if !found_tt {
-                score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
-                self.tt.set(board.hash(), (depth - 1, -score, 0));
-            }
+
+            let score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
 
             if score >= beta {
                 keystack.pop();
                 pv.set_len(0);
+                self.tt.set(board.hash(), (depth as i8, beta, 2));
                 return beta;
             }
 
@@ -164,10 +169,14 @@ impl<'a> Search<'a> {
                 for m in child_pv {
                     pv.push(m);
                 }
+                is_exact_score = true;
             }
         }
 
         keystack.pop();
+
+        self.tt.set(board.hash(), (depth as i8, alpha, if is_exact_score { 0 } else { 1 }));
+
         alpha
     }
 
@@ -193,7 +202,7 @@ impl<'a> Search<'a> {
     }
 
     #[cfg(test)]
-    pub fn DONOTUSE_get_tt(&self) -> &TranspositionTable<(i32, i32, i32)>{
+    pub fn DONOTUSE_get_tt(&self) -> &TranspositionTable<(i8, i32, i8)>{
         &self.tt
     }
 }
@@ -201,15 +210,15 @@ impl<'a> Search<'a> {
 #[cfg(test)]
 mod tests {
     use tinyvec::ArrayVec;
-    use yukari_movegen::{Board, Colour, Zobrist};
+    use yukari_movegen::{Board, Zobrist};
 
-    use crate::{Search, eval::Eval};
+    use crate::Search;
 
     #[test]
     fn lasker_reichhelm() {
         let zobrist = Zobrist::new();
         let startpos = Board::from_fen("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1", &zobrist).unwrap();
-        
+
         let mut search = Search::new(None, &zobrist);
         let mut pv = ArrayVec::new();
         let mut keystack = Vec::new();

@@ -10,7 +10,7 @@ trait Histogram {
     fn hit(&self) {}
     fn misses(&self) -> u64 { 0 }
     fn hits(&self) -> u64 { 0 }
-    fn total(&self) -> u64 { 
+    fn total(&self) -> u64 {
         self.hits() + self.misses()
     }
 }
@@ -85,7 +85,10 @@ impl<T: Default + Clone> TranspositionTable<T> {
         let entry_size = size_of::<Entry<T>>();
         // We can only store an integral number of entries
         // and we want to round down to a power of two to make key wrapping fast
-        let count = (size / entry_size).next_power_of_two() >> 1;
+        let mut count = (size / entry_size).next_power_of_two();
+        if count * entry_size > size {
+            count >>= 1;
+        }
         // Then we have to compute the number of them we can fit i
         Self {
             table: {
