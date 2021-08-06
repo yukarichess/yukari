@@ -203,11 +203,10 @@ impl<'a> Search<'a> {
         alpha
     }
 
-    pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>) -> i32 {
+    pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>, keystack: &Vec<u64>) -> i32 {
+        self.keystack.clone_from(keystack);
         let eval = self.eval.eval(board);
-        let prior_keystack_size = self.keystack.len();
         let result = self.search(board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE);
-        //assert_eq!(prior_keystack_size, self.keystack.len());
         result
     }
 
@@ -226,6 +225,10 @@ impl<'a> Search<'a> {
     pub fn from_tuning_weights(&mut self, weights: &[i32]) {
         self.eval.from_tuning_weights(weights);
     }
+
+    pub fn tt(&self) -> &TranspositionTable<(i8, i32, i8)> {
+        &self.tt
+    }
 }
 
 #[cfg(test)]
@@ -235,15 +238,17 @@ mod tests {
 
     use crate::Search;
 
+    // TODO: Remove this test entirely because this can be handled way better by just keeping specific
+    // fens to feed into the normal search example
     #[test]
     fn lasker_reichhelm() {
         let zobrist = Zobrist::new();
         let startpos = Board::from_fen("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1", &zobrist).unwrap();
-
+        let mut keystack = vec![];
         let mut search = Search::new(None, &zobrist);
         let mut pv = ArrayVec::new();
         for i in 1..=100 {
-            dbg!(search.search_root(&startpos, i, &mut pv));
+            dbg!(search.search_root(&startpos, i, &mut pv, &keystack));
             eprintln!("PV [{}]: {}", i, &pv);
             eprintln!("TT stats [{}]: {}", i, &search.tt)
         }
