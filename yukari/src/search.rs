@@ -121,7 +121,7 @@ impl<'a> Search<'a> {
 
         // Attempt to look up the move in the transposition table
         if let Some(&(tt_depth, tt_score, bound)) = self.tt.get(board.hash()) {
-            if tt_depth as i32 >= depth {
+            if tt_depth as i32 >= depth && beta == alpha+1{
                 if bound == 0 {
                     self.keystack.pop();
                     return tt_score;
