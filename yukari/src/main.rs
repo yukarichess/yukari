@@ -94,13 +94,17 @@ impl Yukari {
             pv.set_len(0);
             // FIXME: We want to search one depth without time controls
             let score = s.search_root(&self.board, depth, &mut pv, &self.keystack);
-            // If we have bailed out stop the loop
-            if Instant::now() >= stop_after {
+            // If we have a pv that's not just empty from bailing out use that as our best moves
+            if pv.len() > 0 {
+                best_pv.clone_from(&pv);
+            }
+            // For various reasons this is not a lightweight operation...
+            let now = Instant::now();
+            // If we have bailed out stop the loop, but only after we copy a set of pv values
+            if now >= stop_after {
                 break;
             }
-            // If we have a pv that's not just empty from bailing out use that as our best moves
-            best_pv.clone_from(&pv);
-            let now = Instant::now().duration_since(start);
+            let now = now.duration_since(start);
             print!(
                 "{} {:.2} {} {} ",
                 depth,
