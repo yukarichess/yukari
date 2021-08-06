@@ -93,7 +93,7 @@ impl Yukari {
         while depth < 20 {
             pv.set_len(0);
             // FIXME: We want to search one depth without time controls
-            let score = s.search_root(&self.board, depth, &mut pv);
+            let score = s.search_root(&self.board, depth, &mut pv, &self.keystack);
             // If we have bailed out stop the loop
             if Instant::now() >= stop_after {
                 break;

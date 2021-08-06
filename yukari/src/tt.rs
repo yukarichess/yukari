@@ -3,30 +3,14 @@ use std::{boxed::Box, cell::Cell, fmt::{Display, Debug}, mem::size_of};
 // Entry in the table, hash and value
 type Entry<T> = (u64, T);
 
-/// Implements a "histogram" for recording hits and misses in the table
-/// has do-nothing default implementations
-trait Histogram {
-    fn miss(&self) {}
-    fn hit(&self) {}
-    fn misses(&self) -> u64 { 0 }
-    fn hits(&self) -> u64 { 0 }
-    fn total(&self) -> u64 {
-        self.hits() + self.misses()
-    }
-}
-/// NullHistogram does nothing and takes no space so it's intentionally supposed to optimize out
-struct NullHistogram;
-impl Histogram for NullHistogram {}
-
-/// BasicHistogram implements the usual support
 /// Needs to use cell because we don't want to make get on the hashtable mutable
 #[derive(Clone)]
-struct BasicHistogram {
+struct Statistics {
     hits: Cell<u64>,
     misses: Cell<u64>
 }
 
-impl BasicHistogram {
+impl Statistics {
     fn new() -> Self {
         Self {
             hits: Cell::new(0),
@@ -35,7 +19,8 @@ impl BasicHistogram {
     }
 }
 
-impl Histogram for BasicHistogram {
+// These are all inlined always because they're single operations
+impl Statistics {
     #[inline(always)]
     fn miss(&self) {
         self.misses.set(self.misses.get() + 1);
@@ -47,19 +32,14 @@ impl Histogram for BasicHistogram {
     }
 
     #[inline(always)]
-    fn misses(&self) -> u64 {
-        self.misses.get()
-    }
-
-    #[inline(always)]
-    fn hits(&self) -> u64 {
-        self.hits.get()
+    fn total(&self) -> u64 {
+        self.hits.get() + self.misses.get()
     }
 }
 
-impl Display for BasicHistogram {
+impl Display for Statistics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Histogram")
+        f.debug_struct("Statistics")
             .field("hits", &self.hits.get())
             .field("misses", &self.misses.get())
             .field("total", &self.total())
@@ -67,7 +47,7 @@ impl Display for BasicHistogram {
     }
 }
 
-impl Debug for BasicHistogram {
+impl Debug for Statistics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}", self))
     }
@@ -76,7 +56,7 @@ impl Debug for BasicHistogram {
 #[derive(Clone)]
 pub struct TranspositionTable<T> {
     table: Box<[Entry<T>]>,
-    histogram: BasicHistogram
+    histogram: Statistics
 }
 
 impl<T: Default + Clone> TranspositionTable<T> {
@@ -95,7 +75,7 @@ impl<T: Default + Clone> TranspositionTable<T> {
                 let empty = (0, T::default());
                 vec![empty; count].into_boxed_slice()
             },
-            histogram: BasicHistogram::new()
+            histogram: Statistics::new()
         }
     }
     /// Creates a new transposition table of the given size in bytes
@@ -142,7 +122,7 @@ impl<T> Display for TranspositionTable<T> {
                                     .count();
         f.debug_struct("TranspositionTable")
             .field("table (valid entries)", &valid_count)
-            .field("histogram", &self.histogram)
+            .field("statistics", &self.histogram)
             .finish()
     }
 }

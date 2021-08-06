@@ -12,13 +12,13 @@ fn main() {
     } else {
         fen
     }, &zobrist).unwrap();
-
+    let keystack = vec![];
     let mut s = Search::new(None, &zobrist);
     let start = Instant::now();
-    for depth in 1..=10 {
+    for depth in 1..=50 {
         let mut pv = ArrayVec::new();
         pv.set_len(0);
-        let score = s.search_root(&board, depth, &mut pv);
+        let score = s.search_root(&board, depth, &mut pv, &keystack);
         let now = Instant::now().duration_since(start);
         print!(
             "{} {:.2} {} {} ",
@@ -46,4 +46,5 @@ fn main() {
         "# Nullmove success: {:.3}%",
         s.nullmove_success()
     );
+    println!("# TT statistics: {}", s.tt());
 }
