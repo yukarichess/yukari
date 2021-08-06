@@ -1,8 +1,8 @@
-use std::io::{self};
+use std::io;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
+use yukari::{Search, is_repetition_draw};
 use yukari::engine::{TimeControl, TimeMode};
-use yukari::{self, Search, is_repetition_draw};
 use yukari_movegen::{Board, Move, Square, Zobrist};
 use tinyvec::ArrayVec;
 
@@ -66,7 +66,7 @@ impl Yukari {
         self.tc.set_remaining(csec);
     }
 
-    /// Generates valid moves for current posiition then finds the attempted
+    /// Generates valid moves for current position then finds the attempted
     /// move in the list
     pub fn find_move(&self, from: Square, dest: Square) -> Option<Move> {
         let moves: [Move; 256] = [Move::default(); 256];
