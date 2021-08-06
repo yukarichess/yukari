@@ -442,7 +442,7 @@ impl<'a> Tune<'a> {
         for _position in 0..24 {
             let mut pv = ArrayVec::new();
             pv.set_len(0);
-            let score = s.search_root(&board, 2, &mut pv, &mut keystack);
+            let score = s.search_root(&board, 2, &mut pv);
 
             let mut pv_board = board.clone();
             for m in pv {

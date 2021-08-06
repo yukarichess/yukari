@@ -20,7 +20,8 @@ pub struct Search<'a> {
     nullmove_success: u64,
     stop_after: Option<Instant>,
     zobrist: &'a Zobrist,
-    tt: TranspositionTable<(i8, i32, i8)>
+    tt: TranspositionTable<(i8, i32, i8)>,
+    keystack: Vec<u64>
 }
 
 impl<'a> Search<'a> {
@@ -33,7 +34,8 @@ impl<'a> Search<'a> {
             nullmove_success: 0,
             stop_after,
             zobrist,
-            tt: TranspositionTable::new(1024*1024*16)
+            tt: TranspositionTable::new(1024*1024*16),
+            keystack: vec![]
         }
     }
 
@@ -70,7 +72,7 @@ impl<'a> Search<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn search(&mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32, keystack: &mut Vec<u64>) -> i32 {
+    fn search(&mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32) -> i32 {
         if depth <= 0 {
             pv.set_len(0);
             return self.quiesce(board, alpha, beta, eval);
@@ -79,11 +81,11 @@ impl<'a> Search<'a> {
         const R: i32 = 3;
 
         if !board.in_check() && depth >= R {
-            keystack.push(board.hash());
+            self.keystack.push(board.hash());
             let board = board.make_null(self.zobrist);
             let mut child_pv = ArrayVec::new();
-            let score = -self.search(&board, depth - 1 - R, -beta, -beta + 1, eval, &mut child_pv, mate, keystack);
-            keystack.pop();
+            let score = -self.search(&board, depth - 1 - R, -beta, -beta + 1, eval, &mut child_pv, mate);
+            self.keystack.pop();
 
             self.nullmove_attempts += 1;
 
@@ -108,8 +110,11 @@ impl<'a> Search<'a> {
             }
         }
 
+        self.keystack.push(board.hash());
+
         // Is this a repetition draw?
-        if is_repetition_draw(keystack, board.hash()) {
+        if is_repetition_draw(&self.keystack, board.hash()) {
+            self.keystack.pop();
             pv.set_len(0);
             return 0;
         }
@@ -118,10 +123,13 @@ impl<'a> Search<'a> {
         if let Some(&(tt_depth, tt_score, bound)) = self.tt.get(board.hash()) {
             if tt_depth as i32 >= depth {
                 if bound == 0 {
+                    self.keystack.pop();
                     return tt_score;
                 } else if bound == 1 && tt_score <= alpha {
+                    self.keystack.pop();
                     return alpha;
                 } else if bound == 2 && tt_score >= beta {
+                    self.keystack.pop();
                     return beta;
                 }
             }
@@ -132,7 +140,6 @@ impl<'a> Search<'a> {
             depth += 1;
         }
 
-        keystack.push(board.hash());
 
         let mut is_exact_score = false;
 
@@ -143,10 +150,10 @@ impl<'a> Search<'a> {
             let eval = self.eval.update_eval(board, &m, eval);
             let board = board.make(m, self.zobrist);
 
-            let score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
+            let score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1);
 
             if score >= beta {
-                keystack.pop();
+                self.keystack.pop();
                 pv.set_len(0);
                 self.tt.set(board.hash(), (depth as i8, beta, 2));
                 return beta;
@@ -155,7 +162,7 @@ impl<'a> Search<'a> {
             if self.nodes & 1023 == 0 {
                 if let Some(time) = self.stop_after {
                     if Instant::now() >= time {
-                        keystack.pop();
+                        self.keystack.pop();
                         pv.set_len(0);
                         return alpha;
                     }
@@ -173,16 +180,19 @@ impl<'a> Search<'a> {
             }
         }
 
-        keystack.pop();
+        self.keystack.pop();
 
         self.tt.set(board.hash(), (depth as i8, alpha, if is_exact_score { 0 } else { 1 }));
 
         alpha
     }
 
-    pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>, keystack: &mut Vec<u64>) -> i32 {
+    pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>) -> i32 {
         let eval = self.eval.eval(board);
-        self.search(board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE, keystack)
+        let prior_keystack_size = self.keystack.len();
+        let result = self.search(board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE);
+        assert_eq!(prior_keystack_size, self.keystack.len());
+        result
     }
 
     pub fn nodes(&self) -> u64 {
@@ -216,10 +226,8 @@ mod tests {
 
         let mut search = Search::new(None, &zobrist);
         let mut pv = ArrayVec::new();
-        let mut keystack = Vec::new();
         for i in 1..=100 {
-            keystack.clear();
-            dbg!(search.search_root(&startpos, i, &mut pv, &mut keystack));
+            dbg!(search.search_root(&startpos, i, &mut pv));
             eprintln!("PV [{}]: {}", i, &pv);
             eprintln!("TT stats [{}]: {}", i, &search.tt)
         }

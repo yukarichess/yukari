@@ -16,10 +16,9 @@ fn main() {
     let mut s = Search::new(None, &zobrist);
     let start = Instant::now();
     for depth in 1..=10 {
-        let mut keystack = Vec::new();
         let mut pv = ArrayVec::new();
         pv.set_len(0);
-        let score = s.search_root(&board, depth, &mut pv, &mut keystack);
+        let score = s.search_root(&board, depth, &mut pv);
         let now = Instant::now().duration_since(start);
         print!(
             "{} {:.2} {} {} ",
