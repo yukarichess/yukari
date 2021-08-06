@@ -113,9 +113,12 @@ impl<'a> Search<'a> {
                 return 0;
             }
         }
-        
+
+        self.keystack.push(board.hash());
+
         // Is this a repetition draw?
         if is_repetition_draw(&self.keystack, board.hash()) {
+            self.keystack.pop();
             pv.set_len(0);
             return 0;
         }
@@ -124,10 +127,13 @@ impl<'a> Search<'a> {
         if let Some(&(tt_depth, tt_score, bound)) = self.tt.get(board.hash()) {
             if tt_depth as i32 >= depth {
                 if bound == 0 {
+                    self.keystack.pop();
                     return tt_score;
                 } else if bound == 1 && tt_score <= alpha {
+                    self.keystack.pop();
                     return alpha;
                 } else if bound == 2 && tt_score >= beta {
+                    self.keystack.pop();
                     return beta;
                 }
             }
@@ -138,7 +144,6 @@ impl<'a> Search<'a> {
             depth += 1;
         }
 
-        self.keystack.push(board.hash());
 
         let mut found_pv = false;
 
