@@ -119,13 +119,24 @@ impl<'a> Search<'a> {
 
         keystack.push(board.hash());
 
+        let mut found_pv = false;
+
         for m in moves {
             self.nodes += 1;
 
             let mut child_pv = ArrayVec::new();
             let eval = self.eval.update_eval(board, &m, eval);
             let board = board.make(m, self.zobrist);
-            let score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
+            let mut score;
+
+            if !found_pv {
+                score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
+            } else {
+                score = -self.search(&board, depth - 1, -alpha - 1, -alpha, &eval, &mut child_pv, mate - 1, keystack);
+                if score > alpha {
+                    score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
+                }
+            }
 
             if score >= beta {
                 keystack.pop();
@@ -150,6 +161,7 @@ impl<'a> Search<'a> {
                 for m in child_pv {
                     pv.push(m);
                 }
+                found_pv = true;
             }
         }
 
