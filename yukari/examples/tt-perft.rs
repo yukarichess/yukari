@@ -1,6 +1,5 @@
 use yukari::tt::TranspositionTable;
 use yukari_movegen::{Board, Move, Zobrist};
-use rayon::prelude::*;
 use tinyvec::ArrayVec;
 
 /// Count the number of legal chess positions after N moves.

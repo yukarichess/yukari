@@ -200,11 +200,6 @@ impl<'a> Search<'a> {
     pub fn from_tuning_weights(&mut self, weights: &[i32]) {
         self.eval.from_tuning_weights(weights);
     }
-
-    #[cfg(test)]
-    pub fn DONOTUSE_get_tt(&self) -> &TranspositionTable<(i8, i32, i8)>{
-        &self.tt
-    }
 }
 
 #[cfg(test)]
@@ -226,7 +221,7 @@ mod tests {
             keystack.clear();
             dbg!(search.search_root(&startpos, i, &mut pv, &mut keystack));
             eprintln!("PV [{}]: {}", i, &pv);
-            eprintln!("TT stats [{}]: {}", i, &search.DONOTUSE_get_tt())
+            eprintln!("TT stats [{}]: {}", i, &search.tt)
         }
     }
 }

@@ -263,12 +263,12 @@ impl<'a> Tune<'a> {
         mean_eg[5] = self.weights[715..779].iter().map(|v| v.value()).sum::<f64>() / 64.0;
 
         print!("mat_mg: [");
-        for (index, w) in self.weights[0..6].iter().enumerate() {
+        for w in &self.weights[0..6] {
             print!("{:>4.0}, ", w.value());
         }
         println!("],");
         print!("mat_eg: [");
-        for (index, w) in self.weights[6..12].iter().enumerate() {
+        for w in &self.weights[6..12] {
             print!("{:>4.0}, ", w.value());
         }
         println!("],");
