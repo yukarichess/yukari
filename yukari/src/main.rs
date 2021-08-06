@@ -108,10 +108,19 @@ impl Yukari {
                 now.as_millis() / 10,
                 s.nodes() + s.qnodes()
             );
+            eprint!(
+                "{} {:.2} {} {} ",
+                depth,
+                score,
+                now.as_millis() / 10,
+                s.nodes() + s.qnodes()
+            );
             for m in pv.iter() {
                 print!("{} ", m);
+                eprint!("{} ", m);
             }
             println!();
+            eprintln!();
             depth += 1;
         }
         println!(
