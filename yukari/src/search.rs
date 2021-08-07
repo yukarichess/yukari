@@ -198,7 +198,9 @@ impl<'a> Search<'a> {
 
         self.keystack.pop();
 
-        self.tt.set(board.hash(), (depth as i8, alpha, if found_pv { 0 } else { 1 }));
+        if alpha <= MATE_VALUE - 500 && alpha >= -MATE_VALUE + 500 {
+            self.tt.set(board.hash(), (depth as i8, alpha, if found_pv { 0 } else { 1 }));
+        }
 
         alpha
     }
