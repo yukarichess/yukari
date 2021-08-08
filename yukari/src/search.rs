@@ -91,6 +91,10 @@ impl<'a> Search<'a> {
             }
         }
 
+        if !board.in_check() && depth == 1 && eval.get(board.side()) - 200 >= beta {
+            return beta;
+        }
+
         let moves: [Move; 256] = [Move::default(); 256];
         let mut moves = ArrayVec::from(moves);
         moves.set_len(0);
