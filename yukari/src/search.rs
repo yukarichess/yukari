@@ -72,10 +72,10 @@ impl<'a> Search<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn search(&mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32) -> i32 {
+    fn search(&mut self, board: &Board, mut depth: i32, mut lower_bound: i32, upper_bound: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32) -> i32 {
         if depth <= 0 {
             pv.set_len(0);
-            return self.quiesce(board, alpha, beta, eval);
+            return self.quiesce(board, lower_bound, upper_bound, eval);
         }
 
         const R: i32 = 3;
@@ -84,19 +84,19 @@ impl<'a> Search<'a> {
             self.keystack.push(board.hash());
             let board = board.make_null(self.zobrist);
             let mut child_pv = ArrayVec::new();
-            let score = -self.search(&board, depth - 1 - R, -beta, -beta + 1, eval, &mut child_pv, mate);
+            let score = -self.search(&board, depth - 1 - R, -upper_bound, -upper_bound + 1, eval, &mut child_pv, mate);
             self.keystack.pop();
 
             self.nullmove_attempts += 1;
 
-            if score >= beta {
+            if score >= upper_bound {
                 self.nullmove_success += 1;
-                return beta;
+                return upper_bound;
             }
         }
 
-        if !board.in_check() && depth == 1 && eval.get(board.side()) - 200 >= beta {
-            return beta;
+        if !board.in_check() && depth == 1 && eval.get(board.side()) - 200 >= upper_bound {
+            return upper_bound;
         }
 
         let moves: [Move; 256] = [Move::default(); 256];
@@ -114,12 +114,11 @@ impl<'a> Search<'a> {
             }
         }
 
-        self.keystack.push(board.hash());
-
         // Is this a repetition draw?
         if is_repetition_draw(&self.keystack, board.hash()) {
-            self.keystack.pop();
             pv.set_len(0);
+            // Print our bounds if rep draw found
+            println!("# Rep draw, bounds: [{}, {}], depth: {}", lower_bound, upper_bound, depth);
             return 0;
         }
 
@@ -127,14 +126,11 @@ impl<'a> Search<'a> {
         if let Some(&(tt_depth, tt_score, bound)) = self.tt.get(board.hash()) {
             if tt_depth as i32 >= depth {
                 if bound == 0 {
-                    self.keystack.pop();
                     return tt_score;
-                } else if bound == 1 && tt_score <= alpha {
-                    self.keystack.pop();
-                    return alpha;
-                } else if bound == 2 && tt_score >= beta {
-                    self.keystack.pop();
-                    return beta;
+                } else if bound == 1 && tt_score <= lower_bound {
+                    return lower_bound;
+                } else if bound == 2 && tt_score >= upper_bound {
+                    return upper_bound;
                 }
             }
         }
@@ -142,8 +138,7 @@ impl<'a> Search<'a> {
         // Check extension
         if board.in_check() {
             depth += 1;
-        }
-
+        } 
 
         let mut found_pv = false;
 
@@ -155,20 +150,22 @@ impl<'a> Search<'a> {
             let board = board.make(m, self.zobrist);
             let mut score;
 
+            // Push the move to check for repetition draws
+            self.keystack.push(board.hash());
             if !found_pv {
-                score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1);
+                score = -self.search(&board, depth - 1, -upper_bound, -lower_bound, &eval, &mut child_pv, mate - 1);
             } else {
-                score = -self.search(&board, depth - 1, -alpha - 1, -alpha, &eval, &mut child_pv, mate - 1);
-                if score > alpha {
-                    score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1);
+                score = -self.search(&board, depth - 1, -lower_bound - 1, -lower_bound, &eval, &mut child_pv, mate - 1);
+                if score > lower_bound {
+                    score = -self.search(&board, depth - 1, -upper_bound, -lower_bound, &eval, &mut child_pv, mate - 1);
                 }
             }
 
-            if score >= beta {
+            if score >= upper_bound {
                 self.keystack.pop();
                 pv.set_len(0);
-                self.tt.set(board.hash(), (depth as i8, beta, 2));
-                return beta;
+                self.tt.set(board.hash(), (depth as i8, upper_bound, 2));
+                return upper_bound;
             }
 
             if self.nodes & 1023 == 0 {
@@ -176,13 +173,13 @@ impl<'a> Search<'a> {
                     if Instant::now() >= time {
                         self.keystack.pop();
                         pv.set_len(0);
-                        return alpha;
+                        return lower_bound;
                     }
                 }
             }
 
-            if score > alpha {
-                alpha = score;
+            if score > lower_bound {
+                lower_bound = score;
                 pv.set_len(0);
                 pv.push(m);
                 for m in child_pv {
@@ -198,11 +195,11 @@ impl<'a> Search<'a> {
 
         self.keystack.pop();
 
-        if alpha <= MATE_VALUE - 500 && alpha >= -MATE_VALUE + 500 {
-            self.tt.set(board.hash(), (depth as i8, alpha, if found_pv { 0 } else { 1 }));
+        if lower_bound <= MATE_VALUE - 500 && lower_bound >= -MATE_VALUE + 500 {
+            self.tt.set(board.hash(), (depth as i8, lower_bound, if found_pv { 0 } else { 1 }));
         }
 
-        alpha
+        lower_bound
     }
 
     pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>, keystack: &Vec<u64>) -> i32 {
