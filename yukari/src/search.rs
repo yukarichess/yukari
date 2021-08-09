@@ -160,9 +160,9 @@ impl<'a> Search<'a> {
                     score = -self.search(&board, depth - 1, -upper_bound, -lower_bound, &eval, &mut child_pv, mate - 1);
                 }
             }
+            self.keystack.pop();
 
             if score >= upper_bound {
-                self.keystack.pop();
                 pv.set_len(0);
                 self.tt.set(board.hash(), (depth as i8, upper_bound, 2));
                 return upper_bound;
@@ -171,7 +171,6 @@ impl<'a> Search<'a> {
             if self.nodes & 1023 == 0 {
                 if let Some(time) = self.stop_after {
                     if Instant::now() >= time {
-                        self.keystack.pop();
                         pv.set_len(0);
                         return lower_bound;
                     }
@@ -193,8 +192,6 @@ impl<'a> Search<'a> {
             }
         }
 
-        self.keystack.pop();
-
         if lower_bound <= MATE_VALUE - 500 && lower_bound >= -MATE_VALUE + 500 {
             self.tt.set(board.hash(), (depth as i8, lower_bound, if found_pv { 0 } else { 1 }));
         }
@@ -206,6 +203,7 @@ impl<'a> Search<'a> {
         self.keystack.clone_from(keystack);
         let eval = self.eval.eval(board);
         let result = self.search(board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE);
+        println!("# Post root rep stack size: {}", keystack.len());
         result
     }
 
