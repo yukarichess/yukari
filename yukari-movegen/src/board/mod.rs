@@ -1280,7 +1280,9 @@ impl Board {
         if self.castle.3 {
             hash ^= zobrist.castling[3];
         }
-
+        if self.side == Colour::Black {
+            hash ^= zobrist.side;
+        }
         self.hash = hash;
     }
 
@@ -1336,8 +1338,10 @@ mod test {
         cloned.hash
     }
     
+    // Check that incrementally computing a Zobrist hash results in the same value as a freshly
+    // computed hash
     #[test]
-    fn test_incremental_zobrist() {
+    fn incremental_zobrist() {
         // Compare a set of bad moves generated from earlier (current as of this comment's writing) versions of Yukari
         // Generating a board from a FEN notation computes the hash directly. It should always match the incremental
         // version computed directly
@@ -1357,6 +1361,29 @@ mod test {
             board = make_move(&board, &zobrist,m);
             assert_eq!(board.hash, fresh_hash(&board, &zobrist), "Failed testing move #{} ({})", i, m);
         }
+    }
+
+    // Test that making and unmaking a move has the same hash before and after
+    #[test]
+    fn make_unmake() {
+        let zobrist = Zobrist::new();
+        let mut board = Board::from_fen("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1", &zobrist).unwrap();
+        // This hash will always be the same between incremental and non-incremental because it's been computed directly
+        let initial_hash = board.hash;
+        // Now make the test move
+        board = make_move(&board, &zobrist, "a1b1");
+        // Allows us to flip side back without making a move
+        board = board.make_null(&zobrist);
+        // Option for dev to test that it's the same between both incremental and non
+        //assert_eq!(board.hash, fresh_hash(&board, &zobrist), "Made move differs between incremental and fresh");
+        // Unmake the move
+        board = make_move(&board, &zobrist, "b1a1");
+        // Unmake the side swap hash break
+        board = board.make_null(&zobrist);
+        // Check that it's the same hash
+        assert_eq!(board.hash, initial_hash, "Incremental hash differs between original and unmade");
+        // Allow testing if a fresh hash would match
+        assert_eq!(fresh_hash(&board, &zobrist), initial_hash, "Freshly computed hash differs between original and unmade");
     }
 }
 /* impl Drop for Board {
