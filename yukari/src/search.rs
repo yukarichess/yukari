@@ -68,10 +68,10 @@ impl<'a> Search<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn search(&mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32, keystack: &mut Vec<u64>) -> i32 {
+    fn search(&mut self, board: &Board, mut depth: i32, mut lower_bound: i32, upper_bound: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32, keystack: &mut Vec<u64>) -> i32 {
         if depth <= 0 {
             pv.set_len(0);
-            return self.quiesce(board, alpha, beta, eval);
+            return self.quiesce(board, lower_bound, upper_bound, eval);
         }
 
         const R: i32 = 3;
@@ -80,19 +80,19 @@ impl<'a> Search<'a> {
             keystack.push(board.hash());
             let board = board.make_null(self.zobrist);
             let mut child_pv = ArrayVec::new();
-            let score = -self.search(&board, depth - 1 - R, -beta, -beta + 1, eval, &mut child_pv, mate, keystack);
+            let score = -self.search(&board, depth - 1 - R, -upper_bound, -upper_bound + 1, eval, &mut child_pv, mate, keystack);
             keystack.pop();
 
             self.nullmove_attempts += 1;
 
-            if score >= beta {
+            if score >= upper_bound {
                 self.nullmove_success += 1;
-                return beta;
+                return upper_bound;
             }
         }
 
-        if !board.in_check() && depth == 1 && eval.get(board.side()) - 200 >= beta {
-            return beta;
+        if !board.in_check() && depth == 1 && eval.get(board.side()) - 200 >= upper_bound {
+            return upper_bound;
         }
 
         let moves: [Move; 256] = [Move::default(); 256];
@@ -121,8 +121,6 @@ impl<'a> Search<'a> {
             depth += 1;
         }
 
-        keystack.push(board.hash());
-
         let mut found_pv = false;
 
         for m in moves {
@@ -133,33 +131,34 @@ impl<'a> Search<'a> {
             let board = board.make(m, self.zobrist);
             let mut score;
 
+            // Push the move to check for repetition draws
+            keystack.push(board.hash());
             if !found_pv {
-                score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
+                score = -self.search(&board, depth - 1, -upper_bound, -lower_bound, &eval, &mut child_pv, mate - 1, keystack);
             } else {
-                score = -self.search(&board, depth - 1, -alpha - 1, -alpha, &eval, &mut child_pv, mate - 1, keystack);
-                if score > alpha {
-                    score = -self.search(&board, depth - 1, -beta, -alpha, &eval, &mut child_pv, mate - 1, keystack);
+                score = -self.search(&board, depth - 1, -lower_bound - 1, -lower_bound, &eval, &mut child_pv, mate - 1, keystack);
+                if score > lower_bound {
+                    score = -self.search(&board, depth - 1, -upper_bound, -lower_bound, &eval, &mut child_pv, mate - 1, keystack);
                 }
             }
+            keystack.pop();
 
-            if score >= beta {
-                keystack.pop();
+            if score >= upper_bound {
                 pv.set_len(0);
-                return beta;
+                return upper_bound;
             }
 
             if self.nodes & 1023 == 0 {
                 if let Some(time) = self.stop_after {
                     if Instant::now() >= time {
-                        keystack.pop();
                         pv.set_len(0);
-                        return alpha;
+                        return lower_bound;
                     }
                 }
             }
 
-            if score > alpha {
-                alpha = score;
+            if score > lower_bound {
+                lower_bound = score;
                 pv.set_len(0);
                 pv.push(m);
                 for m in child_pv {
@@ -168,9 +167,7 @@ impl<'a> Search<'a> {
                 found_pv = true;
             }
         }
-
-        keystack.pop();
-        alpha
+        lower_bound
     }
 
     pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>, keystack: &mut Vec<u64>) -> i32 {
