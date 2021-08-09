@@ -1303,6 +1303,62 @@ impl Board {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use tinyvec::ArrayVec;
+
+    use crate::{Board, Move, Square, Zobrist};
+
+    // Helper mostly copied from main engine to convert notated moves into real moves
+    fn make_move(board: &Board, zobrist: &Zobrist, move_str: &str) -> Board {
+        let (from_str, dest_str) = move_str.split_at(2);
+        let from = Square::from_str(from_str).unwrap();
+        let dest = Square::from_str(dest_str).unwrap();
+        let moves: [Move; 256] = [Move::default(); 256];
+        let mut moves = ArrayVec::from(moves);
+        moves.set_len(0);
+        board.generate(&mut moves);
+        for m in moves {
+            if m.from == from && m.dest == dest {
+                return board.make(m, zobrist);
+            }
+        }
+        unreachable!("Should never hit this under testing conditions");
+    }
+
+    // Helper to take a board and compute the hash freshly
+    fn fresh_hash(board: &Board, zobrist: &Zobrist) -> u64 {
+        // Have to clone to get mutable board
+        let mut cloned = board.clone();
+        cloned.recalculate_hash(zobrist);
+        cloned.hash
+    }
+    
+    #[test]
+    fn test_incremental_zobrist() {
+        // Compare a set of bad moves generated from earlier (current as of this comment's writing) versions of Yukari
+        // Generating a board from a FEN notation computes the hash directly. It should always match the incremental
+        // version computed directly
+        let zobrist = Zobrist::new();
+        let mut board = Board::from_fen("8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1", &zobrist).unwrap();
+        // Moves to test
+        let moves = [
+            "a1b1",
+            "a7a6",
+            "b1a1",
+            "a6b6",
+            "a1b1",
+            "b6a6"
+        ];
+        // Make each move 
+        for (i, &m) in moves.iter().enumerate() {
+            board = make_move(&board, &zobrist,m);
+            assert_eq!(board.hash, fresh_hash(&board, &zobrist), "Failed testing move #{} ({})", i, m);
+        }
+    }
+}
 /* impl Drop for Board {
     fn drop(&mut self) {
         if ::std::thread::panicking() {
