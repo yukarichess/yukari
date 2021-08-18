@@ -76,7 +76,7 @@ impl<'a> Search<'a> {
 
         const R: i32 = 3;
 
-        if !board.in_check() && depth >= R {
+        if !board.in_check() && depth >= 2 {
             keystack.push(board.hash());
             let board = board.make_null(self.zobrist);
             let mut child_pv = ArrayVec::new();
