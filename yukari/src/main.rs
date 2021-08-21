@@ -2,6 +2,7 @@ use std::io::{self};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use yukari::engine::{TimeControl, TimeMode};
+use yukari::proto::Comms;
 use yukari::{self, Search, is_repetition_draw};
 use yukari_movegen::{Board, Move, Square, Zobrist};
 use tinyvec::ArrayVec;
@@ -134,17 +135,24 @@ impl Default for Yukari {
 
 fn main() -> io::Result<()> {
     let mut engine = Yukari::new();
+    // TODO: Probably move this into engine
+    let mut comms = Comms::stdio();
+    // Line buffer used by comms, we don't need to manage this ourselves other than providing it
     let mut line = String::new();
     loop {
-        line.clear();
-        let count = io::stdin().read_line(&mut line)?;
-        if count == 0 {
-            println!("# got zero read");
-            continue;
+        // Must test for EOF to avoid issues parsing
+        if comms.read_line(&mut line) == false {
+            // This indicates EOF
+            // Print to both pipes
+            eprintln!("We are exiting due to EOF on input!");
+            println!("# Exiting due to EOF on input");
+            return Ok(());
         }
+        // TODO: Potentially switch read_line to return a Result<&str, ()> so that we can return the trimmed string
         let trimmed = line.trim();
+        // TODO: Encapsulate this into comms
         let (cmd, args) = trimmed.split_once(' ').unwrap_or((trimmed, ""));
-
+        // TODO: Move this to XBoard code
         match cmd {
             // Identification for engines that auto switch between protocols
             "xboard" => {}
