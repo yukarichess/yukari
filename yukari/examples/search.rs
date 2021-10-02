@@ -5,7 +5,7 @@ use tinyvec::ArrayVec;
 use std::time::Instant;
 
 fn main() {
-    let fen = &std::env::args().nth(1).expect("Please provide a FEN string or 'bench'");
+    let fen = &std::env::args().nth(1).expect("Please provide a FEN string wrapped in quotes or the string 'bench' as argument");
     let zobrist = Zobrist::new();
     let board = Board::from_fen(if fen == "bench" {
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
