@@ -9,7 +9,7 @@ struct Node {
 pub struct Tape { nodes: RefCell<Vec<Node>> }
 
 impl Tape {
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         Tape { nodes: RefCell::new(Vec::new()) }
     }
 
@@ -72,11 +72,11 @@ pub struct Var<'t> {
 }
 
 impl<'t> Var<'t> {
-    pub fn value(&self) -> f64 {
+    #[must_use] pub fn value(&self) -> f64 {
         self.value
     }
 
-    pub fn grad(&self) -> Grad {
+    #[must_use] pub fn grad(&self) -> Grad {
         let len = self.tape.len();
         let nodes = self.tape.nodes.borrow();
         let mut derivs = vec![0.0; len];
@@ -91,7 +91,7 @@ impl<'t> Var<'t> {
         Grad { derivs }
     }
 
-    pub fn abs(self) -> Self {
+    #[must_use] pub fn abs(self) -> Self {
         Var {
             tape: self.tape,
             value: self.value.abs(),
@@ -101,7 +101,7 @@ impl<'t> Var<'t> {
         }
     }
 
-    pub fn sin(self) -> Self {
+    #[must_use] pub fn sin(self) -> Self {
         Var {
             tape: self.tape,
             value: self.value.sin(),
@@ -111,7 +111,7 @@ impl<'t> Var<'t> {
         }
     }
 
-    pub fn tanh(self) -> Self {
+    #[must_use] pub fn tanh(self) -> Self {
         Var {
             tape: self.tape,
             value: self.value.tanh(),
@@ -199,7 +199,7 @@ impl<'t> ::std::ops::Div for Var<'t> {
 pub struct Grad { derivs: Vec<f64> }
 
 impl Grad {
-    pub fn wrt(&self, var: Var<'_>) -> f64 {
+    #[must_use] pub fn wrt(&self, var: Var<'_>) -> f64 {
         self.derivs[var.index]
     }
 }
@@ -215,7 +215,7 @@ mod tests {
         let y = t.var(4.2);
         let z = x * y + x.sin();
         let grad = z.grad();
-        assert!((z.value - 2.579425538604203).abs() <= 1e-15);
+        assert!((z.value - 2.579_425_538_604_203).abs() <= 1e-15);
         assert!((grad.wrt(x) - (y.value + x.value.cos())).abs() <= 1e-15);
         assert!((grad.wrt(y) - x.value).abs() <= 1e-15);
     }

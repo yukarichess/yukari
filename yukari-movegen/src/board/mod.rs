@@ -681,7 +681,7 @@ impl Board {
                     None => {
                         if Rank::from(dest).is_relative_fourth(self.side) {
                             if let Some(from) = from.relative_south(self.side) {
-                                if let Some(Piece::Pawn) = self.data.piece_from_square(from) {
+                                if self.data.piece_from_square(from) == Some(Piece::Pawn) {
                                     add_pawn_block(v, from, dest, MoveType::DoublePush);
                                 }
                             }

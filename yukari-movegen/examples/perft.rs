@@ -2,7 +2,7 @@ use yukari_movegen::{Board, Move, Zobrist, perft};
 use rayon::prelude::*;
 use tinyvec::ArrayVec;
 
-pub fn divide(board: &Board, zobrist: &Zobrist, depth: u32) -> u64 {
+#[must_use] pub fn divide(board: &Board, zobrist: &Zobrist, depth: u32) -> u64 {
     if depth == 0 {
         1
     } else {

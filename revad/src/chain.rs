@@ -106,7 +106,7 @@ pub fn ctz_extend<T, I>(v: &mut Vec<(usize, T)>, i0: usize, xs: I)
     let start = v.len();
     for (i, x) in xs.enumerate() {
         v.push((i0 + i, x));
-        let j = ruler_max - ruler.trailing_zeros() as i64;
+        let j = ruler_max - i64::from(ruler.trailing_zeros());
         if j <= 0 {
             ruler = 1;
             ruler_max += 1;

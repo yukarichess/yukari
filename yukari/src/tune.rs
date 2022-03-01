@@ -233,7 +233,7 @@ impl<'a> Tune<'a> {
         }
     }
 
-    pub fn get_state(&self) -> [Var<'a>; 780] {
+    #[must_use] pub fn get_state(&self) -> [Var<'a>; 780] {
         self.weights
     }
 
@@ -248,27 +248,27 @@ impl<'a> Tune<'a> {
         let mut mean_mg = [0.0; 6];
         let mut mean_eg = [0.0; 6];
 
-        mean_mg[0] = self.weights[12..75].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[1] = self.weights[75..139].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[2] = self.weights[139..203].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[3] = self.weights[203..267].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[4] = self.weights[267..331].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_mg[5] = self.weights[331..395].iter().map(|v| v.value()).sum::<f64>() / 64.0;
+        mean_mg[0] = self.weights[12..75].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_mg[1] = self.weights[75..139].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_mg[2] = self.weights[139..203].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_mg[3] = self.weights[203..267].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_mg[4] = self.weights[267..331].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_mg[5] = self.weights[331..395].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
 
-        mean_eg[0] = self.weights[395..459].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[1] = self.weights[459..523].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[2] = self.weights[523..587].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[3] = self.weights[587..651].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[4] = self.weights[651..715].iter().map(|v| v.value()).sum::<f64>() / 64.0;
-        mean_eg[5] = self.weights[715..779].iter().map(|v| v.value()).sum::<f64>() / 64.0;
+        mean_eg[0] = self.weights[395..459].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_eg[1] = self.weights[459..523].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_eg[2] = self.weights[523..587].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_eg[3] = self.weights[587..651].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_eg[4] = self.weights[651..715].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
+        mean_eg[5] = self.weights[715..779].iter().map(revad::tape::Var::value).sum::<f64>() / 64.0;
 
         print!("mat_mg: [");
-        for (index, w) in self.weights[0..6].iter().enumerate() {
+        for (_index, w) in self.weights[0..6].iter().enumerate() {
             print!("{:>4.0}, ", w.value());
         }
         println!("],");
         print!("mat_eg: [");
-        for (index, w) in self.weights[6..12].iter().enumerate() {
+        for (_index, w) in self.weights[6..12].iter().enumerate() {
             print!("{:>4.0}, ", w.value());
         }
         println!("],");

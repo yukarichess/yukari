@@ -13,7 +13,7 @@ pub struct TimeControl {
 
 impl TimeControl {
     /// Construct a new instance with the base time on the clock
-    pub fn new(mode: TimeMode) -> Self {
+    #[must_use] pub fn new(mode: TimeMode) -> Self {
         Self {
             remaining: match mode {
                 TimeMode::St(time) => time as f32,
@@ -36,7 +36,7 @@ impl TimeControl {
     }
 
     /// Compute the time to search.
-    pub fn search_time(&self) -> f32 {
+    #[must_use] pub fn search_time(&self) -> f32 {
         match self.mode {
             TimeMode::St(secs) => (secs as f32) - 0.02,
             TimeMode::Incremental { base: _, increment } => {

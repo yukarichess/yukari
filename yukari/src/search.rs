@@ -8,7 +8,7 @@ use crate::eval::{Eval, EvalState};
 const MATE_VALUE: i32 = 10_000;
 
 // TODO: when 50-move rule is implemented, this can be limited to searching from the last irreversible move.
-pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
+#[must_use] pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
     keystack.iter().filter(|key| **key == hash).count() >= 3
 }
 
@@ -23,7 +23,7 @@ pub struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    pub fn new(stop_after: Option<Instant>, zobrist: &'a Zobrist) -> Self {
+    #[must_use] pub fn new(stop_after: Option<Instant>, zobrist: &'a Zobrist) -> Self {
         Self {
             eval: Eval::new(),
             nodes: 0,
@@ -175,15 +175,15 @@ impl<'a> Search<'a> {
         self.search(board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE, keystack)
     }
 
-    pub fn nodes(&self) -> u64 {
+    #[must_use] pub fn nodes(&self) -> u64 {
         self.nodes
     }
 
-    pub fn qnodes(&self) -> u64 {
+    #[must_use] pub fn qnodes(&self) -> u64 {
         self.qnodes
     }
 
-    pub fn nullmove_success(&self) -> f64 {
+    #[must_use] pub fn nullmove_success(&self) -> f64 {
         100.0 * (self.nullmove_success as f64) / (self.nullmove_attempts as f64)
     }
 

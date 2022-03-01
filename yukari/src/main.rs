@@ -30,7 +30,7 @@ pub struct Yukari {
 
 impl Yukari {
     /// Create a new copy of the engine, starting with the typical position and unused time controls
-    pub fn new() -> Self {
+    #[must_use] pub fn new() -> Self {
         let zobrist = Zobrist::new();
         Self {
             // Using startpos fixes knights
@@ -68,7 +68,7 @@ impl Yukari {
 
     /// Generates valid moves for current posiition then finds the attempted
     /// move in the list
-    pub fn find_move(&self, from: Square, dest: Square) -> Option<Move> {
+    #[must_use] pub fn find_move(&self, from: Square, dest: Square) -> Option<Move> {
         let moves: [Move; 256] = [Move::default(); 256];
         let mut moves = ArrayVec::from(moves);
         moves.set_len(0);
@@ -120,7 +120,7 @@ impl Yukari {
         );
         println!(
             "# Branching factor: {:.3}",
-            ((s.nodes() + s.qnodes()) as f64).powf(1.0 / depth as f64)
+            ((s.nodes() + s.qnodes()) as f64).powf(1.0 / f64::from(depth))
         );
         self.tc.increment_moves();
     }
