@@ -3,7 +3,7 @@ use std::{time::Instant};
 use yukari_movegen::{Board, Move, Zobrist};
 use tinyvec::ArrayVec;
 
-use crate::eval::{Eval, EvalState};
+use crate::eval::{EvalState};
 
 const MATE_VALUE: i32 = 10_000;
 
@@ -13,7 +13,6 @@ const MATE_VALUE: i32 = 10_000;
 }
 
 pub struct Search<'a> {
-    eval: Eval,
     nodes: u64,
     qnodes: u64,
     nullmove_attempts: u64,
@@ -25,7 +24,6 @@ pub struct Search<'a> {
 impl<'a> Search<'a> {
     #[must_use] pub fn new(stop_after: Option<Instant>, zobrist: &'a Zobrist) -> Self {
         Self {
-            eval: Eval::new(),
             nodes: 0,
             qnodes: 0,
             nullmove_attempts: 0,
@@ -46,7 +44,7 @@ impl<'a> Search<'a> {
         board.generate_captures_incremental(|m| {
             self.qnodes += 1;
 
-            let eval = self.eval.update_eval(board, &m, eval);
+            let eval = eval.clone().update_eval(board, &m);
 
             // Pre-empt stand pat by skipping moves with bad evaluation.
             // One can think of this as delta pruning, with the delta being zero.
@@ -127,7 +125,7 @@ impl<'a> Search<'a> {
             self.nodes += 1;
 
             let mut child_pv = ArrayVec::new();
-            let eval = self.eval.update_eval(board, &m, eval);
+            let eval = eval.clone().update_eval(board, &m);
             let board = board.make(m, self.zobrist);
             let mut score;
 
@@ -171,7 +169,7 @@ impl<'a> Search<'a> {
     }
 
     pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>, keystack: &mut Vec<u64>) -> i32 {
-        let eval = self.eval.eval(board);
+        let eval = EvalState::eval(board);
         self.search(board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE, keystack)
     }
 
@@ -185,9 +183,5 @@ impl<'a> Search<'a> {
 
     #[must_use] pub fn nullmove_success(&self) -> f64 {
         100.0 * (self.nullmove_success as f64) / (self.nullmove_attempts as f64)
-    }
-
-    pub fn from_tuning_weights(&mut self, weights: &[i32]) {
-        self.eval.from_tuning_weights(weights);
     }
 }

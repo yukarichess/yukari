@@ -1,7 +1,0 @@
-[package]
-name = "revad"
-version = "0.1.0"
-authors = ["Rufflewind"]
-description = "Reverse-mode automatic differentiation."
-
-[dependencies]

@@ -10,7 +10,6 @@ edition = "2018"
 yukari-movegen = { path = "../yukari-movegen" }
 rand = "0.8"
 tinyvec = "1.5"
-revad = { path = "../revad" }
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["real_blackbox"]}
