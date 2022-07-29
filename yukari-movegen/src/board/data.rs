@@ -319,17 +319,7 @@ impl BoardData {
                         break;
                     }
                 }
-            } /* else {
-                  let attacker = attacker.to_square().unwrap();
-                  let square = square.to_square().unwrap();
-                  panic!(
-                      "no direction between {:?} {} and {:?} {}",
-                      self.piece_from_square(attacker),
-                      attacker,
-                      self.piece_from_square(square),
-                      square
-                  );
-              } */
+            }
         }
     }
 }
