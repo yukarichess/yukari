@@ -204,9 +204,7 @@ impl BoardData {
             }
         };
 
-        let slide = |bitlist: &mut BitlistArray,
-                     index: &PieceIndexArray,
-                     dir: Direction| {
+        let slide = |bitlist: &mut BitlistArray, index: &PieceIndexArray, dir: Direction| {
             if let Some(skip_dir) = skip_dir {
                 if skip_dir == dir || skip_dir == dir.opposite() {
                     return;
@@ -322,16 +320,16 @@ impl BoardData {
                     }
                 }
             } /* else {
-                let attacker = attacker.to_square().unwrap();
-                let square = square.to_square().unwrap();
-                panic!(
-                    "no direction between {:?} {} and {:?} {}",
-                    self.piece_from_square(attacker),
-                    attacker,
-                    self.piece_from_square(square),
-                    square
-                );
-            } */
+                  let attacker = attacker.to_square().unwrap();
+                  let square = square.to_square().unwrap();
+                  panic!(
+                      "no direction between {:?} {} and {:?} {}",
+                      self.piece_from_square(attacker),
+                      attacker,
+                      self.piece_from_square(square),
+                      square
+                  );
+              } */
         }
     }
 }

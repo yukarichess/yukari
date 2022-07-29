@@ -1,10 +1,10 @@
 use std::io::{self};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
-use yukari::engine::{TimeControl, TimeMode};
-use yukari::{self, Search, is_repetition_draw};
-use yukari_movegen::{Board, Move, Square, Zobrist};
 use tinyvec::ArrayVec;
+use yukari::engine::{TimeControl, TimeMode};
+use yukari::{self, is_repetition_draw, Search};
+use yukari_movegen::{Board, Move, Square, Zobrist};
 
 #[derive(Clone, Copy, Debug)]
 enum Mode {
@@ -13,9 +13,8 @@ enum Mode {
     Normal,
     /// In force mode we just update our internal state, not responding with a move.
     /// xboard itself seems to use this to relay past game moves to the engine
-    Force
-    // TODO: Update doc comment
-    // TODO: Analyze mode also exists
+    Force, // TODO: Update doc comment
+           // TODO: Analyze mode also exists
 }
 
 /// The main engine state
@@ -30,7 +29,8 @@ pub struct Yukari {
 
 impl Yukari {
     /// Create a new copy of the engine, starting with the typical position and unused time controls
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         let zobrist = Zobrist::new();
         Self {
             // Using startpos fixes knights
@@ -68,7 +68,8 @@ impl Yukari {
 
     /// Generates valid moves for current posiition then finds the attempted
     /// move in the list
-    #[must_use] pub fn find_move(&self, from: Square, dest: Square) -> Option<Move> {
+    #[must_use]
+    pub fn find_move(&self, from: Square, dest: Square) -> Option<Move> {
         let moves: [Move; 256] = [Move::default(); 256];
         let mut moves = ArrayVec::from(moves);
         moves.set_len(0);
@@ -177,10 +178,12 @@ fn main() -> io::Result<()> {
             // Hard would turn on thinking during opponent's time, easy would turn it off
             // we don't do it, so it's unimportant
             "hard" | "easy" => {}
-            "quit" => { break; },
+            "quit" => {
+                break;
+            }
             // Feature replies are just ignored since we don't turn anything off yet
             // TODO: Handle rejects we can't tolerate and abort early
-            "accepted" | "rejected" => {},
+            "accepted" | "rejected" => {}
             // Ping expects a response with the correct tag once the commands prior to the ping are done
             // That ends up being some GPU fence level synchronization nonsense if it were to send more than one
             // so for now we just "handle it" by replying with pong immediately. For now this "works" because
@@ -224,7 +227,9 @@ fn main() -> io::Result<()> {
                     match engine.mode {
                         Mode::Normal => {
                             // Find the move in the list
-                            let m = engine.find_move(from, dest).expect("Attempted move not found!?");
+                            let m = engine
+                                .find_move(from, dest)
+                                .expect("Attempted move not found!?");
                             engine.board = engine.board.make(m, &engine.zobrist);
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                                 println!("1/2-1/2 {{Draw by repetition}}");
@@ -247,7 +252,9 @@ fn main() -> io::Result<()> {
                             engine.keystack.push(engine.board.hash());
                         }
                         Mode::Force => {
-                            let m = engine.find_move(from, dest).expect("Attempted move not found!?");
+                            let m = engine
+                                .find_move(from, dest)
+                                .expect("Attempted move not found!?");
                             engine.board = engine.board.make(m, &engine.zobrist);
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                                 println!("1/2-1/2 {{Draw by repetition}}");

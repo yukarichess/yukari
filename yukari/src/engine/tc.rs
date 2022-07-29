@@ -13,12 +13,13 @@ pub struct TimeControl {
 
 impl TimeControl {
     /// Construct a new instance with the base time on the clock
-    #[must_use] pub fn new(mode: TimeMode) -> Self {
+    #[must_use]
+    pub fn new(mode: TimeMode) -> Self {
         Self {
             remaining: match mode {
                 TimeMode::St(time) => time as f32,
-                TimeMode::Incremental {base, .. } => base,
-                TimeMode::Classical {base, .. } => base
+                TimeMode::Incremental { base, .. } => base,
+                TimeMode::Classical { base, .. } => base,
             },
             mode,
             move_number: 0,
@@ -36,13 +37,14 @@ impl TimeControl {
     }
 
     /// Compute the time to search.
-    #[must_use] pub fn search_time(&self) -> f32 {
+    #[must_use]
+    pub fn search_time(&self) -> f32 {
         match self.mode {
             TimeMode::St(secs) => (secs as f32) - 0.02,
             TimeMode::Incremental { base: _, increment } => {
                 let remaining = self.remaining - 0.02;
                 remaining.min((remaining + increment) / 30.0)
-            },
+            }
             TimeMode::Classical { base: _, mps } => {
                 let remaining = self.remaining - 0.02;
                 let mps = mps as i32;
@@ -55,7 +57,7 @@ impl TimeControl {
                 }
 
                 remaining / (movesleft as f32)
-            },
+            }
         }
     }
 }
@@ -70,15 +72,15 @@ pub enum TimeMode {
         /// Base time for the game in seconds
         base: f32,
         /// Increment in seconds after each move
-        increment: f32
+        increment: f32,
     },
     /// Classical time control has a base time, which is added after a certain number of moves
     Classical {
         /// Base time for the game in seconds
         base: f32,
         /// Moves per session (number of moves before time is bumped again)
-        mps: u32
-    }
+        mps: u32,
+    },
 }
 
 // TODO: this is probably not a great way to handle things since UCI will have it's own setup
@@ -105,14 +107,17 @@ impl FromStr for TimeMode {
                     // Incremental
                     // In incremental we need the increment to add after each move
                     let inc = f32::from_str(args[2]).map_err(|_| ())?;
-                    Ok(Self::Incremental { base, increment: inc})
+                    Ok(Self::Incremental {
+                        base,
+                        increment: inc,
+                    })
                 } else {
                     // Classical
                     // In classical we already know the increment is zero
-                    Ok(Self::Classical {base, mps})
+                    Ok(Self::Classical { base, mps })
                 }
             }
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -122,7 +127,7 @@ impl TimeMode {
     fn parse_time(s: &str) -> Option<f32> {
         if let Some(sep) = s.find(':') {
             let min_part = f32::from_str(&s[0..sep]).ok()?;
-            let sec_part = f32::from_str(&s[sep+1..]).ok()?;
+            let sec_part = f32::from_str(&s[sep + 1..]).ok()?;
             Some(60.0f32.mul_add(min_part, sec_part))
         } else {
             let min = f32::from_str(s).ok()?;

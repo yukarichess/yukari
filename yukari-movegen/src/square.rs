@@ -3,7 +3,7 @@ use std::{
     convert::TryFrom,
     fmt::{Debug, Display},
     num::NonZeroU8,
-    str::FromStr
+    str::FromStr,
 };
 
 const DIRECTIONS: [Option<Direction>; 240] = [

@@ -87,7 +87,8 @@ impl Piecemask {
         // Here we have a 32-bit integer, of which 16 bits are white and 16 are black.
         // Thus, any position where one side has more than 16 pieces is by the rules of chess impossible to reach,
         // and thus every time this gets called there will be at least one empty bit.
-        let piece_index = unsafe { (self.empty() & Bitlist::mask_from_colour(colour)).peek_nonzero() };
+        let piece_index =
+            unsafe { (self.empty() & Bitlist::mask_from_colour(colour)).peek_nonzero() };
         let yes = Bitlist::from(piece_index);
         let no = Bitlist::new();
 

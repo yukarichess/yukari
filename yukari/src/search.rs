@@ -1,14 +1,15 @@
-use std::{time::Instant};
+use std::time::Instant;
 
-use yukari_movegen::{Board, Move, Zobrist};
 use tinyvec::ArrayVec;
+use yukari_movegen::{Board, Move, Zobrist};
 
-use crate::eval::{EvalState};
+use crate::eval::EvalState;
 
 const MATE_VALUE: i32 = 10_000;
 
 // TODO: when 50-move rule is implemented, this can be limited to searching from the last irreversible move.
-#[must_use] pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
+#[must_use]
+pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
     keystack.iter().filter(|key| **key == hash).count() >= 3
 }
 
@@ -22,7 +23,8 @@ pub struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    #[must_use] pub fn new(stop_after: Option<Instant>, zobrist: &'a Zobrist) -> Self {
+    #[must_use]
+    pub fn new(stop_after: Option<Instant>, zobrist: &'a Zobrist) -> Self {
         Self {
             nodes: 0,
             qnodes: 0,
@@ -66,7 +68,17 @@ impl<'a> Search<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn search(&mut self, board: &Board, mut depth: i32, mut lower_bound: i32, upper_bound: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>, mate: i32, keystack: &mut Vec<u64>) -> i32 {
+    fn search(
+        &mut self,
+        board: &Board,
+        mut depth: i32,
+        mut lower_bound: i32,
+        upper_bound: i32,
+        eval: &EvalState,
+        pv: &mut ArrayVec<[Move; 32]>,
+        mate: i32,
+        keystack: &mut Vec<u64>,
+    ) -> i32 {
         if depth <= 0 {
             pv.set_len(0);
             return self.quiesce(board, lower_bound, upper_bound, eval);
@@ -78,7 +90,16 @@ impl<'a> Search<'a> {
             keystack.push(board.hash());
             let board = board.make_null(self.zobrist);
             let mut child_pv = ArrayVec::new();
-            let score = -self.search(&board, depth - 1 - R, -upper_bound, -upper_bound + 1, eval, &mut child_pv, mate, keystack);
+            let score = -self.search(
+                &board,
+                depth - 1 - R,
+                -upper_bound,
+                -upper_bound + 1,
+                eval,
+                &mut child_pv,
+                mate,
+                keystack,
+            );
             keystack.pop();
 
             self.nullmove_attempts += 1;
@@ -132,11 +153,38 @@ impl<'a> Search<'a> {
             // Push the move to check for repetition draws
             keystack.push(board.hash());
             if !found_pv {
-                score = -self.search(&board, depth - 1, -upper_bound, -lower_bound, &eval, &mut child_pv, mate - 1, keystack);
+                score = -self.search(
+                    &board,
+                    depth - 1,
+                    -upper_bound,
+                    -lower_bound,
+                    &eval,
+                    &mut child_pv,
+                    mate - 1,
+                    keystack,
+                );
             } else {
-                score = -self.search(&board, depth - 1, -lower_bound - 1, -lower_bound, &eval, &mut child_pv, mate - 1, keystack);
+                score = -self.search(
+                    &board,
+                    depth - 1,
+                    -lower_bound - 1,
+                    -lower_bound,
+                    &eval,
+                    &mut child_pv,
+                    mate - 1,
+                    keystack,
+                );
                 if score > lower_bound {
-                    score = -self.search(&board, depth - 1, -upper_bound, -lower_bound, &eval, &mut child_pv, mate - 1, keystack);
+                    score = -self.search(
+                        &board,
+                        depth - 1,
+                        -upper_bound,
+                        -lower_bound,
+                        &eval,
+                        &mut child_pv,
+                        mate - 1,
+                        keystack,
+                    );
                 }
             }
             keystack.pop();
@@ -168,20 +216,31 @@ impl<'a> Search<'a> {
         lower_bound
     }
 
-    pub fn search_root(&mut self, board: &Board, depth: i32, pv: &mut ArrayVec<[Move; 32]>, keystack: &mut Vec<u64>) -> i32 {
+    pub fn search_root(
+        &mut self,
+        board: &Board,
+        depth: i32,
+        pv: &mut ArrayVec<[Move; 32]>,
+        keystack: &mut Vec<u64>,
+    ) -> i32 {
         let eval = EvalState::eval(board);
-        self.search(board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE, keystack)
+        self.search(
+            board, depth, -100_000, 100_000, &eval, pv, MATE_VALUE, keystack,
+        )
     }
 
-    #[must_use] pub fn nodes(&self) -> u64 {
+    #[must_use]
+    pub fn nodes(&self) -> u64 {
         self.nodes
     }
 
-    #[must_use] pub fn qnodes(&self) -> u64 {
+    #[must_use]
+    pub fn qnodes(&self) -> u64 {
         self.qnodes
     }
 
-    #[must_use] pub fn nullmove_success(&self) -> f64 {
+    #[must_use]
+    pub fn nullmove_success(&self) -> f64 {
         100.0 * (self.nullmove_success as f64) / (self.nullmove_attempts as f64)
     }
 }

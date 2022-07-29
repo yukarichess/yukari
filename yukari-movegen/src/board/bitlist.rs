@@ -1,6 +1,10 @@
 use super::index::PieceIndex;
 use crate::{colour::Colour, square::Square};
-use std::{fmt::Debug, iter::FusedIterator, ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Index, Not}};
+use std::{
+    fmt::Debug,
+    iter::FusedIterator,
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Index, Not},
+};
 
 /// A set of 32 bits, each representing a piece.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -164,7 +168,10 @@ impl Iterator for BitlistIter {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.0.count_ones() as usize, Some(self.0.count_ones() as usize))
+        (
+            self.0.count_ones() as usize,
+            Some(self.0.count_ones() as usize),
+        )
     }
 }
 

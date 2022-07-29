@@ -2,14 +2,11 @@ use yukari_movegen::{Board, Colour, Move, MoveType, Piece, Square};
 
 // CREDIT: These tables come from PeSTO by Ronald Friedrich.
 
-const MAT_MG: [i32; 6] = [
-    82, 337, 365, 477, 1025,  0
-];
+const MAT_MG: [i32; 6] = [82, 337, 365, 477, 1025, 0];
 
-const MAT_EG: [i32; 6] = [
-    94, 281, 297, 512,  936,  0
-];
+const MAT_EG: [i32; 6] = [94, 281, 297, 512, 936, 0];
 
+#[rustfmt::skip]
 const PST_MG: [[i32; 64]; 6] = [
     // Pawns
     [
@@ -79,6 +76,7 @@ const PST_MG: [[i32; 64]; 6] = [
     ]
 ];
 
+#[rustfmt::skip]
 const PST_EG: [[i32; 64]; 6] = [
     // Pawns
     [
@@ -148,9 +146,7 @@ const PST_EG: [[i32; 64]; 6] = [
     ]
 ];
 
-const PHASE: [i32; 6] = [
-    0, 1, 1, 2, 4, 0
-];
+const PHASE: [i32; 6] = [0, 1, 1, 2, 4, 0];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EvalState {
@@ -190,35 +186,47 @@ impl EvalState {
 
     fn add_piece(&mut self, piece: Piece, square: Square, colour: Colour) {
         if colour == Colour::White {
-            self.pst_mg += PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
-            self.pst_eg += PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
+            self.pst_mg +=
+                PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
+            self.pst_eg +=
+                PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
         } else {
-            self.pst_mg -= PST_MG[piece as usize][square.flip().into_inner() as usize] + MAT_MG[piece as usize];
-            self.pst_eg -= PST_EG[piece as usize][square.flip().into_inner() as usize] + MAT_EG[piece as usize];
+            self.pst_mg -= PST_MG[piece as usize][square.flip().into_inner() as usize]
+                + MAT_MG[piece as usize];
+            self.pst_eg -= PST_EG[piece as usize][square.flip().into_inner() as usize]
+                + MAT_EG[piece as usize];
         }
         self.phase += PHASE[piece as usize];
     }
 
     fn remove_piece(&mut self, piece: Piece, square: Square, colour: Colour) {
         if colour == Colour::White {
-            self.pst_mg -= PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
-            self.pst_eg -= PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
+            self.pst_mg -=
+                PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
+            self.pst_eg -=
+                PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
         } else {
-            self.pst_mg += PST_MG[piece as usize][square.flip().into_inner() as usize] + MAT_MG[piece as usize];
-            self.pst_eg += PST_EG[piece as usize][square.flip().into_inner() as usize] + MAT_EG[piece as usize];
+            self.pst_mg += PST_MG[piece as usize][square.flip().into_inner() as usize]
+                + MAT_MG[piece as usize];
+            self.pst_eg += PST_EG[piece as usize][square.flip().into_inner() as usize]
+                + MAT_EG[piece as usize];
         }
         self.phase -= PHASE[piece as usize];
     }
 
     fn move_piece(&mut self, piece: Piece, from_square: Square, to_square: Square, colour: Colour) {
         if colour == Colour::White {
-            self.pst_mg += PST_MG[piece as usize][to_square.into_inner() as usize] - PST_MG[piece as usize][from_square.into_inner() as usize];
-            self.pst_eg += PST_EG[piece as usize][to_square.into_inner() as usize] - PST_EG[piece as usize][from_square.into_inner() as usize];
+            self.pst_mg += PST_MG[piece as usize][to_square.into_inner() as usize]
+                - PST_MG[piece as usize][from_square.into_inner() as usize];
+            self.pst_eg += PST_EG[piece as usize][to_square.into_inner() as usize]
+                - PST_EG[piece as usize][from_square.into_inner() as usize];
         } else {
             let from_square = from_square.flip();
             let to_square = to_square.flip();
-            self.pst_mg -= PST_MG[piece as usize][to_square.into_inner() as usize] - PST_MG[piece as usize][from_square.into_inner() as usize];
-            self.pst_eg -= PST_EG[piece as usize][to_square.into_inner() as usize] - PST_EG[piece as usize][from_square.into_inner() as usize];
+            self.pst_mg -= PST_MG[piece as usize][to_square.into_inner() as usize]
+                - PST_MG[piece as usize][from_square.into_inner() as usize];
+            self.pst_eg -= PST_EG[piece as usize][to_square.into_inner() as usize]
+                - PST_EG[piece as usize][from_square.into_inner() as usize];
         }
     }
 
@@ -232,7 +240,7 @@ impl EvalState {
                 let dest_piece = board.piece_from_square(m.dest).unwrap();
                 self.remove_piece(dest_piece, m.dest, !board.side());
                 self.move_piece(from_piece, m.from, m.dest, board.side());
-            },
+            }
             MoveType::Castle => {
                 if m.dest > m.from {
                     let rook_from = m.dest.east().unwrap();
@@ -249,17 +257,17 @@ impl EvalState {
                 let dest_piece = board.ep().unwrap().relative_south(board.side()).unwrap();
                 self.remove_piece(Piece::Pawn, dest_piece, !board.side());
                 self.move_piece(from_piece, m.from, m.dest, board.side());
-            },
+            }
             MoveType::Promotion => {
                 self.remove_piece(Piece::Pawn, m.from, board.side());
                 self.add_piece(m.prom.unwrap(), m.dest, board.side());
-            },
+            }
             MoveType::CapturePromotion => {
                 let dest_piece = board.piece_from_square(m.dest).unwrap();
                 self.remove_piece(dest_piece, m.dest, !board.side());
                 self.remove_piece(Piece::Pawn, m.from, board.side());
                 self.add_piece(m.prom.unwrap(), m.dest, board.side());
-            },
+            }
         }
         self
     }
