@@ -148,7 +148,7 @@ const PST_EG: [[i32; 64]; 6] = [
 
 const PHASE: [i32; 6] = [0, 1, 1, 2, 4, 0];
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EvalState {
     pst_mg: i32,
     pst_eg: i32,
@@ -187,13 +187,13 @@ impl EvalState {
     fn add_piece(&mut self, piece: Piece, square: Square, colour: Colour) {
         if colour == Colour::White {
             self.pst_mg +=
-                PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
+                PST_MG[piece as usize][square.flip().into_inner() as usize] + MAT_MG[piece as usize];
             self.pst_eg +=
-                PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
+                PST_EG[piece as usize][square.flip().into_inner() as usize] + MAT_EG[piece as usize];
         } else {
-            self.pst_mg -= PST_MG[piece as usize][square.flip().into_inner() as usize]
+            self.pst_mg -= PST_MG[piece as usize][square.into_inner() as usize]
                 + MAT_MG[piece as usize];
-            self.pst_eg -= PST_EG[piece as usize][square.flip().into_inner() as usize]
+            self.pst_eg -= PST_EG[piece as usize][square.into_inner() as usize]
                 + MAT_EG[piece as usize];
         }
         self.phase += PHASE[piece as usize];
@@ -202,13 +202,13 @@ impl EvalState {
     fn remove_piece(&mut self, piece: Piece, square: Square, colour: Colour) {
         if colour == Colour::White {
             self.pst_mg -=
-                PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
+                PST_MG[piece as usize][square.flip().into_inner() as usize] + MAT_MG[piece as usize];
             self.pst_eg -=
-                PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
+                PST_EG[piece as usize][square.flip().into_inner() as usize] + MAT_EG[piece as usize];
         } else {
-            self.pst_mg += PST_MG[piece as usize][square.flip().into_inner() as usize]
+            self.pst_mg += PST_MG[piece as usize][square.into_inner() as usize]
                 + MAT_MG[piece as usize];
-            self.pst_eg += PST_EG[piece as usize][square.flip().into_inner() as usize]
+            self.pst_eg += PST_EG[piece as usize][square.into_inner() as usize]
                 + MAT_EG[piece as usize];
         }
         self.phase -= PHASE[piece as usize];
@@ -216,13 +216,11 @@ impl EvalState {
 
     fn move_piece(&mut self, piece: Piece, from_square: Square, to_square: Square, colour: Colour) {
         if colour == Colour::White {
-            self.pst_mg += PST_MG[piece as usize][to_square.into_inner() as usize]
-                - PST_MG[piece as usize][from_square.into_inner() as usize];
-            self.pst_eg += PST_EG[piece as usize][to_square.into_inner() as usize]
-                - PST_EG[piece as usize][from_square.into_inner() as usize];
+            self.pst_mg += PST_MG[piece as usize][to_square.flip().into_inner() as usize]
+                - PST_MG[piece as usize][from_square.flip().into_inner() as usize];
+            self.pst_eg += PST_EG[piece as usize][to_square.flip().into_inner() as usize]
+                - PST_EG[piece as usize][from_square.flip().into_inner() as usize];
         } else {
-            let from_square = from_square.flip();
-            let to_square = to_square.flip();
             self.pst_mg -= PST_MG[piece as usize][to_square.into_inner() as usize]
                 - PST_MG[piece as usize][from_square.into_inner() as usize];
             self.pst_eg -= PST_EG[piece as usize][to_square.into_inner() as usize]

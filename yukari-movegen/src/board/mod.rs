@@ -10,7 +10,7 @@ use std::{
     fmt::Display,
 };
 
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, Rng, prelude::StdRng, SeedableRng};
 use tinyvec::ArrayVec;
 
 mod bitlist;
@@ -55,7 +55,7 @@ pub struct Zobrist {
 impl Zobrist {
     #[must_use]
     pub fn new() -> Self {
-        let mut rng = thread_rng();
+        let mut rng = StdRng::seed_from_u64(1);
 
         let mut piece = [[[0_u64; 64]; 6]; 2];
         let mut ep = [0; 8];
