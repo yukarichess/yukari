@@ -142,7 +142,7 @@ impl<'a> Search<'a> {
 
         let mut found_pv = false;
 
-        for m in moves {
+        for (moves_searched, m) in moves.into_iter().enumerate() {
             self.nodes += 1;
 
             let mut child_pv = ArrayVec::new();
@@ -152,32 +152,18 @@ impl<'a> Search<'a> {
 
             // Push the move to check for repetition draws
             keystack.push(board.hash());
-            if !found_pv {
-                score = -self.search(
-                    &board,
-                    depth - 1,
-                    -upper_bound,
-                    -lower_bound,
-                    &eval,
-                    &mut child_pv,
-                    mate - 1,
-                    keystack,
-                );
-            } else {
-                score = -self.search(
-                    &board,
-                    depth - 1,
-                    -lower_bound - 1,
-                    -lower_bound,
-                    &eval,
-                    &mut child_pv,
-                    mate - 1,
-                    keystack,
-                );
-                if score > lower_bound {
+
+            let mut reduction = 1;
+
+            if lower_bound == upper_bound - 1 && depth >= 3 && moves_searched >= 4 && !board.in_check() && !m.is_capture() {
+                reduction += 1;
+            }
+
+            loop {
+                if !found_pv {
                     score = -self.search(
                         &board,
-                        depth - 1,
+                        depth - reduction,
                         -upper_bound,
                         -lower_bound,
                         &eval,
@@ -185,8 +171,38 @@ impl<'a> Search<'a> {
                         mate - 1,
                         keystack,
                     );
+                } else {
+                    score = -self.search(
+                        &board,
+                        depth - reduction,
+                        -lower_bound - 1,
+                        -lower_bound,
+                        &eval,
+                        &mut child_pv,
+                        mate - 1,
+                        keystack,
+                    );
+                    if score > lower_bound {
+                        score = -self.search(
+                            &board,
+                            depth - reduction,
+                            -upper_bound,
+                            -lower_bound,
+                            &eval,
+                            &mut child_pv,
+                            mate - 1,
+                            keystack,
+                        );
+                    }
+                }
+
+                if reduction > 1 && score > lower_bound {
+                    reduction = 1;
+                } else {
+                    break;
                 }
             }
+
             keystack.pop();
 
             if score >= upper_bound {
