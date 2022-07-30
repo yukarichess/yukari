@@ -228,7 +228,7 @@ impl EvalState {
         }
     }
 
-    pub fn update_eval(mut self, board: &Board, m: &Move) -> Self {
+    pub fn update_eval(mut self, board: &Board, m: Move) -> Self {
         let from_piece = board.piece_from_square(m.from).unwrap();
         match m.kind {
             MoveType::Normal | MoveType::DoublePush => {

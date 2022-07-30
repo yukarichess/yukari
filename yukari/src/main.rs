@@ -1,3 +1,5 @@
+#![warn(clippy::pedantic, clippy::nursery, clippy::perf, clippy::style)]
+
 use std::io::{self};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -146,6 +148,7 @@ fn main() -> io::Result<()> {
         let trimmed = line.trim();
         let (cmd, args) = trimmed.split_once(' ').unwrap_or((trimmed, ""));
 
+        #[allow(clippy::match_same_arms)]
         match cmd {
             // Identification for engines that auto switch between protocols
             "xboard" => {}

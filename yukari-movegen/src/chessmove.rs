@@ -4,7 +4,7 @@ use crate::{
 };
 use std::fmt::Display;
 
-#[derive(Copy, Clone, Default, PartialEq)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub struct Move {
     pub from: Square,
     pub dest: Square,

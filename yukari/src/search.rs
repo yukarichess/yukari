@@ -1,11 +1,115 @@
-use std::time::Instant;
+use std::{time::Instant, cell::Cell, cmp::{Ordering, Reverse}};
 
 use tinyvec::ArrayVec;
-use yukari_movegen::{Board, Move, Zobrist};
+use yukari_movegen::{Board, Move, Zobrist, MoveType, Piece};
 
 use crate::eval::EvalState;
 
 const MATE_VALUE: i32 = 10_000;
+
+#[derive(PartialEq, Eq, Debug)]
+enum SortClass {
+    CapturePromotion(Piece, Piece),
+    Capture(Piece, Piece),
+    Promotion(Piece),
+    Quiet(u64),
+}
+
+impl PartialOrd for SortClass {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        /*
+            - capture-promotions are sorted by most valuable victim, then by most valuable promotion piece
+            - capture-promotions > captures if they have a more valuable victim
+            - capture-promotions > promotions & quiet moves
+
+            - captures are sorted by most valuable victim, then by least valuable attacker
+            - captures > promotions & quiet moves
+
+            - promotions are sorted by most valuable promotion piece
+            - promotions > quiet moves
+
+            - quiet moves are sorted by a quiet move heuristic
+        */
+        // (victim, capture_prom, attacker, prom, score)
+        let to_partial = |class: &SortClass| {
+            match class {
+                SortClass::CapturePromotion(victim, prom) => (Some(*victim), Some(*prom), Some(Reverse(Piece::Pawn)), None, u64::MAX),
+                SortClass::Capture(victim, attacker) => (Some(*victim), None, Some(Reverse(*attacker)), None, u64::MAX),
+                SortClass::Promotion(piece) => (None, None, None, Some(*piece), u64::MAX),
+                SortClass::Quiet(score) => (None, None, None, None, *score),
+            }
+        };
+
+        to_partial(self).partial_cmp(&to_partial(other))
+    }
+}
+
+impl Ord for SortClass {
+    fn cmp(&self, other: &Self) -> Ordering {
+        /*
+            - capture-promotions are sorted by most valuable victim, then by most valuable promotion piece
+            - capture-promotions > captures if they have a more valuable victim
+            - capture-promotions > promotions & quiet moves
+
+            - captures are sorted by most valuable victim, then by least valuable attacker
+            - captures > promotions & quiet moves
+
+            - promotions are sorted by most valuable promotion piece
+            - promotions > quiet moves
+
+            - quiet moves are sorted by a quiet move heuristic
+        */
+        // (victim, capture_prom, attacker, prom, score)
+        let to_partial = |class: &SortClass| {
+            match class {
+                SortClass::CapturePromotion(victim, prom) => (Some(*victim), Some(*prom), Some(Reverse(Piece::Pawn)), None, u64::MAX),
+                SortClass::Capture(victim, attacker) => (Some(*victim), None, Some(Reverse(*attacker)), None, u64::MAX),
+                SortClass::Promotion(piece) => (None, None, None, Some(*piece), u64::MAX),
+                SortClass::Quiet(score) => (None, None, None, None, *score),
+            }
+        };
+
+        to_partial(self).cmp(&to_partial(other))
+    }
+}
+
+struct History {
+    fail_highs: [[Cell<u64>; 64]; 64],
+    fail_lows: [[Cell<u64>; 64]; 64],
+}
+
+impl History {
+    pub fn new() -> Self {
+        #[allow(clippy::declare_interior_mutable_const)]
+        const ZERO: Cell<u64> = Cell::new(1);
+        #[allow(clippy::declare_interior_mutable_const)]
+        const ZEROES: [Cell<u64>; 64] = [ZERO; 64];
+        Self { fail_highs: [ZEROES; 64], fail_lows: [ZEROES; 64] }
+    }
+
+    pub fn fail_high(&self, m: Move, depth: i32) {
+        let x = self.fail_highs[m.dest.into_inner() as usize][m.from.into_inner() as usize].get();
+        self.fail_highs[m.dest.into_inner() as usize][m.from.into_inner() as usize].replace(x + (depth * depth) as u64);
+    }
+
+    pub fn fail_low(&self, m: Move) {
+        let x = self.fail_lows[m.dest.into_inner() as usize][m.from.into_inner() as usize].get();
+        self.fail_lows[m.dest.into_inner() as usize][m.from.into_inner() as usize].replace(x + 1);
+    }
+
+    pub fn classify(&self, b: &Board, m: Move) -> SortClass {
+        let fail_highs = self.fail_highs[m.dest.into_inner() as usize][m.from.into_inner() as usize].get();
+        let fail_lows = self.fail_lows[m.dest.into_inner() as usize][m.from.into_inner() as usize].get();
+        let history = fail_highs / fail_lows;
+        match m.kind {
+            MoveType::Normal | MoveType::Castle | MoveType::DoublePush => SortClass::Quiet(history),
+            MoveType::Capture => SortClass::Capture(b.piece_from_square(m.dest).unwrap(), b.piece_from_square(m.from).unwrap()),
+            MoveType::EnPassant => SortClass::Capture(Piece::Pawn, Piece::Pawn),
+            MoveType::Promotion => SortClass::Promotion(m.prom.unwrap()),
+            MoveType::CapturePromotion => SortClass::CapturePromotion(b.piece_from_square(m.dest).unwrap(), m.prom.unwrap()),
+        }
+    }
+}
 
 // TODO: when 50-move rule is implemented, this can be limited to searching from the last irreversible move.
 #[must_use]
@@ -20,6 +124,7 @@ pub struct Search<'a> {
     nullmove_success: u64,
     stop_after: Option<Instant>,
     zobrist: &'a Zobrist,
+    history: History,
 }
 
 impl<'a> Search<'a> {
@@ -32,6 +137,7 @@ impl<'a> Search<'a> {
             nullmove_success: 0,
             stop_after,
             zobrist,
+            history: History::new(),
         }
     }
 
@@ -46,7 +152,7 @@ impl<'a> Search<'a> {
         board.generate_captures_incremental(|m| {
             self.qnodes += 1;
 
-            let eval = eval.clone().update_eval(board, &m);
+            let eval = eval.clone().update_eval(board, m);
 
             // Pre-empt stand pat by skipping moves with bad evaluation.
             // One can think of this as delta pruning, with the delta being zero.
@@ -79,12 +185,12 @@ impl<'a> Search<'a> {
         mate: i32,
         keystack: &mut Vec<u64>,
     ) -> i32 {
+        const R: i32 = 3;
+
         if depth <= 0 {
             pv.set_len(0);
             return self.quiesce(board, lower_bound, upper_bound, eval);
         }
-
-        const R: i32 = 3;
 
         if !board.in_check() && depth >= 2 {
             keystack.push(board.hash());
@@ -124,9 +230,8 @@ impl<'a> Search<'a> {
             pv.set_len(0);
             if board.in_check() {
                 return -mate;
-            } else {
-                return 0;
             }
+            return 0;
         }
 
         // Is this a repetition draw?
@@ -142,11 +247,16 @@ impl<'a> Search<'a> {
 
         let mut found_pv = false;
 
+        moves.sort_by_key(|a| Reverse(self.history.classify(board, *a)));
+        //moves.reverse();
+
+        let mut moves_searched = 0;
+
         for m in moves {
             self.nodes += 1;
 
             let mut child_pv = ArrayVec::new();
-            let eval = eval.clone().update_eval(board, &m);
+            let eval = eval.clone().update_eval(board, m);
             let board = board.make(m, self.zobrist);
             let mut score;
 
@@ -191,7 +301,8 @@ impl<'a> Search<'a> {
 
             if score >= upper_bound {
                 pv.set_len(0);
-                return upper_bound;
+                lower_bound = upper_bound;
+                break;
             }
 
             if self.nodes & 1023 == 0 {
@@ -212,7 +323,20 @@ impl<'a> Search<'a> {
                 }
                 found_pv = true;
             }
+
+            moves_searched += 1;
         }
+
+        if lower_bound == upper_bound && !moves[moves_searched].is_capture() {
+            self.history.fail_high(moves[moves_searched], depth);
+        }
+
+        for m in 0..moves_searched {
+            if !moves[m].is_capture() {
+                self.history.fail_low(moves[m]);
+            }
+        }
+
         lower_bound
     }
 
