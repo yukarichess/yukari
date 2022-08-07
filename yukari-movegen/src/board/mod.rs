@@ -10,7 +10,7 @@ use std::{
     fmt::Display,
 };
 
-use rand::{thread_rng, Rng, prelude::StdRng, SeedableRng};
+use rand::{Rng, prelude::StdRng, SeedableRng};
 use tinyvec::ArrayVec;
 
 mod bitlist;
