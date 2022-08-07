@@ -121,7 +121,7 @@ impl BoardData {
 
     /// Remove a piece from a square.
     pub fn remove_piece(&mut self, piece_index: PieceIndex, update: bool) {
-        let square = self.piecelist.get(piece_index);
+        let square = self.square_of_piece(piece_index);
         let piece = self.piece_from_bit(piece_index);
         self.piecemask.remove_piece(piece_index);
         self.piecelist.remove_piece(piece_index, square);
@@ -306,7 +306,7 @@ impl BoardData {
 
         let square = Square16x8::from_square(square);
         for piece in sliders {
-            let attacker = Square16x8::from_square(self.piecelist.get(piece));
+            let attacker = Square16x8::from_square(self.square_of_piece(piece));
             if let Some(direction) = attacker.direction(square) {
                 for dest in square.ray_attacks(direction) {
                     if add {
