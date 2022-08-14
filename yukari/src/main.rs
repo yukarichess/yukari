@@ -74,12 +74,7 @@ impl Yukari {
         let mut moves = ArrayVec::from(moves);
         moves.set_len(0);
         self.board.generate(&mut moves);
-        for m in moves {
-            if m.from == from && m.dest == dest {
-                return Some(m);
-            }
-        }
-        None
+        moves.into_iter().find(|&m| m.from == from && m.dest == dest)
     }
 
     /// Real search, falls back to dumb search in extreme time constraints

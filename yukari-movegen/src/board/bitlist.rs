@@ -61,7 +61,7 @@ impl Bitlist {
     }
 
     /// Return the lowest set bit of a `Bitlist` as a `PieceIndex`.
-    pub unsafe fn peek_nonzero(self) -> PieceIndex {
+    pub const unsafe fn peek_nonzero(self) -> PieceIndex {
         if self.0 == 0 {
             std::hint::unreachable_unchecked();
         }
@@ -180,7 +180,7 @@ impl FusedIterator for BitlistIter {}
 
 /// The main attack table array.
 #[allow(clippy::module_name_repetitions)]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct BitlistArray([Bitlist; 64]);
 
