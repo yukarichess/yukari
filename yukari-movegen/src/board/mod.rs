@@ -330,7 +330,9 @@ impl Board {
         b.recalculate_hash(zobrist);
         b.data.rebuild_attacks();
 
-        assert!(!b.illegal());
+        if b.illegal() {
+            return None;
+        }
 
         Some(b)
     }
