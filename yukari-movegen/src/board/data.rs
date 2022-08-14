@@ -90,6 +90,13 @@ impl BoardData {
         self.piecemask.pieces_of_colour(colour)
     }
 
+    /// Return the square of the king of a given colour.
+    pub fn king_square(&self, colour: Colour) -> Square {
+        let king_index =
+            unsafe { (self.kings() & Bitlist::mask_from_colour(colour)).peek_nonzero() };
+        self.square_of_piece(king_index)
+    }
+
     /// Given a piece index, return its piece type.
     pub fn piece_from_bit(&self, bit: PieceIndex) -> Piece {
         self.piecemask

@@ -207,10 +207,18 @@ impl Board {
     #[must_use]
     #[inline]
     pub fn illegal(&self) -> bool {
-        let king_index =
-            unsafe { (self.data.kings() & self.data.pieces_of_colour(!self.side)).peek_nonzero() };
-        let king_square = self.data.square_of_piece(king_index);
-        !self.data.attacks_to(king_square, self.side).empty()
+        // A valid chessboard has a white king and a black king.
+        if (self.kings() & Bitlist::white()).empty() {
+            return true;
+        }
+        if (self.kings() & Bitlist::black()).empty() {
+            return true;
+        }
+        // The opponent's king should not be in check.
+        if !self.data.attacks_to(self.data.king_square(!self.side), self.side).empty() {
+            return true;
+        }
+        false
     }
 
     /// Parse a position in Forsyth-Edwards Notation into a board.
@@ -321,6 +329,8 @@ impl Board {
 
         b.recalculate_hash(zobrist);
         b.data.rebuild_attacks();
+
+        assert!(!b.illegal());
 
         Some(b)
     }
@@ -525,9 +535,7 @@ impl Board {
         let mut info = PinInfo::new();
 
         let sliders = self.data.bishops() | self.data.rooks() | self.data.queens();
-        let king_index =
-            unsafe { (self.data.kings() & Bitlist::mask_from_colour(self.side)).peek_nonzero() };
-        let king_square = self.data.square_of_piece(king_index);
+        let king_square = self.data.king_square(self.side);
         let king_square_16x8 = Square16x8::from_square(king_square);
 
         for possible_pinner in self.data.pieces_of_colour(!self.side).and(sliders) {
@@ -677,10 +685,7 @@ impl Board {
     /// Generate moves when in check by a single piece.
     #[allow(clippy::too_many_lines)]
     fn generate_single_check(&self, v: &mut ArrayVec<[Move; 256]>) {
-        #[allow(clippy::unwrap_used)]
-        let king_index =
-            unsafe { (self.data.kings() & Bitlist::mask_from_colour(self.side)).peek_nonzero() };
-        let king_square = self.data.square_of_piece(king_index);
+        let king_square = self.data.king_square(self.side);
         let king_square_16x8 = Square16x8::from_square(king_square);
         let attacker_bit = self.data.attacks_to(king_square, !self.side);
         let attacker_index = unsafe { attacker_bit.peek_nonzero() };
@@ -848,10 +853,7 @@ impl Board {
     }
 
     fn generate_double_check(&self, v: &mut ArrayVec<[Move; 256]>) {
-        #[allow(clippy::unwrap_used)]
-        let king_index =
-            unsafe { (self.data.kings() & Bitlist::mask_from_colour(self.side)).peek_nonzero() };
-        let king_square = self.data.square_of_piece(king_index);
+        let king_square = self.data.king_square(self.side);
         let mut attacker_bits = self.data.attacks_to(king_square, !self.side);
         let attacker1_index = attacker_bits.pop().unwrap();
         let attacker1_piece = self.data.piece_from_bit(attacker1_index);
@@ -1190,9 +1192,7 @@ impl Board {
     #[allow(clippy::missing_inline_in_public_items)]
     pub fn generate(&self, v: &mut ArrayVec<[Move; 256]>) {
         // Unless something has gone very badly wrong we have to have a king.
-        let king_index =
-            unsafe { (self.data.kings() & Bitlist::mask_from_colour(self.side)).peek_nonzero() };
-        let king_square = self.data.square_of_piece(king_index);
+        let king_square = self.data.king_square(self.side);
         let checks = self.data.attacks_to(king_square, !self.side);
 
         if checks.count_ones() == 1 {
@@ -1350,10 +1350,7 @@ impl Board {
 
     #[must_use]
     pub fn in_check(&self) -> bool {
-        let king_index =
-            unsafe { (self.data.kings() & Bitlist::mask_from_colour(self.side)).peek_nonzero() };
-        let king_square = self.data.square_of_piece(king_index);
-        !self.data.attacks_to(king_square, !self.side).empty()
+        !self.data.attacks_to(self.data.king_square(self.side), !self.side).empty()
     }
 
     #[must_use]
