@@ -65,18 +65,12 @@ impl Piecemask {
     }
 
     pub const fn piece(&self, index: PieceIndex) -> Option<Piece> {
-        let pbq = self.pbq.contains(Bitlist::from_piece(index));
-        let nbk = self.nbk.contains(Bitlist::from_piece(index));
-        let rqk = self.rqk.contains(Bitlist::from_piece(index));
-        match (pbq, nbk, rqk) {
-            (true, false, false) => Some(Piece::Pawn),
-            (false, true, false) => Some(Piece::Knight),
-            (true, true, false) => Some(Piece::Bishop),
-            (false, false, true) => Some(Piece::Rook),
-            (true, false, true) => Some(Piece::Queen),
-            (false, true, true) => Some(Piece::King),
-            (_, _, _) => None,
-        }
+        let pbq = self.pbq.contains(Bitlist::from_piece(index)) as usize;
+        let nbk = self.nbk.contains(Bitlist::from_piece(index)) as usize;
+        let rqk = self.rqk.contains(Bitlist::from_piece(index)) as usize;
+        let index = (rqk << 2) | (nbk << 1) | pbq;
+        const PIECES: [Option<Piece>; 8] = [None, Some(Piece::Pawn), Some(Piece::Knight), Some(Piece::Bishop), Some(Piece::Rook), Some(Piece::Queen), Some(Piece::King), None];
+        PIECES[index]
     }
 
     /// Add a piece to a `Piecemask`.
