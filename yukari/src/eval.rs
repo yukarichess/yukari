@@ -156,7 +156,7 @@ pub struct EvalState {
 }
 
 impl EvalState {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             pst_mg: 0,
             pst_eg: 0,

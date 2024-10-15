@@ -170,8 +170,7 @@ impl BoardData {
 
         debug_assert!(
             !self.bitlist[to_square].contains(piece_index.into()),
-            "piece on {} cannot attack itself",
-            to_square
+            "piece on {to_square} cannot attack itself"
         );
     }
 

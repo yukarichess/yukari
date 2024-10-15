@@ -28,8 +28,7 @@ impl Piecelist {
         let piece_index = usize::from(piece_index.into_inner());
         debug_assert!(
             self.0[piece_index].is_none(),
-            "attempted to add piece to occupied piece index {:?}",
-            piece_index
+            "attempted to add piece to occupied piece index {piece_index:?}"
         );
         self.0[piece_index] = Some(square);
     }

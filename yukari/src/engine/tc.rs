@@ -14,7 +14,7 @@ pub struct TimeControl {
 impl TimeControl {
     /// Construct a new instance with the base time on the clock
     #[must_use]
-    pub fn new(mode: TimeMode) -> Self {
+    pub const fn new(mode: TimeMode) -> Self {
         Self {
             remaining: match mode {
                 TimeMode::St(time) => time as f32,

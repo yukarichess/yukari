@@ -65,11 +65,11 @@ impl Piecemask {
     }
 
     pub const fn piece(&self, index: PieceIndex) -> Option<Piece> {
+        const PIECES: [Option<Piece>; 8] = [None, Some(Piece::Pawn), Some(Piece::Knight), Some(Piece::Bishop), Some(Piece::Rook), Some(Piece::Queen), Some(Piece::King), None];
         let pbq = self.pbq.contains(Bitlist::from_piece(index)) as usize;
         let nbk = self.nbk.contains(Bitlist::from_piece(index)) as usize;
         let rqk = self.rqk.contains(Bitlist::from_piece(index)) as usize;
         let index = (rqk << 2) | (nbk << 1) | pbq;
-        const PIECES: [Option<Piece>; 8] = [None, Some(Piece::Pawn), Some(Piece::Knight), Some(Piece::Bishop), Some(Piece::Rook), Some(Piece::Queen), Some(Piece::King), None];
         PIECES[index]
     }
 

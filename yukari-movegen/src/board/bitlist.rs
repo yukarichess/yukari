@@ -11,6 +11,12 @@ use std::{
 #[repr(transparent)]
 pub struct Bitlist(u32);
 
+impl Default for Bitlist {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Bitlist {
     /// Create a new, empty Bitlist.
     pub const fn new() -> Self {
@@ -226,8 +232,7 @@ impl BitlistArray {
         let piece = Bitlist::from(piece);
         debug_assert!(
             !self.0[index].contains(piece),
-            "attempted to add pre-existing piece attack on {}",
-            square
+            "attempted to add pre-existing piece attack on {square}"
         );
         self.0[index] |= piece;
     }
@@ -238,8 +243,7 @@ impl BitlistArray {
         let piece = Bitlist::from(piece);
         debug_assert!(
             self.0[index].contains(piece),
-            "attempted to remove nonexistent piece attack on {}",
-            square
+            "attempted to remove nonexistent piece attack on {square}"
         );
         self.0[index] &= !piece;
     }

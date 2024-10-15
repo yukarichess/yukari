@@ -141,7 +141,7 @@ impl Display for Board {
                     Colour::Black => c.to_ascii_lowercase(),
                 };
 
-                write!(f, "{} ", c)?;
+                write!(f, "{c} ")?;
             } else {
                 write!(f, ". ")?;
             }
@@ -169,7 +169,7 @@ impl Display for Board {
         }
         writeln!(f)?;
         if let Some(ep) = self.ep {
-            writeln!(f, "{}", ep)?;
+            writeln!(f, "{ep}")?;
         } else {
             writeln!(f, "-")?;
         }
@@ -222,6 +222,9 @@ impl Board {
     }
 
     /// Parse a position in Forsyth-Edwards Notation into a board.
+    /// 
+    /// # Panics
+    /// Panics if `fen` is not ASCII.
     #[must_use]
     pub fn from_fen(fen: &str, zobrist: &Zobrist) -> Option<Self> {
         let fen = CString::new(fen).expect("FEN is not ASCII");
@@ -515,13 +518,12 @@ impl Board {
     ) {
         if let Some(dir) = pininfo.pins[self.data.piece_index(from).unwrap().into_inner() as usize]
         {
-            if let Some(move_dir) = from.direction(dest) {
-                // Pinned slider can only move along pin ray.
-                if dir != move_dir && dir != move_dir.opposite() {
-                    return;
-                }
-            } else {
+            let Some(move_dir) = from.direction(dest) else {
                 // Pinned knight can't move.
+                return;
+            };
+            // Pinned slider can only move along pin ray.
+            if dir != move_dir && dir != move_dir.opposite() {
                 return;
             }
         }
@@ -544,10 +546,7 @@ impl Board {
             let pinner_square = self.data.square_of_piece(possible_pinner);
             let pinner_square_16x8 = Square16x8::from_square(pinner_square);
             let pinner_type = self.data.piece_from_bit(possible_pinner);
-            let pinner_king_dir = match pinner_square_16x8.direction(king_square_16x8) {
-                Some(dir) => dir,
-                None => continue,
-            };
+            let Some(pinner_king_dir) = pinner_square_16x8.direction(king_square_16x8) else { continue };
 
             if !pinner_king_dir.valid_for_slider(pinner_type) {
                 continue;
@@ -631,43 +630,22 @@ impl Board {
 
     /// Generate pawn-specific quiet moves.
     fn generate_pawn_quiet(&self, v: &mut ArrayVec<[Move; 256]>, from: Square, pininfo: &PinInfo) {
+        let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
         let north = from.relative_north(self.side);
         if let Some(dest) = north {
             // Pawn single pushes.
             if !self.data.has_piece(dest) {
                 if Rank::from(dest).is_relative_eighth(self.side) {
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::Promotion,
-                        Some(Piece::Queen),
-                        pininfo,
-                    );
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::Promotion,
-                        Some(Piece::Knight),
-                        pininfo,
-                    );
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::Promotion,
-                        Some(Piece::Rook),
-                        pininfo,
-                    );
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::Promotion,
-                        Some(Piece::Bishop),
-                        pininfo,
-                    );
+                    for piece in &promotion_pieces {
+                        self.try_push_move(
+                            v,
+                            from,
+                            dest,
+                            MoveType::Promotion,
+                            Some(*piece),
+                            pininfo,
+                        );
+                    }
                 } else {
                     self.try_push_move(v, from, dest, MoveType::Normal, None, pininfo);
                 }
@@ -725,6 +703,7 @@ impl Board {
 
         // Can we capture the attacker?
         for capturer in self.data.attacks_to(attacker_square, self.side) {
+            let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
             let from = self.data.square_of_piece(capturer);
             if self.data.piece_from_bit(capturer) == Piece::King
                 && !self.data.attacks_to(attacker_square, !self.side).empty()
@@ -734,38 +713,16 @@ impl Board {
             if self.data.piece_from_bit(capturer) == Piece::Pawn
                 && Rank::from(attacker_square).is_relative_eighth(self.side)
             {
-                self.try_push_move(
-                    v,
-                    from,
-                    attacker_square,
-                    MoveType::CapturePromotion,
-                    Some(Piece::Queen),
-                    &pininfo,
-                );
-                self.try_push_move(
-                    v,
-                    from,
-                    attacker_square,
-                    MoveType::CapturePromotion,
-                    Some(Piece::Knight),
-                    &pininfo,
-                );
-                self.try_push_move(
-                    v,
-                    from,
-                    attacker_square,
-                    MoveType::CapturePromotion,
-                    Some(Piece::Rook),
-                    &pininfo,
-                );
-                self.try_push_move(
-                    v,
-                    from,
-                    attacker_square,
-                    MoveType::CapturePromotion,
-                    Some(Piece::Bishop),
-                    &pininfo,
-                );
+                for piece in &promotion_pieces {
+                    self.try_push_move(
+                        v,
+                        from,
+                        attacker_square,
+                        MoveType::CapturePromotion,
+                        Some(*piece),
+                        &pininfo,
+                    );
+                }
             } else {
                 self.try_push_move(v, from, attacker_square, MoveType::Capture, None, &pininfo);
             }
@@ -912,59 +869,31 @@ impl Board {
         let pininfo = self.discover_pinned_pieces();
 
         let mut find_attackers = |dest: Square| {
+            let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
             let attacks = self.data.attacks_to(dest, self.side);
             for capturer in attacks & self.data.pawns() {
                 let from = self.data.square_of_piece(capturer);
                 if Rank::from(dest).is_relative_eighth(self.side) {
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Queen),
-                        &pininfo,
-                    );
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Knight),
-                        &pininfo,
-                    );
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Rook),
-                        &pininfo,
-                    );
-                    self.try_push_move(
-                        v,
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Bishop),
-                        &pininfo,
-                    );
+                    for piece in &promotion_pieces {
+                        self.try_push_move(
+                            v,
+                            from,
+                            dest,
+                            MoveType::CapturePromotion,
+                            Some(*piece),
+                            &pininfo,
+                        );
+                    }
                 } else {
                     self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
                 }
             }
-            for capturer in attacks & self.data.knights() {
-                let from = self.data.square_of_piece(capturer);
-                self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
-            }
-            for capturer in attacks & self.data.bishops() {
-                let from = self.data.square_of_piece(capturer);
-                self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
-            }
-            for capturer in attacks & self.data.rooks() {
-                let from = self.data.square_of_piece(capturer);
-                self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
-            }
-            for capturer in attacks & self.data.queens() {
+            let capturers = (attacks & self.data.knights()).into_iter()
+                .chain(attacks & self.data.bishops())
+                .chain(attacks & self.data.rooks())
+                .chain(attacks & self.data.queens());
+
+            for capturer in capturers {
                 let from = self.data.square_of_piece(capturer);
                 self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
             }
@@ -978,19 +907,13 @@ impl Board {
             }
         };
 
-        for victim in self.data.pieces_of_colour(!self.side) & self.data.queens() {
-            find_attackers(self.square_of_piece(victim));
-        }
-        for victim in self.data.pieces_of_colour(!self.side) & self.data.rooks() {
-            find_attackers(self.square_of_piece(victim));
-        }
-        for victim in self.data.pieces_of_colour(!self.side) & self.data.bishops() {
-            find_attackers(self.square_of_piece(victim));
-        }
-        for victim in self.data.pieces_of_colour(!self.side) & self.data.knights() {
-            find_attackers(self.square_of_piece(victim));
-        }
-        for victim in self.data.pieces_of_colour(!self.side) & self.data.pawns() {
+        let victims = (self.data.pieces_of_colour(!self.side) & self.data.queens()).into_iter()
+            .chain(self.data.pieces_of_colour(!self.side) & self.data.rooks())
+            .chain(self.data.pieces_of_colour(!self.side) & self.data.bishops())
+            .chain(self.data.pieces_of_colour(!self.side) & self.data.knights())
+            .chain(self.data.pieces_of_colour(!self.side) & self.data.pawns());
+
+        for victim in victims {
             find_attackers(self.square_of_piece(victim));
         }
 
@@ -999,6 +922,27 @@ impl Board {
 
     #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
     pub fn generate_captures_incremental<F: FnMut(Move) -> bool>(&self, mut f: F) {
+        let king_square = self.data.king_square(self.side);
+        let checks = self.data.attacks_to(king_square, !self.side);
+
+        // special case: being in check.
+        if checks.count_ones() != 0 {
+            let mut v = ArrayVec::new();
+            v.set_len(0);
+            if checks.count_ones() == 1 {
+                self.generate_single_check(&mut v);
+            } else if checks.count_ones() == 2 {
+                self.generate_double_check(&mut v);
+            }
+
+            for m in v {
+                if m.is_capture() && !f(m) {
+                    break;
+                }
+            }
+            return;
+        }
+
         let pininfo = self.discover_pinned_pieces();
 
         let mut minor_mask = Bitlist::new();
@@ -1031,45 +975,21 @@ impl Board {
                                   rook_mask: Bitlist,
                                   queen_mask: Bitlist|
          -> bool {
+            let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
             let attacks = self.data.attacks_to(dest, self.side);
             for capturer in attacks & self.data.pawns() {
                 let from = self.data.square_of_piece(capturer);
                 if Rank::from(dest).is_relative_eighth(self.side) {
-                    if !try_move(
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Queen),
-                        &pininfo,
-                    ) {
-                        return false;
-                    }
-                    if !try_move(
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Knight),
-                        &pininfo,
-                    ) {
-                        return false;
-                    }
-                    if !try_move(
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Rook),
-                        &pininfo,
-                    ) {
-                        return false;
-                    }
-                    if !try_move(
-                        from,
-                        dest,
-                        MoveType::CapturePromotion,
-                        Some(Piece::Bishop),
-                        &pininfo,
-                    ) {
-                        return false;
+                    for piece in &promotion_pieces {
+                        if !try_move(
+                            from,
+                            dest,
+                            MoveType::CapturePromotion,
+                            Some(*piece),
+                            &pininfo,
+                        ) {
+                            return false;
+                        }
                     }
                 } else if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
                     return false;
@@ -1416,9 +1336,7 @@ mod test {
             assert_eq!(
                 board.hash,
                 fresh_hash(&board, &zobrist),
-                "Failed testing move #{} ({})",
-                i,
-                m
+                "Failed testing move #{i} ({m})"
             );
         }
     }

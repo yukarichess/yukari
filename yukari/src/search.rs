@@ -24,7 +24,7 @@ pub struct Search<'a> {
 
 impl<'a> Search<'a> {
     #[must_use]
-    pub fn new(stop_after: Option<Instant>, zobrist: &'a Zobrist) -> Self {
+    pub const fn new(stop_after: Option<Instant>, zobrist: &'a Zobrist) -> Self {
         Self {
             nodes: 0,
             qnodes: 0,
@@ -35,8 +35,10 @@ impl<'a> Search<'a> {
         }
     }
 
-    fn quiesce(&mut self, board: &Board, mut alpha: i32, beta: i32, eval: &EvalState) -> i32 {
+    fn quiesce(&mut self, board: &Board, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>) -> i32 {
         let eval_int = eval.get(board.side());
+
+        pv.set_len(0);
 
         if eval_int >= beta {
             return beta;
@@ -55,12 +57,23 @@ impl<'a> Search<'a> {
             }
 
             let board = board.make(m, self.zobrist);
-            alpha = alpha.max(-self.quiesce(&board, -beta, -alpha, &eval));
+            let mut child_pv = ArrayVec::new();
+            let score = -self.quiesce(&board, -beta, -alpha, &eval, &mut child_pv);
 
-            if alpha >= beta {
+            if score >= beta {
                 alpha = beta;
                 return false;
             }
+
+            if score > alpha {
+                alpha = score;
+                pv.set_len(0);
+                pv.push(m);
+                for m in child_pv {
+                    pv.push(m);
+                }
+            }
+
             true
         });
 
@@ -80,8 +93,7 @@ impl<'a> Search<'a> {
         keystack: &mut Vec<u64>,
     ) -> i32 {
         if depth <= 0 {
-            pv.set_len(0);
-            return self.quiesce(board, lower_bound, upper_bound, eval);
+            return self.quiesce(board, lower_bound, upper_bound, eval, pv);
         }
 
         const R: i32 = 3;
@@ -230,12 +242,12 @@ impl<'a> Search<'a> {
     }
 
     #[must_use]
-    pub fn nodes(&self) -> u64 {
+    pub const fn nodes(&self) -> u64 {
         self.nodes
     }
 
     #[must_use]
-    pub fn qnodes(&self) -> u64 {
+    pub const fn qnodes(&self) -> u64 {
         self.qnodes
     }
 
