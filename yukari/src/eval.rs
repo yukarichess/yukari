@@ -186,30 +186,30 @@ impl EvalState {
 
     fn add_piece(&mut self, piece: Piece, square: Square, colour: Colour) {
         if colour == Colour::White {
-            self.pst_mg +=
-                PST_MG[piece as usize][square.flip().into_inner() as usize] + MAT_MG[piece as usize];
-            self.pst_eg +=
-                PST_EG[piece as usize][square.flip().into_inner() as usize] + MAT_EG[piece as usize];
-        } else {
-            self.pst_mg -= PST_MG[piece as usize][square.into_inner() as usize]
+            self.pst_mg += PST_MG[piece as usize][square.flip().into_inner() as usize]
                 + MAT_MG[piece as usize];
-            self.pst_eg -= PST_EG[piece as usize][square.into_inner() as usize]
+            self.pst_eg += PST_EG[piece as usize][square.flip().into_inner() as usize]
                 + MAT_EG[piece as usize];
+        } else {
+            self.pst_mg -=
+                PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
+            self.pst_eg -=
+                PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
         }
         self.phase += PHASE[piece as usize];
     }
 
     fn remove_piece(&mut self, piece: Piece, square: Square, colour: Colour) {
         if colour == Colour::White {
-            self.pst_mg -=
-                PST_MG[piece as usize][square.flip().into_inner() as usize] + MAT_MG[piece as usize];
-            self.pst_eg -=
-                PST_EG[piece as usize][square.flip().into_inner() as usize] + MAT_EG[piece as usize];
-        } else {
-            self.pst_mg += PST_MG[piece as usize][square.into_inner() as usize]
+            self.pst_mg -= PST_MG[piece as usize][square.flip().into_inner() as usize]
                 + MAT_MG[piece as usize];
-            self.pst_eg += PST_EG[piece as usize][square.into_inner() as usize]
+            self.pst_eg -= PST_EG[piece as usize][square.flip().into_inner() as usize]
                 + MAT_EG[piece as usize];
+        } else {
+            self.pst_mg +=
+                PST_MG[piece as usize][square.into_inner() as usize] + MAT_MG[piece as usize];
+            self.pst_eg +=
+                PST_EG[piece as usize][square.into_inner() as usize] + MAT_EG[piece as usize];
         }
         self.phase -= PHASE[piece as usize];
     }

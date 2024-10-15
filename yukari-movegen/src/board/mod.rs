@@ -10,7 +10,7 @@ use std::{
     fmt::Display,
 };
 
-use rand::{Rng, prelude::StdRng, SeedableRng};
+use rand::{prelude::StdRng, Rng, SeedableRng};
 use tinyvec::ArrayVec;
 
 mod bitlist;
@@ -215,14 +215,18 @@ impl Board {
             return true;
         }
         // The opponent's king should not be in check.
-        if !self.data.attacks_to(self.data.king_square(!self.side), self.side).empty() {
+        if !self
+            .data
+            .attacks_to(self.data.king_square(!self.side), self.side)
+            .empty()
+        {
             return true;
         }
         false
     }
 
     /// Parse a position in Forsyth-Edwards Notation into a board.
-    /// 
+    ///
     /// # Panics
     /// Panics if `fen` is not ASCII.
     #[must_use]
@@ -546,7 +550,9 @@ impl Board {
             let pinner_square = self.data.square_of_piece(possible_pinner);
             let pinner_square_16x8 = Square16x8::from_square(pinner_square);
             let pinner_type = self.data.piece_from_bit(possible_pinner);
-            let Some(pinner_king_dir) = pinner_square_16x8.direction(king_square_16x8) else { continue };
+            let Some(pinner_king_dir) = pinner_square_16x8.direction(king_square_16x8) else {
+                continue;
+            };
 
             if !pinner_king_dir.valid_for_slider(pinner_type) {
                 continue;
@@ -888,7 +894,8 @@ impl Board {
                     self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
                 }
             }
-            let capturers = (attacks & self.data.knights()).into_iter()
+            let capturers = (attacks & self.data.knights())
+                .into_iter()
                 .chain(attacks & self.data.bishops())
                 .chain(attacks & self.data.rooks())
                 .chain(attacks & self.data.queens());
@@ -907,7 +914,8 @@ impl Board {
             }
         };
 
-        let victims = (self.data.pieces_of_colour(!self.side) & self.data.queens()).into_iter()
+        let victims = (self.data.pieces_of_colour(!self.side) & self.data.queens())
+            .into_iter()
             .chain(self.data.pieces_of_colour(!self.side) & self.data.rooks())
             .chain(self.data.pieces_of_colour(!self.side) & self.data.bishops())
             .chain(self.data.pieces_of_colour(!self.side) & self.data.knights())
@@ -1272,7 +1280,10 @@ impl Board {
 
     #[must_use]
     pub fn in_check(&self) -> bool {
-        !self.data.attacks_to(self.data.king_square(self.side), !self.side).empty()
+        !self
+            .data
+            .attacks_to(self.data.king_square(self.side), !self.side)
+            .empty()
     }
 
     #[must_use]

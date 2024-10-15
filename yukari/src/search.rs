@@ -35,7 +35,14 @@ impl<'a> Search<'a> {
         }
     }
 
-    fn quiesce(&mut self, board: &Board, mut alpha: i32, beta: i32, eval: &EvalState, pv: &mut ArrayVec<[Move; 32]>) -> i32 {
+    fn quiesce(
+        &mut self,
+        board: &Board,
+        mut alpha: i32,
+        beta: i32,
+        eval: &EvalState,
+        pv: &mut ArrayVec<[Move; 32]>,
+    ) -> i32 {
         let eval_int = eval.get(board.side());
 
         pv.set_len(0);
