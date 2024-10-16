@@ -621,16 +621,15 @@ impl Board {
 
     /// Generate en-passant pawn moves.
     fn generate_pawn_enpassant(&self, v: &mut ArrayVec<[Move; 256]>, pininfo: &PinInfo) {
-        if let Some(ep) = self.ep {
-            for capturer in self
-                .data
-                .attacks_to(ep, self.side)
-                .and(self.data.pawns())
-                .and(!pininfo.enpassant_pinned)
-            {
-                let from = self.data.square_of_piece(capturer);
-                self.try_push_move(v, from, ep, MoveType::EnPassant, None, pininfo);
-            }
+        let Some(ep) = self.ep else { return; };
+        for capturer in self
+            .data
+            .attacks_to(ep, self.side)
+            .and(self.data.pawns())
+            .and(!pininfo.enpassant_pinned)
+        {
+            let from = self.data.square_of_piece(capturer);
+            self.try_push_move(v, from, ep, MoveType::EnPassant, None, pininfo);
         }
     }
 
@@ -638,33 +637,31 @@ impl Board {
     fn generate_pawn_quiet(&self, v: &mut ArrayVec<[Move; 256]>, from: Square, pininfo: &PinInfo) {
         let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
         let north = from.relative_north(self.side);
-        if let Some(dest) = north {
-            // Pawn single pushes.
-            if !self.data.has_piece(dest) {
-                if Rank::from(dest).is_relative_eighth(self.side) {
-                    for piece in &promotion_pieces {
-                        self.try_push_move(
-                            v,
-                            from,
-                            dest,
-                            MoveType::Promotion,
-                            Some(*piece),
-                            pininfo,
-                        );
-                    }
-                } else {
-                    self.try_push_move(v, from, dest, MoveType::Normal, None, pininfo);
-                }
-
-                // Pawn double pushes.
-                let north2 = dest.relative_north(self.side);
-                if let Some(dest) = north2 {
-                    if Rank::from(dest).is_relative_fourth(self.side) && !self.data.has_piece(dest)
-                    {
-                        self.try_push_move(v, from, dest, MoveType::DoublePush, None, pininfo);
-                    }
-                }
+        let Some(dest) = north else { return; };
+        // Pawn single pushes.
+        if self.data.has_piece(dest) {
+            return;
+        }
+        if Rank::from(dest).is_relative_eighth(self.side) {
+            for piece in &promotion_pieces {
+                self.try_push_move(
+                    v,
+                    from,
+                    dest,
+                    MoveType::Promotion,
+                    Some(*piece),
+                    pininfo,
+                );
             }
+        } else {
+            self.try_push_move(v, from, dest, MoveType::Normal, None, pininfo);
+        }
+
+        // Pawn double pushes.
+        let Some(dest) = dest.relative_north(self.side) else { return; };
+        if Rank::from(dest).is_relative_fourth(self.side) && !self.data.has_piece(dest)
+        {
+            self.try_push_move(v, from, dest, MoveType::DoublePush, None, pininfo);
         }
     }
 
@@ -682,25 +679,22 @@ impl Board {
         let pininfo = self.discover_pinned_pieces();
 
         let add_pawn_block = |v: &mut ArrayVec<[Move; 256]>, from, dest, kind| {
-            if let Some(colour) = self.data.colour_from_square(from) {
-                if colour == self.side {
-                    self.try_push_move(v, from, dest, kind, None, &pininfo);
-                }
+            let Some(colour) = self.data.colour_from_square(from) else { return; };
+            if colour == self.side {
+                self.try_push_move(v, from, dest, kind, None, &pininfo);
             }
         };
 
         let add_pawn_blocks = |v: &mut ArrayVec<[Move; 256]>, dest: Square| {
-            if let Some(from) = dest.relative_south(self.side) {
-                match self.data.piece_from_square(from) {
-                    Some(Piece::Pawn) => add_pawn_block(v, from, dest, MoveType::Normal),
-                    Some(_) => {}
-                    None => {
-                        if Rank::from(dest).is_relative_fourth(self.side) {
-                            if let Some(from) = from.relative_south(self.side) {
-                                if self.data.piece_from_square(from) == Some(Piece::Pawn) {
-                                    add_pawn_block(v, from, dest, MoveType::DoublePush);
-                                }
-                            }
+            let Some(from) = dest.relative_south(self.side) else { return; };
+            match self.data.piece_from_square(from) {
+                Some(Piece::Pawn) => add_pawn_block(v, from, dest, MoveType::Normal),
+                Some(_) => {}
+                None => {
+                    if Rank::from(dest).is_relative_fourth(self.side) {
+                        let Some(from) = from.relative_south(self.side) else { return; };
+                        if self.data.piece_from_square(from) == Some(Piece::Pawn) {
+                            add_pawn_block(v, from, dest, MoveType::DoublePush);
                         }
                     }
                 }
