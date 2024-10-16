@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use tinyvec::ArrayVec;
 use yukari::engine::{TimeControl, TimeMode};
 use yukari::{self, is_repetition_draw, Search};
-use yukari_movegen::{Board, Move, Square, Zobrist};
+use yukari_movegen::{Board, Move, Piece, Square, Zobrist};
 
 #[derive(Clone, Copy, Debug)]
 enum Mode {
@@ -69,14 +69,14 @@ impl Yukari {
     /// Generates valid moves for current posiition then finds the attempted
     /// move in the list
     #[must_use]
-    pub fn find_move(&self, from: Square, dest: Square) -> Option<Move> {
+    pub fn find_move(&self, from: Square, dest: Square, prom: Option<Piece>) -> Option<Move> {
         let moves: [Move; 256] = [Move::default(); 256];
         let mut moves = ArrayVec::from(moves);
         moves.set_len(0);
         self.board.generate(&mut moves);
         moves
             .into_iter()
-            .find(|&m| m.from == from && m.dest == dest)
+            .find(|&m| m.from == from && m.dest == dest && m.prom == prom)
     }
 
     /// Real search, falls back to dumb search in extreme time constraints
@@ -314,11 +314,22 @@ fn main() -> io::Result<()> {
                     // This is actually a move
                     let from = Square::from_str(&cmd[..2]).unwrap();
                     let dest = Square::from_str(&cmd[2..4]).unwrap();
+                    let prom = if chars.len() == 5 {
+                        match chars[4] {
+                            b'n' => Some(Piece::Knight),
+                            b'b' => Some(Piece::Bishop),
+                            b'r' => Some(Piece::Rook),
+                            b'q' => Some(Piece::Queen),
+                            _ => None
+                        }
+                    } else {
+                        None
+                    };
                     match engine.mode {
                         Mode::Normal => {
                             // Find the move in the list
                             let m = engine
-                                .find_move(from, dest)
+                                .find_move(from, dest, prom)
                                 .expect("Attempted move not found!?");
                             engine.board = engine.board.make(m, &engine.zobrist);
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
@@ -343,7 +354,7 @@ fn main() -> io::Result<()> {
                         }
                         Mode::Force => {
                             let m = engine
-                                .find_move(from, dest)
+                                .find_move(from, dest, prom)
                                 .expect("Attempted move not found!?");
                             engine.board = engine.board.make(m, &engine.zobrist);
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
