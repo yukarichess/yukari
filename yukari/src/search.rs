@@ -99,6 +99,12 @@ impl<'a> Search<'a> {
         mate: i32,
         keystack: &mut Vec<u64>,
     ) -> i32 {
+
+        // Check extension
+        if board.in_check() {
+            depth += 1;
+        }
+
         if depth <= 0 {
             return self.quiesce(board, lower_bound, upper_bound, eval, pv);
         }
@@ -152,11 +158,6 @@ impl<'a> Search<'a> {
         if is_repetition_draw(keystack, board.hash()) {
             pv.set_len(0);
             return 0;
-        }
-
-        // Check extension
-        if board.in_check() {
-            depth += 1;
         }
 
         let mut found_pv = false;
