@@ -1212,7 +1212,7 @@ impl Board {
 
     /// Given a piece index, return its piece type.
     #[must_use]
-    pub fn piece_from_bit(&self, bit: PieceIndex) -> Piece {
+    pub const fn piece_from_bit(&self, bit: PieceIndex) -> Piece {
         self.data.piece_from_bit(bit)
     }
 

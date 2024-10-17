@@ -18,8 +18,7 @@ impl TimeControl {
         Self {
             remaining: match mode {
                 TimeMode::St(time) => time as f32,
-                TimeMode::Incremental { base, .. } => base,
-                TimeMode::Classical { base, .. } => base,
+                TimeMode::Incremental { base, .. } | TimeMode::Classical { base, .. } => base,
             },
             mode,
             move_number: 0,

@@ -98,7 +98,7 @@ impl BoardData {
     }
 
     /// Given a piece index, return its piece type.
-    pub fn piece_from_bit(&self, bit: PieceIndex) -> Piece {
+    pub const fn piece_from_bit(&self, bit: PieceIndex) -> Piece {
         self.piecemask
             .piece(bit)
             .expect("piece index corresponds to invalid piece")

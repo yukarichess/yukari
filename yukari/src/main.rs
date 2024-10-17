@@ -106,8 +106,8 @@ impl Yukari {
                 now.as_millis() / 10,
                 s.nodes() + s.qnodes()
             );
-            for m in pv.iter() {
-                print!("{} ", m);
+            for m in &pv {
+                print!("{m} ");
             }
             println!();
             depth += 1;
@@ -236,6 +236,7 @@ fn main() -> io::Result<()> {
         let trimmed = line.trim();
         let (cmd, args) = trimmed.split_once(' ').unwrap_or((trimmed, ""));
 
+        #[allow(clippy::match_same_arms)]
         match cmd {
             // Identification for engines that auto switch between protocols
             "xboard" => {}
@@ -278,7 +279,7 @@ fn main() -> io::Result<()> {
             // That ends up being some GPU fence level synchronization nonsense if it were to send more than one
             // so for now we just "handle it" by replying with pong immediately. For now this "works" because
             // the engine is single threaded such that moves can never be passed by other commands
-            "ping" => println!("pong {}", args),
+            "ping" => println!("pong {args}"),
             // TODO: Should support randomization so we don't always play the same game
             // we can't todo!() because we cannot turn off getting this message
             "random" => {}
@@ -300,7 +301,7 @@ fn main() -> io::Result<()> {
                 let m = pv[0];
                 // We must actually make the move locally too
                 engine.board = engine.board.make(m, &engine.zobrist);
-                println!("move {}", m);
+                println!("move {m}");
                 if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                     println!("1/2-1/2 {{Draw by repetition}}");
                 }
@@ -346,7 +347,7 @@ fn main() -> io::Result<()> {
                             let m = pv[0];
                             // We must actually make the move locally too
                             engine.board = engine.board.make(m, &engine.zobrist);
-                            println!("move {}", m);
+                            println!("move {m}");
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                                 println!("1/2-1/2 {{Draw by repetition}}");
                             }
@@ -365,7 +366,7 @@ fn main() -> io::Result<()> {
                     }
                 } else {
                     // This may look like I chose the format, but it is a standard response
-                    println!("Error (unknown command): {}", trimmed);
+                    println!("Error (unknown command): {trimmed}");
                 }
             }
         }

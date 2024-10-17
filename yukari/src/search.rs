@@ -55,7 +55,7 @@ impl<'a> Search<'a> {
         board.generate_captures_incremental(|m| {
             self.qnodes += 1;
 
-            let eval = eval.clone().update_eval(board, &m);
+            let eval = eval.clone().update_eval(board, m);
 
             // Pre-empt stand pat by skipping moves with bad evaluation.
             // One can think of this as delta pruning, with the delta being zero.
@@ -149,9 +149,8 @@ impl<'a> Search<'a> {
             pv.set_len(0);
             if board.in_check() {
                 return -mate;
-            } else {
-                return 0;
             }
+            return 0;
         }
 
         // Is this a repetition draw?
@@ -160,19 +159,19 @@ impl<'a> Search<'a> {
             return 0;
         }
 
-        let mut found_pv = false;
+        let mut finding_pv = true;
 
         for m in moves {
             self.nodes += 1;
 
             let mut child_pv = ArrayVec::new();
-            let eval = eval.clone().update_eval(board, &m);
+            let eval = eval.clone().update_eval(board, m);
             let board = board.make(m, self.zobrist);
             let mut score;
 
             // Push the move to check for repetition draws
             keystack.push(board.hash());
-            if !found_pv {
+            if finding_pv {
                 score = -self.search(
                     &board,
                     depth - 1,
@@ -214,7 +213,7 @@ impl<'a> Search<'a> {
                 return upper_bound;
             }
 
-            if self.nodes & 1023 == 0 {
+            if self.nodes.trailing_zeros() >= 10 {
                 if let Some(time) = self.stop_after {
                     if Instant::now() >= time {
                         pv.set_len(0);
@@ -230,7 +229,7 @@ impl<'a> Search<'a> {
                 for m in child_pv {
                     pv.push(m);
                 }
-                found_pv = true;
+                finding_pv = false;
             }
         }
         lower_bound
