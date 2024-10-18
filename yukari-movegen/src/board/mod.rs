@@ -961,25 +961,21 @@ impl Board {
             };
         }
 
-        macro_rules! try_move {
+        macro_rules! try_yield_move {
             ($from:ident, $dest:expr, $kind:expr, $promotion_piece:expr) => {
-                #[coroutine]
-                move || {
-                    if let Some(dir) =
-                        pininfo.pins[self.data.piece_index($from).unwrap().into_inner() as usize]
-                    {
-                        if let Some(move_dir) = $from.direction($dest) {
-                            // Pinned slider can only move along pin ray.
-                            if dir == move_dir || dir == move_dir.opposite() {
-                                yield Move::new($from, $dest, $kind, $promotion_piece);
-                            }
+                if let Some(dir) =
+                    pininfo.pins[self.data.piece_index($from).unwrap().into_inner() as usize]
+                {
+                    if let Some(move_dir) = $from.direction($dest) {
+                        // Pinned slider can only move along pin ray.
+                        if dir == move_dir || dir == move_dir.opposite() {
+                            yield Move::new($from, $dest, $kind, $promotion_piece);
                         }
-                        // Pinned leaper can't move.
-                        return;
                     }
+                } else {
                     yield Move::new($from, $dest, $kind, $promotion_piece);
                 }
-            };
+            }
         }
 
         macro_rules! find_attackers {
@@ -993,13 +989,10 @@ impl Board {
                         let from = self.data.square_of_piece(capturer);
                         if Rank::from($dest).is_relative_eighth(self.side) {
                             for piece in promotion_pieces {
-                                let mut f =
-                                    try_move!(from, $dest, MoveType::CapturePromotion, Some(piece));
-                                yield_from!(f);
+                                try_yield_move!(from, $dest, MoveType::CapturePromotion, Some(piece));
                             }
                         } else {
-                            let mut f = try_move!(from, $dest, MoveType::Capture, None);
-                            yield_from!(f);
+                            try_yield_move!(from, $dest, MoveType::Capture, None);
                         }
                     }
                     for capturer in attacks & (self.data.knights() | self.data.bishops()) {
@@ -1010,8 +1003,7 @@ impl Board {
                             // This is a bad capture.
                             continue;
                         }
-                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
-                        yield_from!(f);
+                        try_yield_move!(from, $dest, MoveType::Capture, None);
                     }
                     for capturer in attacks & self.data.rooks() {
                         let from = self.data.square_of_piece(capturer);
@@ -1021,8 +1013,7 @@ impl Board {
                             // This is a bad capture.
                             continue;
                         }
-                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
-                        yield_from!(f);
+                        try_yield_move!(from, $dest, MoveType::Capture, None);
                     }
                     for capturer in attacks & self.data.queens() {
                         let from = self.data.square_of_piece(capturer);
@@ -1032,8 +1023,7 @@ impl Board {
                             // This is a bad capture.
                             continue;
                         }
-                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
-                        yield_from!(f);
+                        try_yield_move!(from, $dest, MoveType::Capture, None);
                     }
                     for capturer in attacks & self.data.kings() {
                         let from = self.data.square_of_piece(capturer);
@@ -1041,8 +1031,7 @@ impl Board {
                             // Moving into check is illegal.
                             continue;
                         }
-                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
-                        yield_from!(f);
+                        try_yield_move!(from, $dest, MoveType::Capture, None);
                     }
                 }
             };
