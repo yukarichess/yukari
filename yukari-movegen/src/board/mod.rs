@@ -8,6 +8,8 @@ use std::{
     convert::{TryFrom, TryInto},
     ffi::CString,
     fmt::Display,
+    ops::{Coroutine, CoroutineState},
+    pin::{pin, Pin},
 };
 
 use rand::{prelude::StdRng, Rng, SeedableRng};
@@ -621,7 +623,9 @@ impl Board {
 
     /// Generate en-passant pawn moves.
     fn generate_pawn_enpassant(&self, v: &mut ArrayVec<[Move; 256]>, pininfo: &PinInfo) {
-        let Some(ep) = self.ep else { return; };
+        let Some(ep) = self.ep else {
+            return;
+        };
         for capturer in self
             .data
             .attacks_to(ep, self.side)
@@ -637,30 +641,26 @@ impl Board {
     fn generate_pawn_quiet(&self, v: &mut ArrayVec<[Move; 256]>, from: Square, pininfo: &PinInfo) {
         let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
         let north = from.relative_north(self.side);
-        let Some(dest) = north else { return; };
+        let Some(dest) = north else {
+            return;
+        };
         // Pawn single pushes.
         if self.data.has_piece(dest) {
             return;
         }
         if Rank::from(dest).is_relative_eighth(self.side) {
             for piece in &promotion_pieces {
-                self.try_push_move(
-                    v,
-                    from,
-                    dest,
-                    MoveType::Promotion,
-                    Some(*piece),
-                    pininfo,
-                );
+                self.try_push_move(v, from, dest, MoveType::Promotion, Some(*piece), pininfo);
             }
         } else {
             self.try_push_move(v, from, dest, MoveType::Normal, None, pininfo);
         }
 
         // Pawn double pushes.
-        let Some(dest) = dest.relative_north(self.side) else { return; };
-        if Rank::from(dest).is_relative_fourth(self.side) && !self.data.has_piece(dest)
-        {
+        let Some(dest) = dest.relative_north(self.side) else {
+            return;
+        };
+        if Rank::from(dest).is_relative_fourth(self.side) && !self.data.has_piece(dest) {
             self.try_push_move(v, from, dest, MoveType::DoublePush, None, pininfo);
         }
     }
@@ -679,20 +679,26 @@ impl Board {
         let pininfo = self.discover_pinned_pieces();
 
         let add_pawn_block = |v: &mut ArrayVec<[Move; 256]>, from, dest, kind| {
-            let Some(colour) = self.data.colour_from_square(from) else { return; };
+            let Some(colour) = self.data.colour_from_square(from) else {
+                return;
+            };
             if colour == self.side {
                 self.try_push_move(v, from, dest, kind, None, &pininfo);
             }
         };
 
         let add_pawn_blocks = |v: &mut ArrayVec<[Move; 256]>, dest: Square| {
-            let Some(from) = dest.relative_south(self.side) else { return; };
+            let Some(from) = dest.relative_south(self.side) else {
+                return;
+            };
             match self.data.piece_from_square(from) {
                 Some(Piece::Pawn) => add_pawn_block(v, from, dest, MoveType::Normal),
                 Some(_) => {}
                 None => {
                     if Rank::from(dest).is_relative_fourth(self.side) {
-                        let Some(from) = from.relative_south(self.side) else { return; };
+                        let Some(from) = from.relative_south(self.side) else {
+                            return;
+                        };
                         if self.data.piece_from_square(from) == Some(Piece::Pawn) {
                             add_pawn_block(v, from, dest, MoveType::DoublePush);
                         }
@@ -920,6 +926,198 @@ impl Board {
         }
 
         self.generate_pawn_enpassant(v, &pininfo);
+    }
+
+    #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
+    pub fn generate_captures_coro<F: FnMut(Move) -> bool>(&self, mut f: F) {
+        let king_square = self.data.king_square(self.side);
+        let checks = self.data.attacks_to(king_square, !self.side);
+
+        // special case: being in check.
+        if checks.count_ones() != 0 {
+            let mut v = ArrayVec::new();
+            v.set_len(0);
+            if checks.count_ones() == 1 {
+                self.generate_single_check(&mut v);
+            } else if checks.count_ones() == 2 {
+                self.generate_double_check(&mut v);
+            }
+
+            for m in v {
+                if m.is_capture() && !f(m) {
+                    break;
+                }
+            }
+            return;
+        }
+
+        let pininfo = self.discover_pinned_pieces();
+
+        macro_rules! yield_from {
+            ($coro:ident) => {
+                while let CoroutineState::Yielded(m) = pin!(&mut $coro).resume(()) {
+                    yield m
+                }
+            };
+        }
+
+        macro_rules! try_move {
+            ($from:ident, $dest:expr, $kind:expr, $promotion_piece:expr) => {
+                #[coroutine]
+                move || {
+                    if let Some(dir) =
+                        pininfo.pins[self.data.piece_index($from).unwrap().into_inner() as usize]
+                    {
+                        if let Some(move_dir) = $from.direction($dest) {
+                            // Pinned slider can only move along pin ray.
+                            if dir == move_dir || dir == move_dir.opposite() {
+                                yield Move::new($from, $dest, $kind, $promotion_piece);
+                            }
+                        }
+                        // Pinned leaper can't move.
+                        return;
+                    }
+                    yield Move::new($from, $dest, $kind, $promotion_piece);
+                }
+            };
+        }
+
+        macro_rules! find_attackers {
+            ($dest:expr, $victim_type:expr, $minor_mask:ident, $rook_mask:ident, $queen_mask:ident) => {
+                #[coroutine]
+                move || {
+                    let promotion_pieces =
+                        [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
+                    let attacks = self.data.attacks_to($dest, self.side);
+                    for capturer in attacks & self.data.pawns() {
+                        let from = self.data.square_of_piece(capturer);
+                        if Rank::from($dest).is_relative_eighth(self.side) {
+                            for piece in promotion_pieces {
+                                let mut f =
+                                    try_move!(from, $dest, MoveType::CapturePromotion, Some(piece));
+                                yield_from!(f);
+                            }
+                        } else {
+                            let mut f = try_move!(from, $dest, MoveType::Capture, None);
+                            yield_from!(f);
+                        }
+                    }
+                    for capturer in attacks & (self.data.knights() | self.data.bishops()) {
+                        let from = self.data.square_of_piece(capturer);
+                        if $victim_type < Piece::Bishop
+                            && !(self.data.attacks_to($dest, !self.side) & $minor_mask).empty()
+                        {
+                            // This is a bad capture.
+                            continue;
+                        }
+                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
+                        yield_from!(f);
+                    }
+                    for capturer in attacks & self.data.rooks() {
+                        let from = self.data.square_of_piece(capturer);
+                        if $victim_type < Piece::Rook
+                            && !(self.data.attacks_to($dest, !self.side) & $rook_mask).empty()
+                        {
+                            // This is a bad capture.
+                            continue;
+                        }
+                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
+                        yield_from!(f);
+                    }
+                    for capturer in attacks & self.data.queens() {
+                        let from = self.data.square_of_piece(capturer);
+                        if $victim_type < Piece::Queen
+                            && !(self.data.attacks_to($dest, !self.side) & $queen_mask).empty()
+                        {
+                            // This is a bad capture.
+                            continue;
+                        }
+                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
+                        yield_from!(f);
+                    }
+                    for capturer in attacks & self.data.kings() {
+                        let from = self.data.square_of_piece(capturer);
+                        if !self.data.attacks_to($dest, !self.side).empty() {
+                            // Moving into check is illegal.
+                            continue;
+                        }
+                        let mut f = try_move!(from, $dest, MoveType::Capture, None);
+                        yield_from!(f);
+                    }
+                }
+            };
+        }
+
+        let mut find_victims = #[coroutine]
+        || {
+            let mut minor_mask = Bitlist::new();
+            let mut rook_mask = Bitlist::new();
+            let mut queen_mask = Bitlist::new();
+
+            minor_mask |= self.data.pieces_of_colour(!self.side) & self.data.pawns();
+            rook_mask |= self.data.pieces_of_colour(!self.side) & self.data.pawns();
+            queen_mask |= self.data.pieces_of_colour(!self.side) & self.data.pawns();
+
+            for victim in self.data.pieces_of_colour(!self.side) & self.data.queens() {
+                let mut f = find_attackers!(
+                    self.square_of_piece(victim),
+                    Piece::Queen,
+                    minor_mask,
+                    rook_mask,
+                    queen_mask
+                );
+                yield_from!(f);
+            }
+
+            queen_mask |= self.data.pieces_of_colour(!self.side)
+                & (self.data.knights() | self.data.bishops());
+
+            for victim in self.data.pieces_of_colour(!self.side) & self.data.rooks() {
+                let mut f = find_attackers!(
+                    self.square_of_piece(victim),
+                    Piece::Rook,
+                    minor_mask,
+                    rook_mask,
+                    queen_mask
+                );
+                yield_from!(f);
+            }
+
+            queen_mask |= self.data.pieces_of_colour(!self.side) & self.data.rooks();
+
+            for victim in
+                self.data.pieces_of_colour(!self.side) & (self.data.knights() | self.data.bishops())
+            {
+                let mut f = find_attackers!(
+                    self.square_of_piece(victim),
+                    Piece::Bishop,
+                    minor_mask,
+                    rook_mask,
+                    queen_mask
+                );
+                yield_from!(f);
+            }
+
+            rook_mask |= self.data.pieces_of_colour(!self.side)
+                & (self.data.knights() | self.data.bishops());
+
+            for victim in self.data.pieces_of_colour(!self.side) & self.data.pawns() {
+                let mut f = find_attackers!(
+                    self.square_of_piece(victim),
+                    Piece::Pawn,
+                    minor_mask,
+                    rook_mask,
+                    queen_mask
+                );
+                yield_from!(f);
+            }
+        };
+
+        while let CoroutineState::Yielded(m) = Pin::new(&mut find_victims).resume(()) {
+            if !f(m) {
+                break;
+            }
+        }
     }
 
     #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]

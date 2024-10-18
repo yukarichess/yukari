@@ -321,7 +321,7 @@ fn main() -> io::Result<()> {
                             b'b' => Some(Piece::Bishop),
                             b'r' => Some(Piece::Rook),
                             b'q' => Some(Piece::Queen),
-                            _ => None
+                            _ => None,
                         }
                     } else {
                         None

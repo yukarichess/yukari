@@ -52,7 +52,7 @@ impl<'a> Search<'a> {
         }
         alpha = alpha.max(eval_int);
 
-        board.generate_captures_incremental(|m| {
+        board.generate_captures_coro(|m| {
             self.qnodes += 1;
 
             let eval = eval.clone().update_eval(board, m);
@@ -99,7 +99,6 @@ impl<'a> Search<'a> {
         mate: i32,
         keystack: &mut Vec<u64>,
     ) -> i32 {
-
         // Check extension
         if board.in_check() {
             depth += 1;

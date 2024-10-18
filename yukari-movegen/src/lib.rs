@@ -1,3 +1,4 @@
+#![feature(coroutines, coroutine_trait, stmt_expr_attributes)]
 #![warn(clippy::pedantic, clippy::nursery, clippy::perf, clippy::style)]
 
 mod board;

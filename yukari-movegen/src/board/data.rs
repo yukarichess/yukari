@@ -313,7 +313,9 @@ impl BoardData {
         let square = Square16x8::from_square(square);
         for piece in sliders {
             let attacker = Square16x8::from_square(self.square_of_piece(piece));
-            let Some(direction) = attacker.direction(square) else { continue; };
+            let Some(direction) = attacker.direction(square) else {
+                continue;
+            };
             for dest in square.ray_attacks(direction) {
                 if add {
                     self.bitlist.add_piece(dest, piece);
