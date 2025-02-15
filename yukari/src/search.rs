@@ -279,16 +279,19 @@ impl<'a> Search<'a> {
     ) -> i32 {
         // Emergency bailout
         if ply == 63 {
+            pv.set_len(0);
             return self.eval_with_corrhist(board, board.eval(board.side()));
         }
 
         // Draw by insufficient material
-        if board.insufficient_material() {
+        if board.insufficient_material() && ply > 0 {
+            pv.set_len(0);
             return 0;
         }
 
         // Is this a repetition draw?
-        if is_repetition_draw(keystack, board.hash()) {
+        if is_repetition_draw(keystack, board.hash()) && ply > 0 {
+            pv.set_len(0);
             return 0;
         }
 
