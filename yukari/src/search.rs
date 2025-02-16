@@ -431,6 +431,7 @@ impl<'a> Search<'a> {
                 let depth = (depth as f32).ln();
                 let i = (i as f32).ln();
                 reduction += (depth * i).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
+                reduction += i32::from(lower_bound == upper_bound - 1);
                 // credit: adam
             }
 
