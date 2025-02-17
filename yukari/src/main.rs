@@ -204,7 +204,7 @@ impl Yukari {
                     soft_limit = start + soft_limit_diff.mul_f64(0.95);
                 } else {
                     let soft_limit_diff = soft_limit - start;
-                    soft_limit = start + soft_limit_diff.mul_f64(1.05);
+                    soft_limit = start + soft_limit_diff.mul_f64(1.1);
                 }
             }
 
