@@ -467,6 +467,17 @@ impl<'a> Search<'a> {
                 }
             }
 
+            // SEE Pruning
+            if !board.in_check() && depth == 2 && movecount > 1 && best_score > -MATE_VALUE + 500 {
+                let see = board.static_exchange_evaluation(m);
+                if m.is_capture() && see < -1 {
+                    continue;
+                }
+                if !m.is_capture() && see < 0 {
+                    continue;
+                }
+            }
+            
             let lmp_threshold = 1.max(if depth == 1 { (3 * moves.len()) / 4 } else { (7 * moves.len()) / 8 });
             if !board.in_check() && !m.is_capture() && depth <= 2 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
                 continue;
