@@ -189,7 +189,7 @@ impl BoardData {
 
         let from_file = File::from(from_square);
         let to_file = File::from(to_square);
-        if piece == Piece::King && ((from_file >= File::E && to_file <= File::D) || (from_file <= File::D && to_file >= File::E)) {
+        if crate::board::eval::HORIZONTAL_MIRROR && piece == Piece::King && ((from_file >= File::E && to_file <= File::D) || (from_file <= File::D && to_file >= File::E)) {
             // we need to rebuild the accumulator ;~;
             self.eval.reset_colour(piece_index.colour());
             for square in 0..64 {

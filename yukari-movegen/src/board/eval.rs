@@ -2,6 +2,7 @@ use std::simd::{cmp::SimdOrd, i16x64, i32x64, num::SimdInt};
 
 use crate::{Colour, File, Piece, Square};
 
+pub const HORIZONTAL_MIRROR: bool = true;
 const HIDDEN_SIZE: usize = 1024;
 const OUTPUT_BUCKETS: usize = 8;
 const DIVISOR: usize = 32_usize.div_ceil(OUTPUT_BUCKETS);
@@ -119,11 +120,17 @@ impl Eval {
         }
     }
 
+    pub fn mirror(king: Square) -> usize {
+        if HORIZONTAL_MIRROR && File::from(king) >= File::E {
+            7
+        } else {
+            0
+        }
+    }
+
     pub fn add_piece_for_acc(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool) {
-        let white_flip = if File::from(white_king) >= File::E { 7 } else { 0 };
-        let black_flip = if File::from(black_king) >= File::E { 7 } else { 0 };
-        let white_square = square.into_inner() as usize ^ white_flip;
-        let black_square = square.flip().into_inner() as usize ^ black_flip;
+        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
+        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
 
         if colour == Colour::White {
             if white_acc {
@@ -139,10 +146,8 @@ impl Eval {
     }
 
     pub fn add_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        let white_flip = if File::from(white_king) >= File::E { 7 } else { 0 };
-        let black_flip = if File::from(black_king) >= File::E { 7 } else { 0 };
-        let white_square = square.into_inner() as usize ^ white_flip;
-        let black_square = square.flip().into_inner() as usize ^ black_flip;
+        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
+        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
 
         if colour == Colour::White {
             self.white.add_feature(64 * (piece as usize) + white_square, &NNUE);
@@ -154,10 +159,8 @@ impl Eval {
     }
 
     pub fn remove_piece_for_acc(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool) {
-        let white_flip = if File::from(white_king) >= File::E { 7 } else { 0 };
-        let black_flip = if File::from(black_king) >= File::E { 7 } else { 0 };
-        let white_square = square.into_inner() as usize ^ white_flip;
-        let black_square = square.flip().into_inner() as usize ^ black_flip;
+        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
+        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
 
         if colour == Colour::White {
             if white_acc {
@@ -173,10 +176,8 @@ impl Eval {
     }
 
     pub fn remove_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        let white_flip = if File::from(white_king) >= File::E { 7 } else { 0 };
-        let black_flip = if File::from(black_king) >= File::E { 7 } else { 0 };
-        let white_square = square.into_inner() as usize ^ white_flip;
-        let black_square = square.flip().into_inner() as usize ^ black_flip;
+        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
+        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
 
         if colour == Colour::White {
             self.white.remove_feature(64 * (piece as usize) + white_square, &NNUE);
