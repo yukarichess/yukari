@@ -141,12 +141,11 @@ impl MoveOrder {
         if m.is_capture() {
             let dest_piece = board.piece_from_square(m.dest).unwrap_or(Piece::Pawn);
             let from_piece = board.piece_from_square(m.from).unwrap();
-            return Self::GoodCapture(dest_piece, from_piece);
-            /*if board.static_exchange_evaluation(m) >= 0 {
-                return Self::GoodCapture(score);
+            if (dest_piece >= from_piece) || board.static_exchange_evaluation(m) >= 0 {
+                return Self::GoodCapture(dest_piece, from_piece);
             } else {
-                return Self::BadCapture(score);
-            }*/
+                return Self::BadCapture(dest_piece, from_piece);
+            }
         }
 
         let score = history[m.from.into_inner() as usize][m.dest.into_inner() as usize];
@@ -450,10 +449,6 @@ impl<'a> Search<'a> {
                 self.zw_nodes += 1;
             }
 
-            let mut child_pv = ArrayVec::new();
-            let child_board = board.make(m);
-            let mut score = 0;
-
             if ply == 0 {
                 let now = Instant::now();
                 if now >= self.start + Duration::from_secs(2) {
@@ -463,7 +458,7 @@ impl<'a> Search<'a> {
 
             let lmp_threshold = 1.max((3 * moves.len()) / 4);
             if !board.in_check() && !m.is_capture() && depth == 1 && i >= lmp_threshold && best_score > -MATE_VALUE + 500 {
-                break;
+                continue;
             }
 
             let mut reduction = 1;
@@ -475,6 +470,10 @@ impl<'a> Search<'a> {
                 reduction -= i32::from(lower_bound != upper_bound - 1);
                 // credit: adam
             }
+
+            let mut child_pv = ArrayVec::new();
+            let child_board = board.make(m);
+            let mut score = 0;
 
             if i > 0 {
                 score = -self.search(
