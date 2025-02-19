@@ -5,7 +5,7 @@ use std::{
 };
 
 use tinyvec::ArrayVec;
-use yukari_movegen::{Board, Move};
+use yukari_movegen::{Board, Move, Piece};
 
 use crate::output;
 
@@ -393,9 +393,9 @@ impl<'a> Search<'a> {
                 (false, true) => Ordering::Greater,
                 (true, false) => Ordering::Less,
                 (true, true) => board
-                    .piece_from_square(b.dest)
-                    .cmp(&board.piece_from_square(a.dest))
-                    .then_with(|| board.piece_from_square(a.from).cmp(&board.piece_from_square(b.from))),
+                .piece_from_square(b.dest).unwrap_or(Piece::Pawn)
+                .cmp(&board.piece_from_square(a.dest).unwrap_or(Piece::Pawn))
+                .then_with(|| board.piece_from_square(a.from).cmp(&board.piece_from_square(b.from))),
             }
         });
 
