@@ -92,6 +92,68 @@ pub fn allocate_tt(megabytes: usize) -> Vec<TtEntry> {
     tt
 }
 
+#[derive(PartialEq, Eq, Debug)]
+enum MoveOrder {
+    TtMove,
+    GoodCapture(Piece, Piece),
+    Quiet(i16),
+    BadCapture(Piece, Piece),
+}
+
+impl PartialOrd for MoveOrder {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MoveOrder {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            // TT Move sorts above all others
+            (MoveOrder::TtMove, MoveOrder::TtMove) => Ordering::Equal, // shouldn't happen?
+            (MoveOrder::TtMove, _) => Ordering::Less,
+            (_, MoveOrder::TtMove) => Ordering::Greater,
+
+            // Good captures sort above quiets and bad captures; ties broken by highest MVV/LVA score.
+            (MoveOrder::GoodCapture(a_mvv, a_lva), MoveOrder::GoodCapture(b_mvv, b_lva)) => b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva)),
+            (MoveOrder::GoodCapture(_, _), _) => Ordering::Less,
+            (_, MoveOrder::GoodCapture(_, _)) => Ordering::Greater,
+
+            // Quiets sort above bad captures; ties broken by highest history score.
+            (MoveOrder::Quiet(a), MoveOrder::Quiet(b)) => b.cmp(a),
+            (MoveOrder::Quiet(_), _) => Ordering::Less,
+            (_, MoveOrder::Quiet(_)) => Ordering::Greater,
+
+            // Bad captures; ties broken by highest MVV/LVA score.
+            (MoveOrder::BadCapture(a_mvv, a_lva), MoveOrder::BadCapture(b_mvv, b_lva)) => b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva)),
+        }
+    }
+}
+
+impl MoveOrder {
+    pub fn classify(board: &Board, history: &[[i16; 64]; 64], tt_move: Option<Move>, m: Move) -> Self {
+        if let Some(tt_move) = tt_move {
+            if tt_move == m {
+                return Self::TtMove;
+            }
+        }
+
+        if m.is_capture() {
+            let dest_piece = board.piece_from_square(m.dest).unwrap_or(Piece::Pawn);
+            let from_piece = board.piece_from_square(m.from).unwrap();
+            return Self::GoodCapture(dest_piece, from_piece);
+            /*if board.static_exchange_evaluation(m) >= 0 {
+                return Self::GoodCapture(score);
+            } else {
+                return Self::BadCapture(score);
+            }*/
+        }
+
+        let score = history[m.from.into_inner() as usize][m.dest.into_inner() as usize];
+        Self::Quiet(score)
+    }
+}
+
 pub struct Search<'a> {
     nodes: u64,
     qnodes: u64,
@@ -373,31 +435,7 @@ impl<'a> Search<'a> {
             return 0;
         }
 
-        moves.sort_by(|a, b| {
-            // TT move sorts above everything else.
-            if let Some(tt_move) = tt_move {
-                if *a == tt_move {
-                    return Ordering::Less;
-                }
-                if *b == tt_move {
-                    return Ordering::Greater;
-                }
-            }
-
-            // Captures sort above quiet moves.
-            // Captures are sorted by most valuable victim, and tiebroken by least valuable attacker.
-            // Quiets are sorted by largest history heuristic value.
-            match (a.is_capture(), b.is_capture()) {
-                (false, false) => self.history[b.from.into_inner() as usize][b.dest.into_inner() as usize]
-                    .cmp(&self.history[a.from.into_inner() as usize][a.dest.into_inner() as usize]),
-                (false, true) => Ordering::Greater,
-                (true, false) => Ordering::Less,
-                (true, true) => board
-                .piece_from_square(b.dest).unwrap_or(Piece::Pawn)
-                .cmp(&board.piece_from_square(a.dest).unwrap_or(Piece::Pawn))
-                .then_with(|| board.piece_from_square(a.from).cmp(&board.piece_from_square(b.from))),
-            }
-        });
+        moves.sort_by_key(|m| MoveOrder::classify(board, self.history, tt_move, *m));
 
         let mut best_move = None;
         let mut best_score = i32::MIN;
