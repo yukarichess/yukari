@@ -486,8 +486,8 @@ impl Square16x8 {
         dest.wrapping_sub(from).wrapping_add(119) as usize
     }
 
-    pub(crate) fn add_dir(self, dir: Direction) -> Self {
-        let sq = i16::from(self.0);
+    pub(crate) const fn add_dir(self, dir: Direction) -> Self {
+        let sq = self.0 as i16;
         let sq = sq.wrapping_add(dir.to_16x8());
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let sq = Self(sq as u8);

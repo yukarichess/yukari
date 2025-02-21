@@ -2,8 +2,11 @@ use std::simd::{cmp::SimdOrd, i16x64, i32x64, num::SimdInt};
 
 use crate::{Colour, File, Piece, Square};
 
+use super::feature;
+
 pub const HORIZONTAL_MIRROR: bool = true;
-const HIDDEN_SIZE: usize = 1024;
+const INPUTS: usize = (2 * 6 * 64) + 2 * feature::MAX_OFFSET;
+const HIDDEN_SIZE: usize = 256;
 const OUTPUT_BUCKETS: usize = 8;
 const DIVISOR: usize = 32_usize.div_ceil(OUTPUT_BUCKETS);
 const SCALE: i32 = 400;
@@ -13,8 +16,8 @@ const QB: i16 = 64;
 /// This is the quantised format that yukari uses.
 #[repr(C)]
 pub struct Network {
-    /// Column-Major `HIDDEN_SIZE x 768` matrix.
-    feature_weights: [Accumulator; 768],
+    /// Column-Major `HIDDEN_SIZE x INPUTS` matrix.
+    feature_weights: [Accumulator; INPUTS],
     /// Vector with dimension `HIDDEN_SIZE`.
     feature_bias: Accumulator,
     /// Row-Major `OUTPUT_BUCKETS x (2 * HIDDEN_SIZE)` matrix.
@@ -24,7 +27,7 @@ pub struct Network {
 }
 
 static NNUE: Network = unsafe {
-    std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!("../../../yukari_8bd20941.bin"))
+    std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!("../../../yukari_e6f50cf9.bin"))
 };
 
 impl Network {
@@ -129,63 +132,61 @@ impl Eval {
     }
 
     pub fn add_piece_for_acc(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool) {
-        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
-        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
-
-        if colour == Colour::White {
-            if white_acc {
-                self.white.add_feature(64 * (piece as usize) + white_square, &NNUE);
-            } else {
-                self.black.add_feature(64 * (6 + piece as usize) + black_square, &NNUE);
-            }
-        } else if white_acc {
-            self.white.add_feature(64 * (6 + piece as usize) + white_square, &NNUE);
+        if white_acc {
+            self.white.add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
         } else {
-            self.black.add_feature(64 * (piece as usize) + black_square, &NNUE);
+            self.black.add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_threat_for_acc(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square, white_acc: bool) {
+        let Some(to_colour) = to_colour else { return };
+        if white_acc {
+            self.white.add_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
+        } else {
+            self.black.add_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
         }
     }
 
     pub fn add_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
-        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
+        self.white.add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+        self.black.add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+    }
 
-        if colour == Colour::White {
-            self.white.add_feature(64 * (piece as usize) + white_square, &NNUE);
-            self.black.add_feature(64 * (6 + piece as usize) + black_square, &NNUE);
-        } else {
-            self.black.add_feature(64 * (piece as usize) + black_square, &NNUE);
-            self.white.add_feature(64 * (6 + piece as usize) + white_square, &NNUE);
-        }
+    pub fn add_threat(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square) {
+        let Some(to_colour) = to_colour else { return };
+        self.white.add_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
+        self.black.add_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
     }
 
     pub fn remove_piece_for_acc(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool) {
-        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
-        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
-
-        if colour == Colour::White {
-            if white_acc {
-                self.white.remove_feature(64 * (piece as usize) + white_square, &NNUE);
-            } else {
-                self.black.remove_feature(64 * (6 + piece as usize) + black_square, &NNUE);
-            }
-        } else if white_acc {
-            self.white.remove_feature(64 * (6 + piece as usize) + white_square, &NNUE);
+        if white_acc {
+            self.white.remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
         } else {
-            self.black.remove_feature(64 * (piece as usize) + black_square, &NNUE);
+            self.black.remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn remove_threat_for_acc(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square, white_acc: bool) {
+        let Some(to_colour) = to_colour else { return };
+        if white_acc {
+            self.white.remove_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
+        } else {
+            self.black.remove_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
         }
     }
 
     pub fn remove_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        let white_square = square.into_inner() as usize ^ Self::mirror(white_king);
-        let black_square = square.flip().into_inner() as usize ^ Self::mirror(black_king);
+        self.white.remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+        self.black.remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+    }
 
-        if colour == Colour::White {
-            self.white.remove_feature(64 * (piece as usize) + white_square, &NNUE);
-            self.black.remove_feature(64 * (6 + piece as usize) + black_square, &NNUE);
-        } else {
-            self.black.remove_feature(64 * (piece as usize) + black_square, &NNUE);
-            self.white.remove_feature(64 * (6 + piece as usize) + white_square, &NNUE);
-        }
+    pub fn remove_threat(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square) {
+        let Some(to_colour) = to_colour else { return };
+        self.white.remove_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
+        self.black.remove_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
     }
 
     pub fn move_piece(&mut self, piece: Piece, from_square: Square, to_square: Square, colour: Colour, white_king: Square, black_king: Square) {

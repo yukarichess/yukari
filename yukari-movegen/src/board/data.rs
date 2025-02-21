@@ -9,7 +9,7 @@ use super::{
 use crate::{
     colour::Colour,
     piece::Piece,
-    square::{Direction, Square, Square16x8}, File,
+    square::{Direction, Square, Square16x8}, File, Move,
 };
 
 #[allow(clippy::module_name_repetitions)]
@@ -127,8 +127,12 @@ impl BoardData {
         self.eval.add_piece(piece, square, colour, white_king, black_king);
 
         if update {
-            self.update_attacks(square, piece_index, piece, true, None);
-            self.update_sliders(square, false);
+            self.update_attacks(square, piece_index, piece, true);
+            self.update_sliders(square, false, None);
+            // fixup: add threats to new square
+            for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
+                self.eval.add_threat(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), Some(piece_index.colour()), white_king, black_king);
+            }
         }
     }
 
@@ -146,18 +150,28 @@ impl BoardData {
         self.eval.remove_piece(piece, square, piece_index.colour(), white_king, black_king);
 
         if update {
-            self.update_attacks(square, piece_index, piece, false, None);
-            self.update_sliders(square, true);
+            self.update_attacks(square, piece_index, piece, false);
+            self.update_sliders(square, true, None);
+            // fixup: clear threats to old square
+            for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
+                self.eval.remove_threat(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), Some(piece_index.colour()), white_king, black_king);
+            }
         }
     }
 
     pub fn rebuild_accumulators(&mut self) {
         let white_king = self.king_square(Colour::White);
         let black_king = self.king_square(Colour::Black);
+        //println!("===");
         self.eval = Eval::new();
         for square in 0..64 {
             let square = unsafe { Square::from_u8_unchecked(square) };
             let Some(square_piece_index) = self.index[square] else { continue };
+
+            for attack in self.bitlist[square] {
+                self.eval.add_threat(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), self.colour_from_square(square), white_king, black_king);
+            }
+
             self.eval.add_piece(self.piece_from_bit(square_piece_index), square, square_piece_index.colour(), white_king, black_king);
         }
     }
@@ -166,23 +180,16 @@ impl BoardData {
     pub fn move_piece(&mut self, from_square: Square, to_square: Square) {
         let piece_index = self.index[from_square].expect("attempted to move piece from empty square");
         let piece = self.piece_from_bit(piece_index);
-        let slide_dir = from_square.direction(to_square).and_then(|dir| {
-            if matches!(piece, Piece::Bishop | Piece::Rook | Piece::Queen) {
-                Some(dir)
-            } else {
-                None
-            }
-        });
 
-        self.update_attacks(from_square, piece_index, piece, false, slide_dir);
-        self.update_sliders(from_square, true);
-        if slide_dir.is_some() {
-            self.bitlist.add_piece(from_square, piece_index);
-        }
+        self.update_attacks(from_square, piece_index, piece, false);
+        self.update_sliders(from_square, true, None);
 
         self.piecelist.move_piece(piece_index, to_square);
         self.index.move_piece(piece_index, from_square, to_square);
         Zobrist::move_piece(piece_index.colour(), piece, from_square, to_square, &mut self.hash);
+
+        self.update_attacks(to_square, piece_index, piece, true);
+        self.update_sliders(to_square, false, Some(from_square));
 
         let white_king = self.king_square(Colour::White);
         let black_king = self.king_square(Colour::Black);
@@ -195,20 +202,37 @@ impl BoardData {
             for square in 0..64 {
                 let square = unsafe { Square::from_u8_unchecked(square) };
                 let Some(square_piece_index) = self.index[square] else { continue };
+
+                for attack in self.bitlist[square] {
+                    self.eval.add_threat_for_acc(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), self.colour_from_square(square), white_king, black_king, piece_index.is_white());
+                }
                 self.eval.add_piece_for_acc(self.piece_from_bit(square_piece_index), square, square_piece_index.colour(), white_king, black_king, piece_index.is_white());
             }
 
             self.eval.remove_piece_for_acc(piece, from_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
             self.eval.add_piece_for_acc(piece, to_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
+            // fixup: clear threats to old square
+            for attack in self.bitlist[from_square] & !Bitlist::from_piece(piece_index) {
+                self.eval.remove_threat_for_acc(self.piece_from_bit(attack), self.square_of_piece(attack), from_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king, !piece_index.is_white());
+            }
+
+            // fixup: add threats to new square
+            for attack in self.bitlist[to_square] & !Bitlist::from_piece(piece_index) {
+                self.eval.add_threat_for_acc(self.piece_from_bit(attack), self.square_of_piece(attack), to_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king, !piece_index.is_white());
+            }
         } else {
             self.eval.move_piece(piece, from_square, to_square, piece_index.colour(), white_king, black_king);
-        }
 
-        if slide_dir.is_some() {
-            self.bitlist.remove_piece(to_square, piece_index);
+            // fixup: clear threats to old square
+            for attack in self.bitlist[from_square] & !Bitlist::from_piece(piece_index) {
+                self.eval.remove_threat(self.piece_from_bit(attack), self.square_of_piece(attack), from_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king);
+            }
+
+            // fixup: add threats to new square
+            for attack in self.bitlist[to_square] & !Bitlist::from_piece(piece_index) {
+                self.eval.add_threat(self.piece_from_bit(attack), self.square_of_piece(attack), to_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king);
+            }
         }
-        self.update_attacks(to_square, piece_index, piece, true, slide_dir);
-        self.update_sliders(to_square, false);
 
         debug_assert!(!self.bitlist[to_square].contains(piece_index.into()), "piece on {to_square} cannot attack itself");
     }
@@ -251,34 +275,33 @@ impl BoardData {
             let square = unsafe { Square::from_u8_unchecked(square) };
             if let Some(bit) = self.index[square] {
                 let piece = self.piece_from_bit(bit);
-                self.update_attacks(square, bit, piece, true, None);
+                self.update_attacks(square, bit, piece, true);
             }
         }
     }
 
     /// Add or remove attacks for a square.
-    fn update_attacks(&mut self, square: Square, bit: PieceIndex, piece: Piece, add: bool, skip_dir: Option<Direction>) {
-        let update = |bitlist: &mut BitlistArray, dest: Square| {
+    fn update_attacks(&mut self, square: Square, bit: PieceIndex, piece: Piece, add: bool) {
+        let white_king = self.king_square(Colour::White);
+        let black_king = self.king_square(Colour::Black);
+
+        let update = |bitlist: &mut BitlistArray, index: &PieceIndexArray, eval: &mut Eval, dest: Square| {
             if add {
                 debug_assert!(dest != square);
                 bitlist.add_piece(dest, bit);
+                eval.add_threat(piece, square, dest, bit.colour(), index[dest].map(PieceIndex::colour), white_king, black_king);
             } else {
                 bitlist.remove_piece(dest, bit);
+                eval.remove_threat(piece, square, dest, bit.colour(), index[dest].map(PieceIndex::colour), white_king, black_king);
             }
         };
 
-        let slide = |bitlist: &mut BitlistArray, index: &PieceIndexArray, dir: Direction| {
-            if let Some(skip_dir) = skip_dir {
-                if skip_dir == dir || skip_dir == dir.opposite() {
-                    return;
-                }
-            }
-
+        let slide = |bitlist: &mut BitlistArray, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
             let mut sq = square.travel(dir);
 
             let mut iters = 0;
             while let Some(square) = sq {
-                update(bitlist, square);
+                update(bitlist, index, eval, square);
                 sq = square.travel(dir).filter(|_| index[square].is_none());
                 iters += 1;
                 if iters > 6 {
@@ -287,9 +310,9 @@ impl BoardData {
             }
         };
 
-        let leap = |b: &mut BitlistArray, dir: Direction| {
+        let leap = |b: &mut BitlistArray, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
             if let Some(dest) = square.travel(dir) {
-                update(b, dest);
+                update(b, index, eval, dest);
             }
         };
 
@@ -303,54 +326,54 @@ impl BoardData {
         match piece {
             Piece::Pawn => {
                 if bit.is_white() {
-                    leap(&mut self.bitlist, Direction::NorthEast);
-                    leap(&mut self.bitlist, Direction::NorthWest);
+                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
+                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
                 } else {
-                    leap(&mut self.bitlist, Direction::SouthEast);
-                    leap(&mut self.bitlist, Direction::SouthWest);
+                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
+                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
                 }
             }
             Piece::Knight => {
-                leap(&mut self.bitlist, Direction::NorthNorthEast);
-                leap(&mut self.bitlist, Direction::EastNorthEast);
-                leap(&mut self.bitlist, Direction::EastSouthEast);
-                leap(&mut self.bitlist, Direction::SouthSouthEast);
-                leap(&mut self.bitlist, Direction::SouthSouthWest);
-                leap(&mut self.bitlist, Direction::WestSouthWest);
-                leap(&mut self.bitlist, Direction::WestNorthWest);
-                leap(&mut self.bitlist, Direction::NorthNorthWest);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthEast);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastNorthEast);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastSouthEast);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthEast);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthWest);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestSouthWest);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestNorthWest);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthWest);
             }
             Piece::King => {
-                leap(&mut self.bitlist, Direction::North);
-                leap(&mut self.bitlist, Direction::NorthEast);
-                leap(&mut self.bitlist, Direction::East);
-                leap(&mut self.bitlist, Direction::SouthEast);
-                leap(&mut self.bitlist, Direction::South);
-                leap(&mut self.bitlist, Direction::SouthWest);
-                leap(&mut self.bitlist, Direction::West);
-                leap(&mut self.bitlist, Direction::NorthWest);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
             }
             Piece::Bishop => {
-                slide(&mut self.bitlist, &self.index, Direction::NorthEast);
-                slide(&mut self.bitlist, &self.index, Direction::SouthEast);
-                slide(&mut self.bitlist, &self.index, Direction::SouthWest);
-                slide(&mut self.bitlist, &self.index, Direction::NorthWest);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
             }
             Piece::Rook => {
-                slide(&mut self.bitlist, &self.index, Direction::North);
-                slide(&mut self.bitlist, &self.index, Direction::East);
-                slide(&mut self.bitlist, &self.index, Direction::South);
-                slide(&mut self.bitlist, &self.index, Direction::West);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
             }
             Piece::Queen => {
-                slide(&mut self.bitlist, &self.index, Direction::North);
-                slide(&mut self.bitlist, &self.index, Direction::East);
-                slide(&mut self.bitlist, &self.index, Direction::South);
-                slide(&mut self.bitlist, &self.index, Direction::West);
-                slide(&mut self.bitlist, &self.index, Direction::NorthEast);
-                slide(&mut self.bitlist, &self.index, Direction::SouthEast);
-                slide(&mut self.bitlist, &self.index, Direction::SouthWest);
-                slide(&mut self.bitlist, &self.index, Direction::NorthWest);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
+                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
             }
         }
 
@@ -363,20 +386,29 @@ impl BoardData {
     }
 
     /// Extend or remove slider attacks to a square.
-    fn update_sliders(&mut self, square: Square, add: bool) {
+    fn update_sliders(&mut self, square: Square, add: bool, from_square: Option<Square>) {
+        let white_king = self.king_square(Colour::White);
+        let black_king = self.king_square(Colour::Black);
         let sliders = self.bitlist[square] & (self.piecemask.bishops() | self.piecemask.rooks() | self.piecemask.queens());
 
-        let square = Square16x8::from_square(square);
+        let square16x8 = Square16x8::from_square(square);
         for piece in sliders {
             let attacker = Square16x8::from_square(self.square_of_piece(piece));
-            let Some(direction) = attacker.direction(square) else {
+            let Some(direction) = attacker.direction(square16x8) else {
                 continue;
             };
-            for dest in square.ray_attacks(direction) {
+            for dest in square16x8.ray_attacks(direction) {
                 if add {
                     self.bitlist.add_piece(dest, piece);
+                    self.eval.add_threat(self.piece_from_bit(piece), self.square_of_piece(piece), dest, piece.colour(), self.colour_from_square(dest), white_king, black_king);
                 } else {
+                    let to_colour = from_square.map_or_else(|| self.colour_from_square(dest), |from_square| if from_square == dest {
+                            self.colour_from_square(square)
+                        } else {
+                            self.colour_from_square(dest)
+                        });
                     self.bitlist.remove_piece(dest, piece);
+                    self.eval.remove_threat(self.piece_from_bit(piece), self.square_of_piece(piece), dest, piece.colour(), to_colour, white_king, black_king);
                 }
 
                 if self.index[dest].is_some() {

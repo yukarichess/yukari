@@ -22,6 +22,7 @@ mod index;
 mod piecelist;
 mod piecemask;
 mod pins;
+mod feature;
 mod zobrist;
 
 use bitlist::Bitlist;
@@ -1214,7 +1215,7 @@ impl Board {
 /* impl Drop for Board {
     fn drop(&mut self) {
         if ::std::thread::panicking() {
-            println!("{}", self);
+            eprintln!("{}", self);
         }
     }
 } */
