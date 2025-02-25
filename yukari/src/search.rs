@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tinyvec::ArrayVec;
+use tinyvec::{Array, ArrayVec};
 use yukari_movegen::{Board, Move, Piece};
 
 use crate::output;
@@ -92,8 +92,9 @@ pub fn allocate_tt(megabytes: usize) -> Vec<TtEntry> {
     tt
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
 enum MoveOrder {
+    #[default]
     TtMove,
     GoodCapture(Piece, Piece),
     Quiet(i16),
@@ -434,7 +435,8 @@ impl<'a> Search<'a> {
             return 0;
         }
 
-        moves.sort_by_key(|m| MoveOrder::classify(board, self.history, tt_move, *m));
+        let mut moves = moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, tt_move, m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>();
+        moves.sort_by_key(|(_, order)| *order);
 
         let mut best_move = None;
         let mut best_score = i32::MIN;
@@ -443,7 +445,7 @@ impl<'a> Search<'a> {
         // Push the move to check for repetition draws
         keystack.push(board.hash());
 
-        for (i, m) in moves.into_iter().enumerate() {
+        for (movecount, (m, _)) in moves.into_iter().enumerate() {
             self.nodes += 1;
             if lower_bound == upper_bound - 1 {
                 self.zw_nodes += 1;
@@ -457,15 +459,15 @@ impl<'a> Search<'a> {
             }
 
             let lmp_threshold = 1.max((3 * moves.len()) / 4);
-            if !board.in_check() && !m.is_capture() && depth == 1 && i >= lmp_threshold && best_score > -MATE_VALUE + 500 {
+            if !board.in_check() && !m.is_capture() && depth == 1 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
                 continue;
             }
 
             let mut reduction = 1;
 
-            if depth >= 3 && i >= 4 && !board.in_check() && !m.is_capture() {
+            if depth >= 3 && movecount >= 4 && !board.in_check() && !m.is_capture() {
                 let depth = (depth as f32).ln();
-                let i = (i as f32).ln();
+                let i = (movecount as f32).ln();
                 reduction += (depth * i).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
                 reduction -= i32::from(lower_bound != upper_bound - 1);
                 // credit: adam
@@ -475,7 +477,7 @@ impl<'a> Search<'a> {
             let child_board = board.make(m);
             let mut score = 0;
 
-            if i > 0 {
+            if movecount > 0 {
                 score = -self.search(
                     &child_board,
                     depth - reduction,
@@ -487,7 +489,7 @@ impl<'a> Search<'a> {
                     keystack,
                 );
             }
-            if i > 0 && reduction > 1 && score > lower_bound {
+            if movecount > 0 && reduction > 1 && score > lower_bound {
                 reduction = 1;
                 score = -self.search(
                     &child_board,
@@ -500,7 +502,7 @@ impl<'a> Search<'a> {
                     keystack,
                 );
             }
-            if i == 0 || lower_bound != upper_bound - 1 && score > lower_bound {
+            if movecount == 0 || lower_bound != upper_bound - 1 && score > lower_bound {
                 reduction = 1;
                 score = -self.search(
                     &child_board,
@@ -541,7 +543,7 @@ impl<'a> Search<'a> {
                 let bonus = self.params.hist_bonus_mul * depth - self.params.hist_bonus_base;
                 let penalty = self.params.hist_pen_mul * depth - self.params.hist_pen_base;
                 if !m.is_capture() {
-                    for m in moves.into_iter().take(i) {
+                    for (m, _) in moves.into_iter().take(movecount) {
                         if m.is_capture() {
                             continue;
                         }
@@ -550,7 +552,7 @@ impl<'a> Search<'a> {
                     self.update_history(m, bonus);
                 }
 
-                self.beta_cutoff_index += i as u64;
+                self.beta_cutoff_index += movecount as u64;
                 self.beta_cutoffs += 1;
 
                 break;
