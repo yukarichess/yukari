@@ -236,6 +236,7 @@ impl<'a, T: Write> DataGen<'a, T> {
         while games > 0 {
             if self.play_game() {
                 games -= 1;
+                self.f.flush().unwrap();
             }
         }
         self.positions
