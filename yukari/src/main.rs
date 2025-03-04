@@ -439,7 +439,7 @@ fn main() -> io::Result<()> {
             }
             "uci" => {
                 protocol = Protocol::Uci;
-                println!("id name Yukari 2025.2.4");
+                println!("id name Yukari 2025.3.4");
                 println!("id author Hannah Ravensloft");
                 println!("option name Hash type spin default 16 min 1 max 8192");
                 println!("option name Threads type spin default 1 min 1 max 1");
@@ -450,7 +450,7 @@ fn main() -> io::Result<()> {
                 // v1 won't send this anyway and we need v2
                 assert_eq!(args, "2");
                 // Do features individually
-                println!("feature myname=\"Yukari 2025.2.4\"");
+                println!("feature myname=\"Yukari 2025.3.4\"");
                 // No signals support
                 println!("feature sigint=0 sigterm=0");
                 // Ping feature helps with race conditions
