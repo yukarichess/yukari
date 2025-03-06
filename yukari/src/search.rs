@@ -394,12 +394,12 @@ impl<'a> Search<'a> {
         let eval_int = self.eval_with_corrhist(board, board.eval(board.side()));
 
         let rfp_margin = self.params.rfp_margin_base + self.params.rfp_margin_mul * depth;
-        if !board.in_check() && depth <= 4 && eval_int - rfp_margin >= beta {
+        if alpha == beta - 1 && !board.in_check() && depth <= 4 && eval_int - rfp_margin >= beta {
             return eval_int - rfp_margin;
         }
 
         let razor_margin = self.params.razor_margin_mul * depth;
-        if !board.in_check() && depth <= 3 && alpha.abs() < 2000 && eval_int + razor_margin <= alpha {
+        if alpha == beta - 1 && !board.in_check() && depth <= 3 && alpha.abs() < 2000 && eval_int + razor_margin <= alpha {
             let score = self.quiesce(board, alpha, alpha + 1, pv, ply);
             if score <= alpha {
                 return score;
@@ -408,7 +408,7 @@ impl<'a> Search<'a> {
 
         let reduction = if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0);
 
-        if !board.in_check() && depth >= 2 && eval_int >= beta {
+        if alpha == beta - 1 && !board.in_check() && depth >= 2 && eval_int >= beta {
             keystack.push(board.hash());
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
