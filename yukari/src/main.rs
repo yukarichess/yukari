@@ -402,6 +402,9 @@ fn main() -> io::Result<()> {
             const GAMES: usize = 500_000;
             const BATCH: usize = 1_000;
 
+            // Try to avoid stack overflows.
+            rayon::ThreadPoolBuilder::new().stack_size(32*1024*1024).build_global().unwrap();
+
             let positions = (0..(GAMES / BATCH))
                 .into_par_iter()
                 .map(|id| {
