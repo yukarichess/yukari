@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tinyvec::{Array, ArrayVec};
+use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Move, Piece};
 
 use crate::output;
@@ -46,7 +46,7 @@ pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
     keystack.iter().filter(|key| **key == hash).count() >= 3
 }
 
-#[derive(Clone, Default)]
+#[derive(Copy, Clone, Default)]
 #[repr(u8)]
 enum TtFlags {
     #[default]
@@ -62,7 +62,7 @@ pub struct TtEntry {
     data: AtomicU64,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 struct TtData {
     flags: TtFlags,
     depth: u8,
@@ -240,10 +240,22 @@ impl<'a> Search<'a> {
         }
         alpha = alpha.max(best_score);
 
-        let mut tt_move = None;
-        if let Some(score) = self.probe_tt(board, 0, ply, alpha, beta, &mut tt_move) {
+        if let Some(entry) = self.probe_tt(board, 0) {
             if alpha == beta - 1 {
-                return score;
+                let score = entry.score as i32;
+                match entry.flags {
+                    TtFlags::Exact => return score,
+                    TtFlags::Upper => {
+                        if score <= alpha {
+                            return score;
+                        }
+                    }
+                    TtFlags::Lower => {
+                        if score >= beta {
+                            return score;
+                        }
+                    }
+                }
             }
         }
 
@@ -283,39 +295,21 @@ impl<'a> Search<'a> {
         best_score
     }
 
-    fn probe_tt(
-        &self, board: &Board, depth: i32, ply: i32, lower_bound: i32, upper_bound: i32, m: &mut Option<Move>,
-    ) -> Option<i32> {
+    fn probe_tt(&self, board: &Board, ply: i32) -> Option<TtData> {
         let entry = (board.hash() & ((self.tt.len() - 1) as u64)) as usize;
         let entry = &self.tt[entry];
         let entry_key = entry.key.load(std::sync::atomic::Ordering::Relaxed);
         let entry_data = entry.data.load(std::sync::atomic::Ordering::Relaxed);
-        let entry: TtData = unsafe { std::mem::transmute(entry_data) };
+        let mut entry: TtData = unsafe { std::mem::transmute(entry_data) };
 
         if entry_key ^ entry_data == board.hash() {
-            if entry.depth as i32 >= depth {
-                let mut score = entry.score as i32;
-                if score >= MATE_VALUE - 500 {
-                    score -= ply;
-                }
-                if score <= -MATE_VALUE + 500 {
-                    score += ply;
-                }
-                match entry.flags {
-                    TtFlags::Exact => return Some(score),
-                    TtFlags::Upper => {
-                        if score <= lower_bound {
-                            return Some(score);
-                        }
-                    }
-                    TtFlags::Lower => {
-                        if score >= upper_bound {
-                            return Some(score);
-                        }
-                    }
-                }
+            if entry.score as i32 >= MATE_VALUE - 500 {
+                entry.score -= ply as i16;
             }
-            *m = entry.m;
+            if entry.score as i32 <= -MATE_VALUE + 500 {
+                entry.score += ply as i16;
+            }
+            return Some(entry);
         }
         None
     }
@@ -336,7 +330,7 @@ impl<'a> Search<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn search(
-        &mut self, board: &Board, mut depth: i32, mut lower_bound: i32, upper_bound: i32, output: &mut dyn output::Output,
+        &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, output: &mut dyn output::Output,
         pv: &mut ArrayVec<[Move; 64]>, ply: i32, keystack: &mut Vec<u64>,
     ) -> i32 {
         // Emergency bailout
@@ -366,17 +360,32 @@ impl<'a> Search<'a> {
         }
 
         if depth <= 0 {
-            return self.quiesce(board, lower_bound, upper_bound, pv, ply);
+            return self.quiesce(board, alpha, beta, pv, ply);
         }
 
         pv.set_len(0);
 
-        let mut tt_move = None;
-        if let Some(score) = self.probe_tt(board, depth, ply, lower_bound, upper_bound, &mut tt_move) {
-            if lower_bound == upper_bound - 1 {
-                return score;
+        let tt_entry = self.probe_tt(board, ply);
+        if let Some(entry) = tt_entry {
+            if alpha == beta - 1 && entry.depth as i32 >= depth {
+                let score = entry.score as i32;
+                match entry.flags {
+                    TtFlags::Exact => return score,
+                    TtFlags::Upper => {
+                        if score <= alpha {
+                            return score;
+                        }
+                    }
+                    TtFlags::Lower => {
+                        if score >= beta {
+                            return score;
+                        }
+                    }
+                }
             }
-        } else if lower_bound != upper_bound - 1 && tt_move.is_none() && depth >= 3 {
+        }
+        
+        if alpha != beta - 1 && tt_entry.is_none() && depth >= 3 {
             // internal iterative reduction
             depth -= 1;
             root_reduction += 1;
@@ -385,29 +394,29 @@ impl<'a> Search<'a> {
         let eval_int = self.eval_with_corrhist(board, board.eval(board.side()));
 
         let rfp_margin = self.params.rfp_margin_base + self.params.rfp_margin_mul * depth;
-        if !board.in_check() && depth <= 4 && eval_int - rfp_margin >= upper_bound {
+        if !board.in_check() && depth <= 4 && eval_int - rfp_margin >= beta {
             return eval_int - rfp_margin;
         }
 
         let razor_margin = self.params.razor_margin_mul * depth;
-        if !board.in_check() && depth <= 3 && lower_bound.abs() < 2000 && eval_int + razor_margin <= lower_bound {
-            let score = self.quiesce(board, lower_bound, lower_bound + 1, pv, ply);
-            if score <= lower_bound {
+        if !board.in_check() && depth <= 3 && alpha.abs() < 2000 && eval_int + razor_margin <= alpha {
+            let score = self.quiesce(board, alpha, alpha + 1, pv, ply);
+            if score <= alpha {
                 return score;
             }
         }
 
-        let reduction = if depth > 6 { 4 } else { 3 } + ((eval_int - upper_bound) / 200).max(0);
+        let reduction = if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0);
 
-        if !board.in_check() && depth >= 2 && eval_int >= upper_bound {
+        if !board.in_check() && depth >= 2 && eval_int >= beta {
             keystack.push(board.hash());
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
             let score = -self.search(
                 &board,
                 depth - 1 - reduction,
-                -upper_bound,
-                -upper_bound + 1,
+                -beta,
+                -beta + 1,
                 output,
                 &mut child_pv,
                 ply + 1,
@@ -417,7 +426,7 @@ impl<'a> Search<'a> {
 
             self.nullmove_attempts += 1;
 
-            if score >= upper_bound {
+            if score >= beta {
                 self.nullmove_success += 1;
                 return score;
             }
@@ -435,7 +444,7 @@ impl<'a> Search<'a> {
             return 0;
         }
 
-        let mut moves = moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, tt_move, m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>();
+        let mut moves = moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, tt_entry.and_then(|e| e.m), m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>();
         moves.sort_by_key(|(_, order)| *order);
 
         let mut best_move = None;
@@ -447,7 +456,7 @@ impl<'a> Search<'a> {
 
         for (movecount, (m, _)) in moves.into_iter().enumerate() {
             self.nodes += 1;
-            if lower_bound == upper_bound - 1 {
+            if alpha == beta - 1 {
                 self.zw_nodes += 1;
             }
 
@@ -469,7 +478,7 @@ impl<'a> Search<'a> {
                 let depth = (depth as f32).ln();
                 let i = (movecount as f32).ln();
                 reduction += (depth * i).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
-                reduction -= i32::from(lower_bound != upper_bound - 1);
+                reduction -= i32::from(alpha != beta - 1);
                 // credit: adam
             }
 
@@ -481,34 +490,34 @@ impl<'a> Search<'a> {
                 score = -self.search(
                     &child_board,
                     depth - reduction,
-                    -lower_bound - 1,
-                    -lower_bound,
+                    -alpha - 1,
+                    -alpha,
                     output,
                     &mut child_pv,
                     ply + 1,
                     keystack,
                 );
             }
-            if movecount > 0 && reduction > 1 && score > lower_bound {
+            if movecount > 0 && reduction > 1 && score > alpha {
                 reduction = 1;
                 score = -self.search(
                     &child_board,
                     depth - reduction,
-                    -lower_bound - 1,
-                    -lower_bound,
+                    -alpha - 1,
+                    -alpha,
                     output,
                     &mut child_pv,
                     ply + 1,
                     keystack,
                 );
             }
-            if movecount == 0 || lower_bound != upper_bound - 1 && score > lower_bound {
+            if movecount == 0 || alpha != beta - 1 && score > alpha {
                 reduction = 1;
                 score = -self.search(
                     &child_board,
                     depth - reduction,
-                    -upper_bound,
-                    -lower_bound,
+                    -beta,
+                    -alpha,
                     output,
                     &mut child_pv,
                     ply + 1,
@@ -539,7 +548,7 @@ impl<'a> Search<'a> {
                 }
             }
 
-            if score >= upper_bound {
+            if score >= beta {
                 let bonus = self.params.hist_bonus_mul * depth - self.params.hist_bonus_base;
                 let penalty = self.params.hist_pen_mul * depth - self.params.hist_pen_base;
                 if !m.is_capture() {
@@ -558,8 +567,8 @@ impl<'a> Search<'a> {
                 break;
             }
 
-            if score > lower_bound {
-                lower_bound = score;
+            if score > alpha {
+                alpha = score;
                 pv.set_len(0);
                 pv.push(m);
                 for m in child_pv {
@@ -591,7 +600,7 @@ impl<'a> Search<'a> {
             TtData {
                 m: best_move,
                 score: best_score as i16,
-                flags: if best_score >= upper_bound {
+                flags: if best_score >= beta {
                     TtFlags::Lower
                 } else if raised_lower_bound {
                     TtFlags::Exact
@@ -605,8 +614,8 @@ impl<'a> Search<'a> {
         if !board.in_check()
             && !best_move.unwrap().is_capture()
             && (raised_lower_bound
-                || (best_score >= upper_bound && best_score >= eval_int)
-                || (best_score <= lower_bound && best_score <= eval_int))
+                || (best_score >= beta && best_score >= eval_int)
+                || (best_score <= alpha && best_score <= eval_int))
         {
             self.update_corrhist(board, depth, best_score - eval_int);
         }
