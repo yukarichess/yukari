@@ -385,7 +385,7 @@ impl<'a> Search<'a> {
             }
         }
         
-        if alpha != beta - 1 && tt_entry.is_none() && depth >= 3 {
+        if alpha != beta - 1 && (tt_entry.is_none() || tt_entry.unwrap().depth as i32 + 3 < depth) && depth >= 3 {
             // internal iterative reduction
             depth -= 1;
             root_reduction += 1;
