@@ -1,6 +1,6 @@
 [package]
 name = "yukari-movegen"
-version = "0.1.0"
+version = "2025.3.4"
 authors = ["Yukari Chess <yukarichess@gmail.com>"]
 edition = "2021"
 license-file = "../LICENSE.md"
