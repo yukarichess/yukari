@@ -478,7 +478,7 @@ impl<'a> Search<'a> {
                 }
             }
             
-            let lmp_threshold = 1.max(if depth == 1 { (3 * moves.len()) / 4 } else { (7 * moves.len()) / 8 });
+            let lmp_threshold = 5 + (depth as usize).pow(2);
             if !board.in_check() && !m.is_capture() && depth <= 2 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
                 continue;
             }
