@@ -315,11 +315,15 @@ impl Board {
             b.data.add_piece(m.prom.unwrap(), b.side, m.dest, true);
         }
 
-        if matches!(m.kind, MoveType::DoublePush) {
-            b.set_ep(m.from.relative_north(b.side));
-        } else {
-            b.set_ep(None);
-        }
+        let candidate_ep = (|| {
+            let MoveType::DoublePush = m.kind else { return None };
+            let candidate_ep = m.from.relative_north(b.side)?;
+            if b.data().attacks_to(candidate_ep, !b.side()).empty() {
+                return None;
+            }
+            Some(candidate_ep)
+        })();
+        b.set_ep(candidate_ep);
 
         let a1 = Square::from_rank_file(Rank::One, File::A);
         let a8 = Square::from_rank_file(Rank::Eight, File::A);
