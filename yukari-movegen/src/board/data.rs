@@ -9,7 +9,7 @@ use super::{
 use crate::{
     colour::Colour,
     piece::Piece,
-    square::{Direction, Square, Square16x8}, File, Move,
+    square::{Direction, Square, Square16x8}, File,
 };
 
 #[allow(clippy::module_name_repetitions)]

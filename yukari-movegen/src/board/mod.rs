@@ -318,7 +318,8 @@ impl Board {
         let candidate_ep = (|| {
             let MoveType::DoublePush = m.kind else { return None };
             let candidate_ep = m.from.relative_north(b.side)?;
-            if b.data().attacks_to(candidate_ep, !b.side()).empty() {
+            let attacks = b.data().attacks_to(candidate_ep, !b.side());
+            if (attacks & b.data().piecemask().pawns()).empty() {
                 return None;
             }
             Some(candidate_ep)
