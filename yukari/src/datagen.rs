@@ -323,6 +323,9 @@ impl<'a, T: Write> DataGen<'a, T> {
             ViriFormat::new(yukari_board.clone())
         };
 
+        let mut draw_adj_counter = 0;
+        let mut win_adj_counter = 0;
+
         // Rollout: "soft 5k nodes" until game end.
         loop {
             assert_eq!(cc_board_stack.len(), yukari_board_stack.len());
@@ -330,6 +333,8 @@ impl<'a, T: Write> DataGen<'a, T> {
 
             let cc_board = cc_board_stack.last().unwrap();
             let yukari_board = yukari_board_stack.last().unwrap();
+
+            // Game ended?
             match cc_board.status() {
                 cozy_chess::GameStatus::Ongoing => {
                     // insufficient material check.
@@ -376,6 +381,23 @@ impl<'a, T: Write> DataGen<'a, T> {
                 }
             }
 
+            // Can we adjudicate?
+            if win_adj_counter >= 6 {
+                let mut f = self.f.lock().unwrap();
+                if yukari_board.side() == Colour::White {
+                    game.finish(MarlinWdl::BlackWin, &mut *f);
+                } else {
+                    game.finish(MarlinWdl::WhiteWin, &mut *f);
+                }
+                return true;
+            }
+
+            if draw_adj_counter >= 16 && self.positions >= 40 {
+                let mut f = self.f.lock().unwrap();
+                game.finish(MarlinWdl::Draw, &mut *f);
+                return true;
+            }
+
             cc_board_stack.push(cc_board_stack.last().unwrap().clone());
             let cc_board = cc_board_stack.last_mut().unwrap();
 
@@ -401,6 +423,18 @@ impl<'a, T: Write> DataGen<'a, T> {
             *yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
             self.positions += 1;
+
+            if score.abs() <= 10 {
+                draw_adj_counter += 1;
+            } else {
+                draw_adj_counter = 0;
+            }
+
+            if score.abs() >= 400 {
+                win_adj_counter += 1;
+            } else {
+                win_adj_counter = 0;
+            }
         }
     }
 }
