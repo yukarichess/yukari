@@ -468,7 +468,7 @@ impl<'a> Search<'a> {
             }
 
             // SEE Pruning
-            if !board.in_check() && depth == 2 && movecount > 1 && best_score > -MATE_VALUE + 500 {
+            if !board.in_check() && (2..=3).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
                 let see = board.static_exchange_evaluation(m);
                 if m.is_capture() && see < -1 {
                     continue;
