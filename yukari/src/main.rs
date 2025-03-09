@@ -1,10 +1,9 @@
 use std::{
-    io::{self, BufWriter},
-    str::FromStr,
-    time::{Duration, Instant},
+    io::{self, BufWriter}, str::FromStr, sync::{atomic::{AtomicUsize, Ordering}, Mutex}, time::{Duration, Instant}
 };
 
 use colored::Colorize;
+use indicatif::{ParallelProgressIterator, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tinyvec::ArrayVec;
 use yukari::{
@@ -400,22 +399,26 @@ fn main() -> io::Result<()> {
         }
         if arg == "datagen" {
             const GAMES: usize = 500_000;
-            const BATCH: usize = 1_000;
 
             // Try to avoid stack overflows.
             rayon::ThreadPoolBuilder::new().stack_size(32*1024*1024).build_global().unwrap();
 
-            let positions = (0..(GAMES / BATCH))
-                .into_par_iter()
-                .map(|id| {
-                    let f = std::fs::File::options().create(true).append(true).open(format!("games{id}.viriformat")).unwrap();
-                    let mut f = BufWriter::new(f);
-                    let mut dg = datagen::DataGen::new(&mut f);
-                    dg.play(BATCH)
-                })
-                .sum::<usize>();
+            let f = std::fs::File::options().create(true).append(true).open("games.viriformat").unwrap();
+            let f = BufWriter::new(f);
+            let f = Mutex::new(f);
 
-            println!("{GAMES} games, {positions} positions");
+            let positions = AtomicUsize::new(0);
+            let style = ProgressStyle::with_template("[{bar:40.magenta/red}] {pos:>6}/{len:6} ({per_sec} games/s)").unwrap().progress_chars("━╸ ");
+
+            (0..GAMES)
+                .into_par_iter()
+                .progress_with_style(style)
+                .for_each_init(
+                    || datagen::DataGen::new(&f),
+                    |dg, _| { positions.fetch_add(dg.play(1), Ordering::SeqCst); }
+                );
+
+            println!("{GAMES} games, {} positions", positions.load(Ordering::SeqCst));
 
             return Ok(());
         }

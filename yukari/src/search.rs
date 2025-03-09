@@ -88,7 +88,6 @@ pub fn allocate_tt(megabytes: usize) -> Vec<TtEntry> {
 
     let mut tt: Vec<TtEntry> = Vec::new();
     tt.resize_with(size, Default::default);
-    println!("# Allocated {} bytes of hash", size * std::mem::size_of::<TtEntry>());
     tt
 }
 

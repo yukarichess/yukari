@@ -1,7 +1,5 @@
 use std::{
-    io::Write,
-    str::FromStr,
-    time::{Duration, Instant},
+    io::Write, str::FromStr, sync::Mutex, time::{Duration, Instant}
 };
 
 use rand::seq::IteratorRandom;
@@ -161,11 +159,12 @@ impl ViriFormat {
 
         // viriformat footer
         f.write_all(&[0, 0, 0, 0]).unwrap();
+        f.flush().unwrap();
     }
 }
 
 pub struct DataGen<'a, T: Write> {
-    f: &'a mut T,
+    f: &'a Mutex<T>,
     rng: rand::rngs::ThreadRng,
     params: search::SearchParams,
     tt: Vec<search::TtEntry>,
@@ -175,7 +174,7 @@ pub struct DataGen<'a, T: Write> {
 }
 
 impl<'a, T: Write> DataGen<'a, T> {
-    pub fn new(f: &'a mut T) -> DataGen<'a, T> {
+    pub fn new(f: &'a Mutex<T>) -> DataGen<'a, T> {
         Self {
             f,
             rng: rand::rng(),
@@ -206,7 +205,6 @@ impl<'a, T: Write> DataGen<'a, T> {
         ];
 
         let mut game = ViriFormat::new(board.clone());
-        //println!("{}", board.clone());
         for m_str in moves {
             let chars = m_str.as_bytes();
             let from = Square::from_str(&m_str[..2]).unwrap();
@@ -224,19 +222,18 @@ impl<'a, T: Write> DataGen<'a, T> {
             };
 
             let m = self.find_move(&board, from, dest, prom).unwrap_or_else(|| panic!("Attempted move {m_str} not found!?"));
-            //println!("{} {}", m, board.to_san(m));
             game.push(m, 0);
             board = board.make(m);
         }
 
-        game.finish(MarlinWdl::Draw, self.f);
+        let mut f = self.f.lock().unwrap();
+        game.finish(MarlinWdl::Draw, &mut *f);
     }
 
     pub fn play(&mut self, mut games: usize) -> usize {
         while games > 0 {
             if self.play_game() {
                 games -= 1;
-                self.f.flush().unwrap();
             }
         }
         self.positions
@@ -277,7 +274,7 @@ impl<'a, T: Write> DataGen<'a, T> {
         if pv.is_empty() {
             return None;
         }
-        Some((pv[0], score as i16))
+        Some((pv[0], score.clamp(-10_000, 10_000) as i16))
     }
 
     fn play_game(&mut self) -> bool {
@@ -298,7 +295,6 @@ impl<'a, T: Write> DataGen<'a, T> {
                 // checkmate in the opening, maybe?
                 return false;
             };
-            //println!("{}", yukari_board.to_san(m));
             *yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
             let m_str = format!("{m}");
@@ -338,8 +334,8 @@ impl<'a, T: Write> DataGen<'a, T> {
                 cozy_chess::GameStatus::Ongoing => {
                     // insufficient material check.
                     if yukari_board.insufficient_material() {
-                        println!("1/2-1/2 {{Draw by insufficient material}}");
-                        game.finish(MarlinWdl::Draw, self.f);
+                        let mut f = self.f.lock().unwrap();
+                        game.finish(MarlinWdl::Draw, &mut *f);
                         return true;
                     }
 
@@ -357,24 +353,24 @@ impl<'a, T: Write> DataGen<'a, T> {
                                         eprintln!("{board}");
                                     }
                                 }
-                                println!("1/2-1/2 {{Draw by threefold repetition}}");
-                                game.finish(MarlinWdl::Draw, self.f);
+                                let mut f = self.f.lock().unwrap();
+                                game.finish(MarlinWdl::Draw, &mut *f);
                                 return true;
                             }
                         }
                     }
                 }
                 cozy_chess::GameStatus::Drawn => {
-                    game.finish(MarlinWdl::Draw, self.f);
+                    let mut f = self.f.lock().unwrap();
+                    game.finish(MarlinWdl::Draw, &mut *f);
                     return true;
                 }
                 cozy_chess::GameStatus::Won => {
+                    let mut f = self.f.lock().unwrap();
                     if yukari_board.side() == Colour::White {
-                        println!("0-1 {{Black wins}}");
-                        game.finish(MarlinWdl::BlackWin, self.f);
+                        game.finish(MarlinWdl::BlackWin, &mut *f);
                     } else {
-                        println!("1-0 {{White wins}}");
-                        game.finish(MarlinWdl::WhiteWin, self.f);
+                        game.finish(MarlinWdl::WhiteWin, &mut *f);
                     }
                     return true;
                 }
@@ -391,7 +387,6 @@ impl<'a, T: Write> DataGen<'a, T> {
                 return false;
             };
             let m_str = format!("{m}");
-            //println!("{} = {score}", yukari_board.to_san(m));
             let Ok(cc_m) = cozy_chess::util::parse_uci_move(cc_board, &m_str) else {
                 eprintln!("cozy-chess considers move {m} on board {cc_board} to be invalid!");
                 return false;
@@ -401,10 +396,7 @@ impl<'a, T: Write> DataGen<'a, T> {
                 return false;
             };
 
-            // TODO FOR NEXT DATAGEN RUN:
-            // these scores need to be absolute, rather than relative.
-            // unfortunately, it's probably better to continue datagen with the fucked score than to start from scratch.
-
+            let score = if yukari_board.side() == Colour::Black { -score } else { score };
             game.push(m, score);
             *yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
