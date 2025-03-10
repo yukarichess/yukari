@@ -469,14 +469,18 @@ impl<'a> Search<'a> {
             // SEE Pruning
             if !board.in_check() && (2..=5).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
                 let see = board.static_exchange_evaluation(m);
-                if m.is_capture() && see < -1 {
-                    continue;
+                if m.is_capture() {
+                    let threshold = (depth as f32 * -0.5) as i32;
+                    if see < threshold {
+                        continue;
+                    }
                 }
                 if !m.is_capture() && see < 0 {
                     continue;
                 }
             }
             
+            // Late Move Pruning
             let lmp_threshold = 5 + (depth as usize).pow(2);
             if !board.in_check() && !m.is_capture() && depth <= 3 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
                 continue;
