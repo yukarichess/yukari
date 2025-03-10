@@ -323,58 +323,53 @@ impl BoardData {
             square
         );
 
-        match piece {
-            Piece::Pawn => {
-                if bit.is_white() {
-                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
-                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
-                } else {
-                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
-                    leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
-                }
-            }
-            Piece::Knight => {
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthEast);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastNorthEast);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastSouthEast);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthEast);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthWest);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestSouthWest);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestNorthWest);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthWest);
-            }
-            Piece::King => {
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
+        if piece == Piece::Pawn {
+            if bit.is_white() {
                 leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
-                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
                 leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
+            } else {
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
+                leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
             }
-            Piece::Bishop => {
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
+            return;
+        }
+        if piece == Piece::Knight {
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthEast);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastNorthEast);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastSouthEast);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthEast);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthWest);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestSouthWest);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestNorthWest);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthWest);
+            return;
+        }
+        if piece == Piece::King {
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
+            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
+            return;
+        }
+        if piece == Piece::Bishop || piece == Piece::Queen {
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
+            if piece == Piece::Bishop {
+                return;
             }
-            Piece::Rook => {
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
-            }
-            Piece::Queen => {
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
-                slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
-            }
+        }
+        if piece == Piece::Rook || piece == Piece::Queen {
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
+            slide(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
+            return;
         }
 
         debug_assert!(
