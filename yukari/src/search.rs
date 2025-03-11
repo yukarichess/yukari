@@ -468,14 +468,12 @@ impl<'a> Search<'a> {
 
             // SEE Pruning
             if !board.in_check() && (2..=5).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
-                let see = board.static_exchange_evaluation(m);
-                if m.is_capture() {
-                    let threshold = (depth as f32 * -0.5) as i32;
-                    if see < threshold {
-                        continue;
-                    }
-                }
-                if !m.is_capture() && see < 0 {
+                let threshold = if m.is_capture() {
+                    -(depth as f32 * 0.5) as i32
+                } else {
+                    0
+                };
+                if board.static_exchange_evaluation(m) < threshold {
                     continue;
                 }
             }
