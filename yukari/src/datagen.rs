@@ -232,6 +232,7 @@ impl<'a, T: Write> DataGen<'a, T> {
 
     pub fn play(&mut self, mut games: usize) -> usize {
         while games > 0 {
+            self.positions = 0;
             if self.play_game() {
                 games -= 1;
             }
