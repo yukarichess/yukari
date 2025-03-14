@@ -170,6 +170,7 @@ pub struct DataGen<'a, T: Write> {
     tt: Vec<search::TtEntry>,
     history: [[i16; 64]; 64],
     corrhist: [[i32; 16384]; 2],
+    conthist: [[i16; 2*6*64]; 2*6*64],
     positions: usize,
 }
 
@@ -182,6 +183,7 @@ impl<'a, T: Write> DataGen<'a, T> {
             tt: search::allocate_tt(16),
             history: [[0; 64]; 64],
             corrhist: [[0; 16384]; 2],
+            conthist: [[0; 2*6*64]; 2*6*64],
             positions: 0,
         }
     }
@@ -243,7 +245,7 @@ impl<'a, T: Write> DataGen<'a, T> {
     fn search(&mut self, board: Board, keystack: &mut Vec<u64>, node_limit: bool) -> Option<(Move, i16)> {
         let start = Instant::now();
         let stop_after = start + Duration::from_secs_f32(if node_limit { 0.25 } else { 2.0 });
-        let mut s = search::Search::new(start, Some(stop_after), &self.tt, &mut self.history, &mut self.corrhist, &self.params);
+        let mut s = search::Search::new(start, Some(stop_after), &self.tt, &mut self.history, &mut self.corrhist, &mut self.conthist, &self.params);
         let mut pv = ArrayVec::new();
         let mut score = 0;
         let mut lower_bound = 50;

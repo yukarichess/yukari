@@ -5,7 +5,7 @@ use std::{
 };
 
 use tinyvec::ArrayVec;
-use yukari_movegen::{Board, Move, Piece};
+use yukari_movegen::{Board, Colour, Move, Piece};
 
 use crate::output;
 
@@ -96,7 +96,7 @@ enum MoveOrder {
     #[default]
     TtMove,
     GoodCapture(Piece, Piece),
-    Quiet(i16),
+    Quiet(i32),
     BadCapture(Piece, Piece),
 }
 
@@ -131,7 +131,7 @@ impl Ord for MoveOrder {
 }
 
 impl MoveOrder {
-    pub fn classify(board: &Board, history: &[[i16; 64]; 64], tt_move: Option<Move>, m: Move) -> Self {
+    pub fn classify(board: &Board, history: &[[i16; 64]; 64], conthist: &[[i16; 2*6*64]; 2*6*64], tt_move: Option<Move>, last_m: Option<Move>, m: Move) -> Self {
         if let Some(tt_move) = tt_move {
             if tt_move == m {
                 return Self::TtMove;
@@ -148,7 +148,12 @@ impl MoveOrder {
             }
         }
 
-        let score = history[m.from.into_inner() as usize][m.dest.into_inner() as usize];
+        let mut score = history[m.from.into_inner() as usize][m.dest.into_inner() as usize] as i32;
+        if let Some(last_m) = last_m {
+            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(last_m.dest).unwrap() as usize) + usize::from(last_m.dest.into_inner());
+            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            score += conthist[last_index][curr_index] as i32;
+        }
         Self::Quiet(score)
     }
 }
@@ -169,6 +174,8 @@ pub struct Search<'a> {
     history: &'a mut [[i16; 64]; 64],
     tt: &'a [TtEntry],
     corrhist: &'a mut [[i32; 16384]; 2],
+    conthist: &'a mut [[i16; 2*6*64]; 2*6*64],
+    path: ArrayVec<[Option<Move>; 64]>,
     params: &'a SearchParams,
 }
 
@@ -176,7 +183,7 @@ impl<'a> Search<'a> {
     #[must_use]
     pub fn new(
         start: Instant, stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[i16; 64]; 64],
-        corrhist: &'a mut [[i32; 16384]; 2], params: &'a SearchParams,
+        corrhist: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2*6*64]; 2*6*64], params: &'a SearchParams,
     ) -> Self {
         Self {
             nodes: 0,
@@ -194,6 +201,8 @@ impl<'a> Search<'a> {
             history,
             tt,
             corrhist,
+            conthist,
+            path: ArrayVec::new(),
             params,
         }
     }
@@ -216,12 +225,21 @@ impl<'a> Search<'a> {
         (eval + entry / CORRHIST_GRAIN).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
     }
 
-    fn update_history(&mut self, m: Move, bonus: i32) {
+    fn update_history(&mut self, board: &Board, last_m: Option<Move>, m: Move, bonus: i32) {
         const HISTORY_MAX: i32 = 16384;
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
-        let history = &mut self.history[m.from.into_inner() as usize][m.dest.into_inner() as usize];
-        let bonus = bonus - (*history as i32) * bonus.abs() / HISTORY_MAX;
-        *history += bonus as i16;
+        {
+            let history = &mut self.history[m.from.into_inner() as usize][m.dest.into_inner() as usize];
+            let bonus = bonus - (*history as i32) * bonus.abs() / HISTORY_MAX;
+            *history += bonus as i16;
+        }
+        if let Some(last_m) = last_m {
+            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(last_m.dest).unwrap() as usize) + usize::from(last_m.dest.into_inner());
+            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            let conthist = &mut self.conthist[last_index][curr_index];
+            let bonus = bonus - (*conthist as i32) * bonus.abs() / HISTORY_MAX;
+            *conthist += bonus as i16;
+        }
     }
 
     fn quiesce(&mut self, board: &Board, mut alpha: i32, beta: i32, pv: &mut ArrayVec<[Move; 64]>, ply: i32) -> i32 {
@@ -411,6 +429,7 @@ impl<'a> Search<'a> {
             keystack.push(board.hash());
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
+            self.path.push(None);
             let score = -self.search(
                 &board,
                 depth - 1 - reduction,
@@ -421,6 +440,7 @@ impl<'a> Search<'a> {
                 ply + 1,
                 keystack,
             );
+            self.path.pop();
             keystack.pop();
 
             self.nullmove_attempts += 1;
@@ -443,7 +463,7 @@ impl<'a> Search<'a> {
             return 0;
         }
 
-        let mut moves = moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, tt_entry.and_then(|e| e.m), m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>();
+        let mut moves = moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, self.conthist, tt_entry.and_then(|e| e.m), *self.path.last().unwrap_or(&None), m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>();
         moves.sort_by_key(|(_, order)| *order);
 
         let mut best_move = None;
@@ -483,6 +503,8 @@ impl<'a> Search<'a> {
             if !board.in_check() && !m.is_capture() && depth <= 3 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
                 continue;
             }
+
+            self.path.push(Some(m));
 
             let mut reduction = 1;
 
@@ -537,6 +559,8 @@ impl<'a> Search<'a> {
                 );
             }
 
+            self.path.pop();
+
             if score > best_score {
                 best_move = Some(m);
                 best_score = score;
@@ -568,9 +592,9 @@ impl<'a> Search<'a> {
                         if m.is_capture() {
                             continue;
                         }
-                        self.update_history(m, -penalty);
+                        self.update_history(board, *self.path.last().unwrap_or(&None), m, -penalty);
                     }
-                    self.update_history(m, bonus);
+                    self.update_history(board, *self.path.last().unwrap_or(&None), m, bonus);
                 }
 
                 self.beta_cutoff_index += movecount as u64;
