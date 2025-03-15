@@ -131,7 +131,7 @@ impl Ord for MoveOrder {
 }
 
 impl MoveOrder {
-    pub fn classify(board: &Board, history: &[[i16; 64]; 64], conthist: &[[i16; 2*6*64]; 2*6*64], tt_move: Option<Move>, last_m: Option<Move>, m: Move) -> Self {
+    pub fn classify(board: &Board, history: &[[i16; 64]; 64], conthist: &[[i16; 2*6*64]; 2*6*64], tt_move: Option<Move>, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move) -> Self {
         if let Some(tt_move) = tt_move {
             if tt_move == m {
                 return Self::TtMove;
@@ -149,8 +149,13 @@ impl MoveOrder {
         }
 
         let mut score = history[m.from.into_inner() as usize][m.dest.into_inner() as usize] as i32;
-        if let Some(last_m) = last_m {
-            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(last_m.dest).unwrap() as usize) + usize::from(last_m.dest.into_inner());
+        if let Some((last_piece, last_m)) = last_last_m {
+            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
+            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            score += conthist[last_index][curr_index] as i32;
+        }
+        if let Some((last_piece, last_m)) = last_m {
+            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
             let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
             score += conthist[last_index][curr_index] as i32;
         }
@@ -175,7 +180,7 @@ pub struct Search<'a> {
     tt: &'a [TtEntry],
     corrhist: &'a mut [[i32; 16384]; 2],
     conthist: &'a mut [[i16; 2*6*64]; 2*6*64],
-    path: ArrayVec<[Option<Move>; 64]>,
+    path: ArrayVec<[Option<(Piece, Move)>; 64]>,
     params: &'a SearchParams,
 }
 
@@ -225,7 +230,7 @@ impl<'a> Search<'a> {
         (eval + entry / CORRHIST_GRAIN).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
     }
 
-    fn update_history(&mut self, board: &Board, last_m: Option<Move>, m: Move, bonus: i32) {
+    fn update_history(&mut self, board: &Board, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move, bonus: i32) {
         const HISTORY_MAX: i32 = 16384;
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
         {
@@ -233,8 +238,15 @@ impl<'a> Search<'a> {
             let bonus = bonus - (*history as i32) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
         }
-        if let Some(last_m) = last_m {
-            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(last_m.dest).unwrap() as usize) + usize::from(last_m.dest.into_inner());
+        if let Some((last_piece, last_m)) = last_last_m {
+            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
+            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            let conthist = &mut self.conthist[last_index][curr_index];
+            let bonus = bonus - (*conthist as i32) * bonus.abs() / HISTORY_MAX;
+            *conthist += bonus as i16;
+        }
+        if let Some((last_piece, last_m)) = last_m {
+            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
             let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
             let bonus = bonus - (*conthist as i32) * bonus.abs() / HISTORY_MAX;
@@ -463,7 +475,12 @@ impl<'a> Search<'a> {
             return 0;
         }
 
-        let mut moves = moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, self.conthist, tt_entry.and_then(|e| e.m), *self.path.last().unwrap_or(&None), m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>();
+        let mut moves = {
+            let tt_move = tt_entry.and_then(|e| e.m);
+            let last_move = *self.path.last().unwrap_or(&None);
+            let last_last_move = *self.path.iter().rev().nth(1).unwrap_or(&None);
+            moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, self.conthist, tt_move, last_last_move, last_move, m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>()
+        };
         moves.sort_by_key(|(_, order)| *order);
 
         let mut best_move = None;
@@ -504,7 +521,7 @@ impl<'a> Search<'a> {
                 continue;
             }
 
-            self.path.push(Some(m));
+            self.path.push(Some((board.piece_from_square(m.from).unwrap(), m)));
 
             let mut reduction = 1;
 
@@ -587,14 +604,16 @@ impl<'a> Search<'a> {
             if score >= beta {
                 let bonus = self.params.hist_bonus_mul * depth - self.params.hist_bonus_base;
                 let penalty = self.params.hist_pen_mul * depth - self.params.hist_pen_base;
+                let last_move = *self.path.last().unwrap_or(&None);
+                let last_last_move = *self.path.iter().rev().nth(1).unwrap_or(&None);
                 if !m.is_capture() {
                     for (m, _) in moves.into_iter().take(movecount) {
                         if m.is_capture() {
                             continue;
                         }
-                        self.update_history(board, *self.path.last().unwrap_or(&None), m, -penalty);
+                        self.update_history(board, last_last_move, last_move, m, -penalty);
                     }
-                    self.update_history(board, *self.path.last().unwrap_or(&None), m, bonus);
+                    self.update_history(board, last_last_move, last_move, m, bonus);
                 }
 
                 self.beta_cutoff_index += movecount as u64;
