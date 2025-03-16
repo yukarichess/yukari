@@ -18,11 +18,6 @@ else
 endif
 
 
-pgo:
-	cargo pgo instrument
-	cargo pgo run -- bench
-	cargo pgo optimize
-
 # Compile an executable for use with OpenBench
 openbench:
 	@echo $(NAME)
@@ -33,5 +28,10 @@ openbench:
 clean:
 	@echo Removing $(EXE)
 	rm $(EXE)
+
+pgo:
+	cargo pgo instrument
+	cargo pgo run -- bench
+	cargo pgo optimize
 
 .PHONY: pgo openbench clean
