@@ -328,6 +328,7 @@ impl<'a, T: Write> DataGen<'a, T> {
 
         let mut draw_adj_counter = 0;
         let mut win_adj_counter = 0;
+        let mut win_adj_white = true;
 
         // Rollout: "soft 5k nodes" until game end.
         loop {
@@ -387,10 +388,10 @@ impl<'a, T: Write> DataGen<'a, T> {
             // Can we adjudicate?
             if win_adj_counter >= 6 {
                 let mut f = self.f.lock().unwrap();
-                if yukari_board.side() == Colour::White {
-                    game.finish(MarlinWdl::BlackWin, &mut *f);
-                } else {
+                if win_adj_white {
                     game.finish(MarlinWdl::WhiteWin, &mut *f);
+                } else {
+                    game.finish(MarlinWdl::BlackWin, &mut *f);
                 }
                 return true;
             }
@@ -435,8 +436,10 @@ impl<'a, T: Write> DataGen<'a, T> {
 
             if score.abs() >= 400 {
                 win_adj_counter += 1;
+                win_adj_white = score >= 400;
             } else {
                 win_adj_counter = 0;
+                win_adj_white = false;
             }
         }
     }
