@@ -27,7 +27,7 @@ pub struct Network {
 }
 
 static NNUE: Network = unsafe {
-    std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!("../../../yukari_e6f50cf9.bin"))
+    std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!("../../../yukari_3c87c3ee.bin"))
 };
 
 impl Network {
