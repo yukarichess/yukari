@@ -3,11 +3,12 @@ ifeq ($(OS),Windows_NT)
 	EXT := .exe
 	NAME := $(shell powershell -Command "(Get-Content yukari/Cargo.toml | Select-String '^name =').Line -replace '.*= ', '' -replace '\"', ''")
 	VERSION := $(shell powershell -Command "(Get-Content yukari/Cargo.toml | Select-String '^version =').Line -replace '.*= ', '' -replace '\"', ''")
+	TRIPLE := $(shell powershell -Command "(rustc -vV | Select-String '^host: ').Line -replace '^host: ' ''")
 else
 	EXT := 
 	NAME := $(shell sed -n 's/^name = "\(.*\)"/\1/p' yukari/Cargo.toml | head -1)
 	VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' yukari/Cargo.toml | head -1)
-
+	TRIPLE := $(shell rustc -vV | sed -n "s/host: //p")
 endif
 
 # OpenBench specifies that the binary name should be changeable with the EXE parameter
@@ -22,7 +23,16 @@ endif
 openbench:
 	@echo $(NAME)
 	@echo Compiling $(EXE) for OpenBench
-	cargo rustc --release --manifest-path yukari/Cargo.toml --bin yukari -- -C target-cpu=native --emit link=$(EXE)
+	@echo "triple: $(TRIPLE)"
+	rustup component add llvm-tools
+	cargo install cargo-pgo
+	mkdir -p .cargo
+	echo "[target.$(TRIPLE)]" > .cargo/config.toml
+	echo "rustflags = \"-C target-cpu=native\"" >> .cargo/config.toml
+	cargo pgo instrument
+	cargo pgo run -- bench
+	cargo pgo optimize
+	mv "target/$(TRIPLE)/release/yukari" "$(EXE)"
 
 # Remove the EXE created
 clean:
