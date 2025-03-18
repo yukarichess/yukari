@@ -181,6 +181,7 @@ pub struct Search<'a> {
     corrhist: &'a mut [[i32; 16384]; 2],
     conthist: &'a mut [[i16; 2*6*64]; 2*6*64],
     path: ArrayVec<[Option<(Piece, Move)>; 64]>,
+    eval: ArrayVec<[Option<i32>; 64]>,
     params: &'a SearchParams,
 }
 
@@ -208,6 +209,7 @@ impl<'a> Search<'a> {
             corrhist,
             conthist,
             path: ArrayVec::new(),
+            eval: ArrayVec::new(),
             params,
         }
     }
@@ -421,9 +423,15 @@ impl<'a> Search<'a> {
         }
 
         let eval_int = self.eval_with_corrhist(board, board.eval(board.side()));
+        let mut improving = false;
+        if !board.in_check() {
+            let last_eval = *self.eval.iter().rev().nth(1).unwrap_or(&None);
+            improving = last_eval.map(|last_eval| eval_int > last_eval).unwrap_or(false);
+        }
 
         let rfp_margin = self.params.rfp_margin_base + self.params.rfp_margin_mul * depth;
-        if alpha == beta - 1 && !board.in_check() && depth <= 4 && eval_int - rfp_margin >= beta {
+        let rfp_depth = if improving { 5 } else { 4 };
+        if alpha == beta - 1 && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta {
             return eval_int - rfp_margin;
         }
 
@@ -489,6 +497,11 @@ impl<'a> Search<'a> {
 
         // Push the move to check for repetition draws
         keystack.push(board.hash());
+        if board.in_check() {
+            self.eval.push(None);
+        } else {
+            self.eval.push(Some(eval_int));
+        }
 
         for (movecount, (m, _)) in moves.into_iter().enumerate() {
             self.nodes += 1;
@@ -596,6 +609,7 @@ impl<'a> Search<'a> {
                 if let Some(time) = self.stop_after {
                     if Instant::now() >= time {
                         keystack.pop();
+                        self.eval.pop();
                         return best_score;
                     }
                 }
@@ -648,6 +662,7 @@ impl<'a> Search<'a> {
         }
 
         keystack.pop();
+        self.eval.pop();
 
         self.write_tt(
             board,
@@ -683,7 +698,10 @@ impl<'a> Search<'a> {
         &mut self, board: &Board, depth: i32, lower_bound: i32, upper_bound: i32, output: &mut dyn output::Output,
         pv: &mut ArrayVec<[Move; 64]>, keystack: &mut Vec<u64>,
     ) -> i32 {
-        self.search(board, depth, lower_bound, upper_bound, output, pv, 0, keystack)
+        let score = self.search(board, depth, lower_bound, upper_bound, output, pv, 0, keystack);
+        assert_eq!(self.path.len(), 0);
+        assert_eq!(self.eval.len(), 0);
+        score
     }
 
     #[must_use]
