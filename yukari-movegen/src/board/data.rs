@@ -318,9 +318,8 @@ impl BoardData {
 
         debug_assert!(
             !self.bitlist[square].contains(bit.into()),
-            "{:?} on {} cannot attack itself",
-            self.piece_from_square(square),
-            square
+            "{:?} on {square} cannot attack itself",
+            self.piece_from_square(square)
         );
 
         if piece == Piece::Pawn {
@@ -334,25 +333,35 @@ impl BoardData {
             return;
         }
         if piece == Piece::Knight {
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthEast);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastNorthEast);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::EastSouthEast);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthEast);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthSouthWest);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestSouthWest);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::WestNorthWest);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthNorthWest);
+            const DIRS: [Direction; 8] = [
+                Direction::NorthNorthEast, 
+                Direction::EastNorthEast, 
+                Direction::EastSouthEast,
+                Direction::SouthSouthEast,
+                Direction::SouthSouthWest,
+                Direction::WestSouthWest,
+                Direction::WestNorthWest,
+                Direction::NorthNorthWest
+            ];
+            for dir in DIRS {
+                leap(&mut self.bitlist, &mut self.eval, &self.index, dir);
+            }
             return;
         }
         if piece == Piece::King {
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::North);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthEast);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::East);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthEast);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::South);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::SouthWest);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::West);
-            leap(&mut self.bitlist, &mut self.eval, &self.index, Direction::NorthWest);
+            const DIRS: [Direction; 8] = [
+                Direction::North,
+                Direction::NorthEast,
+                Direction::East,
+                Direction::SouthEast,
+                Direction::South,
+                Direction::SouthWest,
+                Direction::West,
+                Direction::NorthWest,
+            ];
+            for dir in DIRS {
+                leap(&mut self.bitlist, &mut self.eval, &self.index, dir);
+            }
             return;
         }
         if piece == Piece::Bishop || piece == Piece::Queen {
@@ -374,9 +383,8 @@ impl BoardData {
 
         debug_assert!(
             !self.bitlist[square].contains(bit.into()),
-            "{:?} on {} cannot attack itself",
-            self.piece_from_square(square),
-            square
+            "{:?} on {square} cannot attack itself",
+            self.piece_from_square(square)
         );
     }
 
