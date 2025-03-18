@@ -298,21 +298,15 @@ impl BoardData {
 
         let slide = |bitlist: &mut BitlistArray, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
             let mut sq = square.travel(dir);
-
-            let mut iters = 0;
             while let Some(square) = sq {
                 update(bitlist, index, eval, square);
                 sq = square.travel(dir).filter(|_| index[square].is_none());
-                iters += 1;
-                if iters > 6 {
-                    break;
-                }
             }
         };
 
-        let leap = |b: &mut BitlistArray, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
+        let leap = |bitlist: &mut BitlistArray, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
             if let Some(dest) = square.travel(dir) {
-                update(b, index, eval, dest);
+                update(bitlist, index, eval, dest);
             }
         };
 
