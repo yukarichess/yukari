@@ -1,3 +1,5 @@
+EVALFILE ?= $(PWD)/yukari_3c87c3ee.bin
+
 # If on Windows, add the .exe extension to the executable and use PowerShell instead of `sed`
 ifeq ($(OS),Windows_NT)
 	EXT := .exe
@@ -29,6 +31,8 @@ openbench:
 	mkdir -p .cargo
 	echo "[target.$(TRIPLE)]" > .cargo/config.toml
 	echo "rustflags = \"-C target-cpu=native\"" >> .cargo/config.toml
+	echo "[env]" >> .cargo/config.toml
+	echo "EVALFILE = \"$(EVALFILE)\"" >> .cargo/config.toml
 	cargo pgo instrument
 	cargo pgo run -- bench
 	cargo pgo optimize
@@ -39,9 +43,5 @@ clean:
 	@echo Removing $(EXE)
 	rm $(EXE)
 
-pgo:
-	cargo pgo instrument
-	cargo pgo run -- bench
-	cargo pgo optimize
+.PHONY: openbench clean
 
-.PHONY: pgo openbench clean
