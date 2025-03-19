@@ -1,4 +1,4 @@
-EVALFILE ?= $(PWD)/yukari_3c87c3ee.bin
+EVALFILE ?= yukari_3c87c3ee.bin
 
 # If on Windows, add the .exe extension to the executable and use PowerShell instead of `sed`
 ifeq ($(OS),Windows_NT)
