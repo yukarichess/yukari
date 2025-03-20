@@ -349,24 +349,11 @@ impl<'a, T: Write> DataGen<'a, T> {
                     }
 
                     // rep-draw check.
-                    let cc_board = cc_board.clone();
-                    let mut reps = 0;
-                    for board in &cc_board_stack {
-                        if board.same_position(&cc_board) {
-                            reps += 1;
-                            if reps == 3 {
-                                let yukari_reps = keystack.iter().filter(|key| **key == yukari_board.hash()).count();
-                                if yukari_reps != 3 {
-                                    eprintln!("cozy-chess thinks position is a repdraw, but yukari thinks there are {yukari_reps} repetitions");
-                                    for board in &yukari_board_stack {
-                                        eprintln!("{board}");
-                                    }
-                                }
-                                let mut f = self.f.lock().unwrap();
-                                game.finish(MarlinWdl::Draw, &mut *f);
-                                return true;
-                            }
-                        }
+                    let yukari_reps = keystack.iter().filter(|key| **key == yukari_board.hash()).count();
+                    if yukari_reps == 3 {
+                        let mut f = self.f.lock().unwrap();
+                        game.finish(MarlinWdl::Draw, &mut *f);
+                        return true;
                     }
                 }
                 cozy_chess::GameStatus::Drawn => {
