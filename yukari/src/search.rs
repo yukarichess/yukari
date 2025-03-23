@@ -32,20 +32,20 @@ pub struct SearchParams {
 impl Default for SearchParams {
     fn default() -> Self {
         Self {
-            rfp_margin_base: 0,
-            rfp_margin_mul: 37,
-            razor_margin_mul: 250,
-            lmr_base: 1.0,
-            lmr_mul: 0.5,
-            hist_bonus_base: 250,
-            hist_bonus_mul: 300,
-            hist_pen_base: 250,
-            hist_pen_mul: 300,
+            rfp_margin_base: 3,
+            rfp_margin_mul: 36,
+            razor_margin_mul: 246,
+            lmr_base: 1.018_642_9,
+            lmr_mul: 0.521_101_53,
+            hist_bonus_base: 260,
+            hist_bonus_mul: 303,
+            hist_pen_base: 251,
+            hist_pen_mul: 298,
             lmp_base: 5,
             lmp_mul: 1,
             lmp_pow: 2,
-            see_pruning_capture: 0.5,
-            see_pruning_quiet: 0.0,
+            see_pruning_capture: 0.489_161_5,
+            see_pruning_quiet: 0.006_385_347,
         }
     }
 }

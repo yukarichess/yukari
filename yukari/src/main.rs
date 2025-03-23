@@ -476,16 +476,17 @@ fn main() -> io::Result<()> {
                 // We support nps for fixed-nodes search.
                 println!("feature nps=1");
                 // Tunables!
-                /*
                 println!("feature option=\"RfpMarginBase -spin 0 0 100\"");
-                println!("feature option=\"RfpMarginMul -spin 75 0 1000\"");
-                println!("feature option=\"LmrBase -spin 100 0 500\"");
-                println!("feature option=\"LmrMul -spin 500 0 2000\"");
+                println!("feature option=\"RfpMarginMul -spin 37 0 1000\"");
+                println!("feature option=\"RazorMarginMul -spin 250 0 500\"");
+                println!("feature option=\"LmrBase -string 1.0\"");
+                println!("feature option=\"LmrMul -string 0.5\"");
                 println!("feature option=\"HistBonusBase -spin 250 0 500\"");
                 println!("feature option=\"HistBonusMul -spin 300 0 600\"");
                 println!("feature option=\"HistPenaltyBase -spin 250 0 500\"");
                 println!("feature option=\"HistPenaltyMul -spin 300 0 600\"");
-                */
+                println!("feature option=\"SeePruningCapture -string 0.5\"");
+                println!("feature option=\"SeePruningQuiet -string 0.0\"");
                 println!("feature option=\"Hash -spin 16 1 8192\"");
                 println!("feature option=\"Threads -spin 1 1 1\"");
                 // Communicate that feature reporting is done
@@ -564,18 +565,24 @@ fn main() -> io::Result<()> {
             }
             "option" => {
                 let (name, value) = args.split_once("=").unwrap();
-                let value = value.parse::<i32>().unwrap();
+                if name == "Hash" { // UCIism. grumble grumble.
+                    let value = value.parse::<i32>().unwrap();
+                    if value >= 1 {
+                        tt = allocate_tt(value as usize);
+                    }
+                }
                 match name {
-                    "RfpMarginBase" => engine.params.rfp_margin_base = value,
-                    "RfpMarginMul" => engine.params.rfp_margin_mul = value,
-                    "LmrBase" => engine.params.lmr_base = (value as f32) / 100.0,
-                    "LmrMul" => engine.params.lmr_mul = (value as f32) / 1000.0,
-                    "HistBonusBase" => engine.params.hist_bonus_base = value,
-                    "HistBonusMul" => engine.params.hist_bonus_mul = value,
-                    "HistPenaltyBase" => engine.params.hist_pen_base = value,
-                    "HistPenaltyMul" => engine.params.hist_pen_mul = value,
-                    "Hash" if value >= 1 => tt = allocate_tt(value as usize), // UCIism. grumble grumble.
-                    "Threads" => (),                                          // UCIism, grumble grumble.
+                    "RfpMarginBase" => engine.params.rfp_margin_base = value.parse::<i32>().unwrap(),
+                    "RfpMarginMul" => engine.params.rfp_margin_mul = value.parse::<i32>().unwrap(),
+                    "RazorMarginMul" => engine.params.razor_margin_mul = value.parse::<i32>().unwrap(),
+                    "LmrBase" => engine.params.lmr_base = value.parse::<f32>().unwrap(),
+                    "LmrMul" => engine.params.lmr_mul = value.parse::<f32>().unwrap(),
+                    "HistBonusBase" => engine.params.hist_bonus_base = value.parse::<i32>().unwrap(),
+                    "HistBonusMul" => engine.params.hist_bonus_mul = value.parse::<i32>().unwrap(),
+                    "HistPenaltyBase" => engine.params.hist_pen_base = value.parse::<i32>().unwrap(),
+                    "HistPenaltyMul" => engine.params.hist_pen_mul = value.parse::<i32>().unwrap(),
+                    "SeePruningCapture" => engine.params.see_pruning_capture = value.parse::<f32>().unwrap(),
+                    "SeePruningQuiet" => engine.params.see_pruning_quiet = value.parse::<f32>().unwrap(),
                     _ => (),
                 }
             }
