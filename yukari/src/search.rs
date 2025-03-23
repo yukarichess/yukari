@@ -22,6 +22,11 @@ pub struct SearchParams {
     pub hist_bonus_mul: i32,
     pub hist_pen_base: i32,
     pub hist_pen_mul: i32,
+    pub lmp_base: i32,
+    pub lmp_mul: i32,
+    pub lmp_pow: u32,
+    pub see_pruning_capture: f32,
+    pub see_pruning_quiet: f32,
 }
 
 impl Default for SearchParams {
@@ -36,6 +41,11 @@ impl Default for SearchParams {
             hist_bonus_mul: 300,
             hist_pen_base: 250,
             hist_pen_mul: 300,
+            lmp_base: 5,
+            lmp_mul: 1,
+            lmp_pow: 2,
+            see_pruning_capture: 0.5,
+            see_pruning_quiet: 0.0,
         }
     }
 }
@@ -168,6 +178,7 @@ pub struct Search<'a> {
     qnodes: u64,
     zw_nodes: u64,
     zw_qnodes: u64,
+    seldepth: i32,
     nullmove_attempts: u64,
     nullmove_success: u64,
     beta_cutoff_index: u64,
@@ -196,6 +207,7 @@ impl<'a> Search<'a> {
             qnodes: 0,
             zw_nodes: 0,
             zw_qnodes: 0,
+            seldepth: 0,
             nullmove_attempts: 0,
             nullmove_success: 0,
             beta_cutoff_index: 0,
@@ -260,6 +272,8 @@ impl<'a> Search<'a> {
         let mut best_score = self.eval_with_corrhist(board, board.eval(board.side()));
 
         pv.set_len(0);
+
+        self.seldepth = self.seldepth.max(ply);
 
         // Emergency bailout
         if ply == 63 {
@@ -364,6 +378,8 @@ impl<'a> Search<'a> {
         &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, output: &mut dyn output::Output,
         pv: &mut ArrayVec<[Move; 64]>, ply: i32, keystack: &mut Vec<u64>,
     ) -> i32 {
+        self.seldepth = self.seldepth.max(ply);
+
         // Emergency bailout
         if ply == 63 {
             pv.set_len(0);
@@ -512,16 +528,16 @@ impl<'a> Search<'a> {
             if ply == 0 {
                 let now = Instant::now();
                 if now >= self.start + Duration::from_secs(2) {
-                    output.new_move(board, depth + root_reduction, now.duration_since(self.start), self.nodes() + self.qnodes(), m);
+                    output.new_move(board, depth + root_reduction, self.seldepth, now.duration_since(self.start), self.nodes() + self.qnodes(), m);
                 }
             }
 
             // SEE Pruning
             if !board.in_check() && (2..=5).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
                 let threshold = if m.is_capture() {
-                    -(depth as f32 * 0.5) as i32
+                    -(depth as f32 * self.params.see_pruning_capture) as i32
                 } else {
-                    0
+                    -(depth as f32 * self.params.see_pruning_quiet) as i32
                 };
                 if board.static_exchange_evaluation(m) < threshold {
                     continue;
@@ -529,7 +545,7 @@ impl<'a> Search<'a> {
             }
             
             // Late Move Pruning
-            let lmp_threshold = 5 + (depth as usize).pow(2);
+            let lmp_threshold = (self.params.lmp_base + (self.params.lmp_mul * depth).pow(self.params.lmp_pow)) as usize;
             if !board.in_check() && !m.is_capture() && depth <= 3 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
                 continue;
             }
@@ -538,10 +554,11 @@ impl<'a> Search<'a> {
 
             let mut reduction = 1;
 
+            // Late Move Reduction
             if depth >= 3 && movecount >= 4 && !board.in_check() && !m.is_capture() {
                 let depth = (depth as f32).ln();
-                let i = (movecount as f32).ln();
-                reduction += (depth * i).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
+                let movecount = (movecount as f32).ln();
+                reduction += (depth * movecount).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
                 reduction -= i32::from(alpha != beta - 1);
                 // credit: adam
             }
@@ -651,6 +668,7 @@ impl<'a> Search<'a> {
                         output.new_pv(
                             board,
                             depth + root_reduction,
+                            self.seldepth,
                             score,
                             now.duration_since(self.start),
                             self.nodes() + self.qnodes(),
@@ -698,6 +716,7 @@ impl<'a> Search<'a> {
         &mut self, board: &Board, depth: i32, lower_bound: i32, upper_bound: i32, output: &mut dyn output::Output,
         pv: &mut ArrayVec<[Move; 64]>, keystack: &mut Vec<u64>,
     ) -> i32 {
+        self.seldepth = 0;
         let score = self.search(board, depth, lower_bound, upper_bound, output, pv, 0, keystack);
         assert_eq!(self.path.len(), 0);
         assert_eq!(self.eval.len(), 0);
@@ -737,5 +756,10 @@ impl<'a> Search<'a> {
     #[must_use]
     pub fn zw_qnodes(&self) -> f64 {
         100.0 * (self.zw_qnodes as f64) / (self.qnodes as f64)
+    }
+
+    #[must_use]
+    pub fn seldepth(&self) -> i32 {
+        self.seldepth
     }
 }

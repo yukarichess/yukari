@@ -136,7 +136,6 @@ impl Yukari {
         let mut pv = ArrayVec::new();
         let max_depth = self.max_depth.unwrap_or(63);
         while depth <= max_depth {
-            println!("# time limits: soft {}s, hard {}s", (soft_limit - start).as_secs_f32(), (hard_limit - start).as_secs_f32());
             let mut lower_bound = 50;
             let mut upper_bound = 50;
             loop {
@@ -159,6 +158,7 @@ impl Yukari {
                     output.complete(
                         &self.board,
                         depth,
+                        s.seldepth(),
                         score,
                         Instant::now().duration_since(start),
                         s.nodes() + s.qnodes(),
@@ -173,6 +173,7 @@ impl Yukari {
                     output.complete(
                         &self.board,
                         depth,
+                        s.seldepth(),
                         score,
                         Instant::now().duration_since(start),
                         s.nodes() + s.qnodes(),
@@ -185,6 +186,7 @@ impl Yukari {
                 output.complete(
                     &self.board,
                     depth,
+                    s.seldepth(),
                     score,
                     Instant::now().duration_since(start),
                     s.nodes() + s.qnodes(),
@@ -312,6 +314,7 @@ impl Yukari {
                     output.complete(
                         &board,
                         11,
+                        s.seldepth(),
                         score,
                         Instant::now().duration_since(start),
                         s.nodes() + s.qnodes(),
@@ -326,6 +329,7 @@ impl Yukari {
                     output.complete(
                         &board,
                         11,
+                        s.seldepth(),
                         score,
                         Instant::now().duration_since(start),
                         s.nodes() + s.qnodes(),
@@ -335,7 +339,7 @@ impl Yukari {
                     );
                     continue;
                 }
-                output.complete(&board, 11, score, Instant::now().duration_since(start), s.nodes() + s.qnodes(), &pv, true, false);
+                output.complete(&board, 11, s.seldepth(), score, Instant::now().duration_since(start), s.nodes() + s.qnodes(), &pv, true, false);
                 break;
             }
             nodes += s.nodes() + s.qnodes();
