@@ -520,6 +520,7 @@ fn main() -> io::Result<()> {
                 if !args.is_empty() {
                     (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
                     assert_eq!(cmd, "moves");
+                    engine.tc.reset_moves();
                     while !args.is_empty() {
                         (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
 
@@ -541,6 +542,7 @@ fn main() -> io::Result<()> {
                         let m = engine.find_move(from, dest, prom).unwrap_or_else(|| panic!("Attempted move {cmd} not found!?"));
                         engine.board = engine.board.make(m);
                         engine.keystack.push(engine.board.hash());
+                        engine.tc.increment_moves();
                     }
                 }
             }
@@ -718,6 +720,7 @@ fn main() -> io::Result<()> {
                             // Find the move in the list
                             let m = engine.find_move(from, dest, prom).expect("Attempted move not found!?");
                             engine.board = engine.board.make(m);
+                            engine.tc.increment_moves();
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                                 println!("1/2-1/2 {{Draw by repetition}}");
                             }
@@ -744,6 +747,7 @@ fn main() -> io::Result<()> {
                                 println!("1/2-1/2 {{Draw by repetition}}");
                             }
                             engine.keystack.push(engine.board.hash());
+                            engine.tc.increment_moves();
                         }
                     }
                 } else {

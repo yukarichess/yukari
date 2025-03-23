@@ -30,6 +30,11 @@ impl TimeControl {
         self.remaining = milliseconds / 1000.0;
     }
 
+    /// Reset the move number.
+    pub fn reset_moves(&mut self) {
+        self.move_number = 0;
+    }
+
     /// Increment the move number.
     pub fn increment_moves(&mut self) {
         self.move_number += 1;
@@ -44,15 +49,17 @@ impl TimeControl {
                 (secs, secs)
             }
             TimeMode::Incremental { base: _, increment } => {
+                let move_number = self.move_number as f32;
+                let expected_length = (59.3 + move_number.mul_add(-2330.0, 72830.0) / (move_number.mul_add(move_number, move_number * 10.0) + 2644.0)) / 2.0;
                 let remaining = self.remaining - 0.02;
-                let soft = remaining.min(remaining / 20.0 + increment / 2.0);
+                let soft = remaining.min((remaining - increment) / expected_length + increment);
                 let hard = remaining / 3.0;
                 (soft, hard)
             }
             TimeMode::Classical { base: _, mps } => {
                 let remaining = self.remaining - 0.02;
                 let mps = mps as i32;
-                let move_number = self.move_number as i32;
+                let move_number = (self.move_number / 2) as i32;
                 let mut movesleft = mps - move_number;
 
                 // Add the moves per session to get a positive number.
