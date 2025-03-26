@@ -50,9 +50,9 @@ impl TimeControl {
             }
             TimeMode::Incremental { base: _, increment } => {
                 let move_number = self.move_number as f32;
-                let expected_length = (59.3
-                    + move_number.mul_add(-2330.0, 72830.0) / (move_number.mul_add(move_number, move_number * 10.0) + 2644.0))
-                    / 2.0;
+                let expected_length =
+                    move_number.mul_add(-2330.0, 72830.0) / (move_number.mul_add(move_number, move_number * 10.0) + 2644.0);
+                let expected_length = (59.3 + expected_length) / 2.0;
                 let remaining = self.remaining - 0.02;
                 let soft = remaining.min((remaining - increment) / expected_length + increment);
                 let hard = remaining / 3.0;
