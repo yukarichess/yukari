@@ -5,7 +5,7 @@ use crate::{Colour, File, Piece, Square};
 
 pub const HORIZONTAL_MIRROR: bool = true;
 const INPUTS: usize = (2 * 6 * 64) + 2 * feature::MAX_OFFSET;
-const HIDDEN_SIZE: usize = 256;
+const HIDDEN_SIZE: usize = 384;
 const OUTPUT_BUCKETS: usize = 8;
 const DIVISOR: usize = 32_usize.div_ceil(OUTPUT_BUCKETS);
 const SCALE: i32 = 400;
