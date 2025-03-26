@@ -1,5 +1,11 @@
 use std::{
-    io::{self, BufWriter}, str::FromStr, sync::{atomic::{AtomicUsize, Ordering}, Mutex}, time::{Duration, Instant}
+    io::{self, BufWriter},
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    },
+    time::{Duration, Instant},
 };
 
 use colored::Colorize;
@@ -44,7 +50,7 @@ pub struct Yukari {
     keystack: Vec<u64>,
     history: [[i16; 64]; 64],
     corrhist: [[i32; 16384]; 2],
-    conthist: [[i16; 2*6*64]; 2*6*64],
+    conthist: [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     params: SearchParams,
 }
 
@@ -64,7 +70,7 @@ impl Yukari {
             keystack: Vec::new(),
             history: [[0; 64]; 64],
             corrhist: [[0; 16384]; 2],
-            conthist: [[0; 2*6*64]; 2*6*64],
+            conthist: [[0; 2 * 6 * 64]; 2 * 6 * 64],
             params: SearchParams::default(),
         }
     }
@@ -339,7 +345,17 @@ impl Yukari {
                     );
                     continue;
                 }
-                output.complete(&board, 11, s.seldepth(), score, Instant::now().duration_since(start), s.nodes() + s.qnodes(), &pv, true, false);
+                output.complete(
+                    &board,
+                    11,
+                    s.seldepth(),
+                    score,
+                    Instant::now().duration_since(start),
+                    s.nodes() + s.qnodes(),
+                    &pv,
+                    true,
+                    false,
+                );
                 break;
             }
             nodes += s.nodes() + s.qnodes();
@@ -407,22 +423,23 @@ fn main() -> io::Result<()> {
             const GAMES: usize = 500_000;
 
             // Try to avoid stack overflows.
-            rayon::ThreadPoolBuilder::new().stack_size(32*1024*1024).build_global().unwrap();
+            rayon::ThreadPoolBuilder::new().stack_size(32 * 1024 * 1024).build_global().unwrap();
 
             let f = std::fs::File::options().create(true).append(true).open("games.viriformat").unwrap();
             let f = BufWriter::new(f);
             let f = Mutex::new(f);
 
             let positions = AtomicUsize::new(0);
-            let style = ProgressStyle::with_template("[{bar:40.magenta/red}] {pos:>6}/{len:6} ({per_sec} games/s)").unwrap().progress_chars("━╸ ");
+            let style = ProgressStyle::with_template("[{bar:40.magenta/red}] {pos:>6}/{len:6} ({per_sec} games/s)")
+                .unwrap()
+                .progress_chars("━╸ ");
 
-            (0..GAMES)
-                .into_par_iter()
-                .progress_with_style(style)
-                .for_each_init(
-                    || datagen::DataGen::new(&f),
-                    |dg, _| { positions.fetch_add(dg.play(1), Ordering::SeqCst); }
-                );
+            (0..GAMES).into_par_iter().progress_with_style(style).for_each_init(
+                || datagen::DataGen::new(&f),
+                |dg, _| {
+                    positions.fetch_add(dg.play(1), Ordering::SeqCst);
+                },
+            );
 
             println!("{GAMES} games, {} positions", positions.load(Ordering::SeqCst));
 
@@ -565,7 +582,8 @@ fn main() -> io::Result<()> {
             }
             "option" => {
                 let (name, value) = args.split_once("=").unwrap();
-                if name == "Hash" { // UCIism. grumble grumble.
+                if name == "Hash" {
+                    // UCIism. grumble grumble.
                     let value = value.parse::<i32>().unwrap();
                     if value >= 1 {
                         tt = allocate_tt(value as usize);

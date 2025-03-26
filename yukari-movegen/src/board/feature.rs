@@ -1,22 +1,45 @@
-use crate::{square::{Direction, Square16x8}, Piece, Square};
+use crate::{
+    square::{Direction, Square16x8},
+    Piece, Square,
+};
 
 const DIRECTIONS: [&[Direction]; 6] = [
     &[],
-    &[Direction::NorthNorthEast, Direction::EastNorthEast, Direction::EastSouthEast, Direction::SouthSouthEast, Direction::SouthSouthWest, Direction::WestSouthWest, Direction::WestNorthWest, Direction::NorthNorthWest],
+    &[
+        Direction::NorthNorthEast,
+        Direction::EastNorthEast,
+        Direction::EastSouthEast,
+        Direction::SouthSouthEast,
+        Direction::SouthSouthWest,
+        Direction::WestSouthWest,
+        Direction::WestNorthWest,
+        Direction::NorthNorthWest,
+    ],
     &[Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest],
     &[Direction::North, Direction::East, Direction::South, Direction::West],
-    &[Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest, Direction::North, Direction::East, Direction::South, Direction::West],
-    &[Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest, Direction::North, Direction::East, Direction::South, Direction::West],
+    &[
+        Direction::NorthEast,
+        Direction::SouthEast,
+        Direction::SouthWest,
+        Direction::NorthWest,
+        Direction::North,
+        Direction::East,
+        Direction::South,
+        Direction::West,
+    ],
+    &[
+        Direction::NorthEast,
+        Direction::SouthEast,
+        Direction::SouthWest,
+        Direction::NorthWest,
+        Direction::North,
+        Direction::East,
+        Direction::South,
+        Direction::West,
+    ],
 ];
 
-const SLIDER: [bool; 6] = [
-    false,
-    false,
-    true,
-    true,
-    true,
-    false
-];
+const SLIDER: [bool; 6] = [false, false, true, true, true, false];
 
 const PAWN_INDEX: usize = 84;
 const KNIGHT_INDEX: [usize; 65] = index_array_for_piece(Piece::Knight);
@@ -38,7 +61,6 @@ const BISHOP_ATTACKS: [u64; 64] = attacks_for_piece(Piece::Bishop);
 const ROOK_ATTACKS: [u64; 64] = attacks_for_piece(Piece::Rook);
 const QUEEN_ATTACKS: [u64; 64] = attacks_for_piece(Piece::Queen);
 const KING_ATTACKS: [u64; 64] = attacks_for_piece(Piece::King);
-
 
 const fn index_array_for_piece(piece: Piece) -> [usize; 65] {
     assert!(!matches!(piece, Piece::Pawn));
@@ -109,7 +131,9 @@ pub fn index_pst(piece: Piece, square: Square, king: Square, friendly: bool) -> 
     64 * (usize::from(!friendly) * 6 + piece as usize) + square
 }
 
-pub fn index_threat(piece: Piece, from_square: Square, to_square: Square, king: Square, friendly: bool, attacking_enemy: bool) -> usize {
+pub fn index_threat(
+    piece: Piece, from_square: Square, to_square: Square, king: Square, friendly: bool, attacking_enemy: bool,
+) -> usize {
     let from_square = from_square.into_inner() as usize ^ crate::board::eval::Eval::mirror(king);
     let to_square = to_square.into_inner() as usize ^ crate::board::eval::Eval::mirror(king);
 

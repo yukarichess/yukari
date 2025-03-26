@@ -1,8 +1,7 @@
 use std::simd::{cmp::SimdOrd, i16x64, i32x64, num::SimdInt};
 
-use crate::{Colour, File, Piece, Square};
-
 use super::feature;
+use crate::{Colour, File, Piece, Square};
 
 pub const HORIZONTAL_MIRROR: bool = true;
 const INPUTS: usize = (2 * 6 * 64) + 2 * feature::MAX_OFFSET;
@@ -26,9 +25,8 @@ pub struct Network {
     output_bias: [i16; OUTPUT_BUCKETS],
 }
 
-static NNUE: Network = unsafe {
-    std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!(env!("EVALFILE")))
-};
+static NNUE: Network =
+    unsafe { std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!(env!("EVALFILE"))) };
 
 impl Network {
     /// Calculates the output of the network, starting from the already
@@ -131,7 +129,9 @@ impl Eval {
         }
     }
 
-    pub fn add_piece_for_acc(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool) {
+    pub fn add_piece_for_acc(
+        &mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool,
+    ) {
         if white_acc {
             self.white.add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
         } else {
@@ -140,12 +140,35 @@ impl Eval {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn add_threat_for_acc(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square, white_acc: bool) {
+    pub fn add_threat_for_acc(
+        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        white_king: Square, black_king: Square, white_acc: bool,
+    ) {
         let Some(to_colour) = to_colour else { return };
         if white_acc {
-            self.white.add_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
+            self.white.add_feature(
+                feature::index_threat(
+                    piece,
+                    from_square,
+                    to_square,
+                    white_king,
+                    from_colour == Colour::White,
+                    to_colour != from_colour,
+                ),
+                &NNUE,
+            );
         } else {
-            self.black.add_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
+            self.black.add_feature(
+                feature::index_threat(
+                    piece,
+                    from_square.flip(),
+                    to_square.flip(),
+                    black_king,
+                    from_colour == Colour::Black,
+                    to_colour != from_colour,
+                ),
+                &NNUE,
+            );
         }
     }
 
@@ -154,13 +177,38 @@ impl Eval {
         self.black.add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
     }
 
-    pub fn add_threat(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square) {
+    pub fn add_threat(
+        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        white_king: Square, black_king: Square,
+    ) {
         let Some(to_colour) = to_colour else { return };
-        self.white.add_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
-        self.black.add_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
+        self.white.add_feature(
+            feature::index_threat(
+                piece,
+                from_square,
+                to_square,
+                white_king,
+                from_colour == Colour::White,
+                to_colour != from_colour,
+            ),
+            &NNUE,
+        );
+        self.black.add_feature(
+            feature::index_threat(
+                piece,
+                from_square.flip(),
+                to_square.flip(),
+                black_king,
+                from_colour == Colour::Black,
+                to_colour != from_colour,
+            ),
+            &NNUE,
+        );
     }
 
-    pub fn remove_piece_for_acc(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool) {
+    pub fn remove_piece_for_acc(
+        &mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool,
+    ) {
         if white_acc {
             self.white.remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
         } else {
@@ -169,12 +217,35 @@ impl Eval {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn remove_threat_for_acc(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square, white_acc: bool) {
+    pub fn remove_threat_for_acc(
+        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        white_king: Square, black_king: Square, white_acc: bool,
+    ) {
         let Some(to_colour) = to_colour else { return };
         if white_acc {
-            self.white.remove_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
+            self.white.remove_feature(
+                feature::index_threat(
+                    piece,
+                    from_square,
+                    to_square,
+                    white_king,
+                    from_colour == Colour::White,
+                    to_colour != from_colour,
+                ),
+                &NNUE,
+            );
         } else {
-            self.black.remove_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
+            self.black.remove_feature(
+                feature::index_threat(
+                    piece,
+                    from_square.flip(),
+                    to_square.flip(),
+                    black_king,
+                    from_colour == Colour::Black,
+                    to_colour != from_colour,
+                ),
+                &NNUE,
+            );
         }
     }
 
@@ -183,13 +254,38 @@ impl Eval {
         self.black.remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
     }
 
-    pub fn remove_threat(&mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>, white_king: Square, black_king: Square) {
+    pub fn remove_threat(
+        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        white_king: Square, black_king: Square,
+    ) {
         let Some(to_colour) = to_colour else { return };
-        self.white.remove_feature(feature::index_threat(piece, from_square, to_square, white_king, from_colour == Colour::White, to_colour != from_colour), &NNUE);
-        self.black.remove_feature(feature::index_threat(piece, from_square.flip(), to_square.flip(), black_king, from_colour == Colour::Black, to_colour != from_colour), &NNUE);
+        self.white.remove_feature(
+            feature::index_threat(
+                piece,
+                from_square,
+                to_square,
+                white_king,
+                from_colour == Colour::White,
+                to_colour != from_colour,
+            ),
+            &NNUE,
+        );
+        self.black.remove_feature(
+            feature::index_threat(
+                piece,
+                from_square.flip(),
+                to_square.flip(),
+                black_king,
+                from_colour == Colour::Black,
+                to_colour != from_colour,
+            ),
+            &NNUE,
+        );
     }
 
-    pub fn move_piece(&mut self, piece: Piece, from_square: Square, to_square: Square, colour: Colour, white_king: Square, black_king: Square) {
+    pub fn move_piece(
+        &mut self, piece: Piece, from_square: Square, to_square: Square, colour: Colour, white_king: Square, black_king: Square,
+    ) {
         self.remove_piece(piece, from_square, colour, white_king, black_king);
         self.add_piece(piece, to_square, colour, white_king, black_king);
     }

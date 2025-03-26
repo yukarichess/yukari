@@ -9,7 +9,8 @@ use super::{
 use crate::{
     colour::Colour,
     piece::Piece,
-    square::{Direction, Square, Square16x8}, File,
+    square::{Direction, Square, Square16x8},
+    File,
 };
 
 #[allow(clippy::module_name_repetitions)]
@@ -131,7 +132,15 @@ impl BoardData {
             self.update_sliders(square, false, None);
             // fixup: add threats to new square
             for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
-                self.eval.add_threat(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), Some(piece_index.colour()), white_king, black_king);
+                self.eval.add_threat(
+                    self.piece_from_bit(attack),
+                    self.square_of_piece(attack),
+                    square,
+                    attack.colour(),
+                    Some(piece_index.colour()),
+                    white_king,
+                    black_king,
+                );
             }
         }
     }
@@ -154,7 +163,15 @@ impl BoardData {
             self.update_sliders(square, true, None);
             // fixup: clear threats to old square
             for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
-                self.eval.remove_threat(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), Some(piece_index.colour()), white_king, black_king);
+                self.eval.remove_threat(
+                    self.piece_from_bit(attack),
+                    self.square_of_piece(attack),
+                    square,
+                    attack.colour(),
+                    Some(piece_index.colour()),
+                    white_king,
+                    black_king,
+                );
             }
         }
     }
@@ -169,10 +186,24 @@ impl BoardData {
             let Some(square_piece_index) = self.index[square] else { continue };
 
             for attack in self.bitlist[square] {
-                self.eval.add_threat(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), self.colour_from_square(square), white_king, black_king);
+                self.eval.add_threat(
+                    self.piece_from_bit(attack),
+                    self.square_of_piece(attack),
+                    square,
+                    attack.colour(),
+                    self.colour_from_square(square),
+                    white_king,
+                    black_king,
+                );
             }
 
-            self.eval.add_piece(self.piece_from_bit(square_piece_index), square, square_piece_index.colour(), white_king, black_king);
+            self.eval.add_piece(
+                self.piece_from_bit(square_piece_index),
+                square,
+                square_piece_index.colour(),
+                white_king,
+                black_king,
+            );
         }
     }
 
@@ -196,7 +227,10 @@ impl BoardData {
 
         let from_file = File::from(from_square);
         let to_file = File::from(to_square);
-        if crate::board::eval::HORIZONTAL_MIRROR && piece == Piece::King && ((from_file >= File::E && to_file <= File::D) || (from_file <= File::D && to_file >= File::E)) {
+        if crate::board::eval::HORIZONTAL_MIRROR
+            && piece == Piece::King
+            && ((from_file >= File::E && to_file <= File::D) || (from_file <= File::D && to_file >= File::E))
+        {
             // we need to rebuild the accumulator ;~;
             self.eval.reset_colour(piece_index.colour());
             for square in 0..64 {
@@ -204,33 +238,90 @@ impl BoardData {
                 let Some(square_piece_index) = self.index[square] else { continue };
 
                 for attack in self.bitlist[square] {
-                    self.eval.add_threat_for_acc(self.piece_from_bit(attack), self.square_of_piece(attack), square, attack.colour(), self.colour_from_square(square), white_king, black_king, piece_index.is_white());
+                    self.eval.add_threat_for_acc(
+                        self.piece_from_bit(attack),
+                        self.square_of_piece(attack),
+                        square,
+                        attack.colour(),
+                        self.colour_from_square(square),
+                        white_king,
+                        black_king,
+                        piece_index.is_white(),
+                    );
                 }
-                self.eval.add_piece_for_acc(self.piece_from_bit(square_piece_index), square, square_piece_index.colour(), white_king, black_king, piece_index.is_white());
+                self.eval.add_piece_for_acc(
+                    self.piece_from_bit(square_piece_index),
+                    square,
+                    square_piece_index.colour(),
+                    white_king,
+                    black_king,
+                    piece_index.is_white(),
+                );
             }
 
-            self.eval.remove_piece_for_acc(piece, from_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
+            self.eval.remove_piece_for_acc(
+                piece,
+                from_square,
+                piece_index.colour(),
+                white_king,
+                black_king,
+                !piece_index.is_white(),
+            );
             self.eval.add_piece_for_acc(piece, to_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
             // fixup: clear threats to old square
             for attack in self.bitlist[from_square] & !Bitlist::from_piece(piece_index) {
-                self.eval.remove_threat_for_acc(self.piece_from_bit(attack), self.square_of_piece(attack), from_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king, !piece_index.is_white());
+                self.eval.remove_threat_for_acc(
+                    self.piece_from_bit(attack),
+                    self.square_of_piece(attack),
+                    from_square,
+                    attack.colour(),
+                    self.colour_from_square(to_square),
+                    white_king,
+                    black_king,
+                    !piece_index.is_white(),
+                );
             }
 
             // fixup: add threats to new square
             for attack in self.bitlist[to_square] & !Bitlist::from_piece(piece_index) {
-                self.eval.add_threat_for_acc(self.piece_from_bit(attack), self.square_of_piece(attack), to_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king, !piece_index.is_white());
+                self.eval.add_threat_for_acc(
+                    self.piece_from_bit(attack),
+                    self.square_of_piece(attack),
+                    to_square,
+                    attack.colour(),
+                    self.colour_from_square(to_square),
+                    white_king,
+                    black_king,
+                    !piece_index.is_white(),
+                );
             }
         } else {
             self.eval.move_piece(piece, from_square, to_square, piece_index.colour(), white_king, black_king);
 
             // fixup: clear threats to old square
             for attack in self.bitlist[from_square] & !Bitlist::from_piece(piece_index) {
-                self.eval.remove_threat(self.piece_from_bit(attack), self.square_of_piece(attack), from_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king);
+                self.eval.remove_threat(
+                    self.piece_from_bit(attack),
+                    self.square_of_piece(attack),
+                    from_square,
+                    attack.colour(),
+                    self.colour_from_square(to_square),
+                    white_king,
+                    black_king,
+                );
             }
 
             // fixup: add threats to new square
             for attack in self.bitlist[to_square] & !Bitlist::from_piece(piece_index) {
-                self.eval.add_threat(self.piece_from_bit(attack), self.square_of_piece(attack), to_square, attack.colour(), self.colour_from_square(to_square), white_king, black_king);
+                self.eval.add_threat(
+                    self.piece_from_bit(attack),
+                    self.square_of_piece(attack),
+                    to_square,
+                    attack.colour(),
+                    self.colour_from_square(to_square),
+                    white_king,
+                    black_king,
+                );
             }
         }
 
@@ -328,14 +419,14 @@ impl BoardData {
         }
         if piece == Piece::Knight {
             const DIRS: [Direction; 8] = [
-                Direction::NorthNorthEast, 
-                Direction::EastNorthEast, 
+                Direction::NorthNorthEast,
+                Direction::EastNorthEast,
                 Direction::EastSouthEast,
                 Direction::SouthSouthEast,
                 Direction::SouthSouthWest,
                 Direction::WestSouthWest,
                 Direction::WestNorthWest,
-                Direction::NorthNorthWest
+                Direction::NorthNorthWest,
             ];
             for dir in DIRS {
                 leap(&mut self.bitlist, &mut self.eval, &self.index, dir);
@@ -397,15 +488,36 @@ impl BoardData {
             for dest in square16x8.ray_attacks(direction) {
                 if add {
                     self.bitlist.add_piece(dest, piece);
-                    self.eval.add_threat(self.piece_from_bit(piece), self.square_of_piece(piece), dest, piece.colour(), self.colour_from_square(dest), white_king, black_king);
+                    self.eval.add_threat(
+                        self.piece_from_bit(piece),
+                        self.square_of_piece(piece),
+                        dest,
+                        piece.colour(),
+                        self.colour_from_square(dest),
+                        white_king,
+                        black_king,
+                    );
                 } else {
-                    let to_colour = from_square.map_or_else(|| self.colour_from_square(dest), |from_square| if from_square == dest {
-                            self.colour_from_square(square)
-                        } else {
-                            self.colour_from_square(dest)
-                        });
+                    let to_colour = from_square.map_or_else(
+                        || self.colour_from_square(dest),
+                        |from_square| {
+                            if from_square == dest {
+                                self.colour_from_square(square)
+                            } else {
+                                self.colour_from_square(dest)
+                            }
+                        },
+                    );
                     self.bitlist.remove_piece(dest, piece);
-                    self.eval.remove_threat(self.piece_from_bit(piece), self.square_of_piece(piece), dest, piece.colour(), to_colour, white_king, black_king);
+                    self.eval.remove_threat(
+                        self.piece_from_bit(piece),
+                        self.square_of_piece(piece),
+                        dest,
+                        piece.colour(),
+                        to_colour,
+                        white_king,
+                        black_king,
+                    );
                 }
 
                 if self.index[dest].is_some() {

@@ -125,7 +125,9 @@ impl Ord for MoveOrder {
             (_, MoveOrder::TtMove) => Ordering::Greater,
 
             // Good captures sort above quiets and bad captures; ties broken by highest MVV/LVA score.
-            (MoveOrder::GoodCapture(a_mvv, a_lva), MoveOrder::GoodCapture(b_mvv, b_lva)) => b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva)),
+            (MoveOrder::GoodCapture(a_mvv, a_lva), MoveOrder::GoodCapture(b_mvv, b_lva)) => {
+                b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva))
+            }
             (MoveOrder::GoodCapture(_, _), _) => Ordering::Less,
             (_, MoveOrder::GoodCapture(_, _)) => Ordering::Greater,
 
@@ -135,13 +137,18 @@ impl Ord for MoveOrder {
             (_, MoveOrder::Quiet(_)) => Ordering::Greater,
 
             // Bad captures; ties broken by highest MVV/LVA score.
-            (MoveOrder::BadCapture(a_mvv, a_lva), MoveOrder::BadCapture(b_mvv, b_lva)) => b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva)),
+            (MoveOrder::BadCapture(a_mvv, a_lva), MoveOrder::BadCapture(b_mvv, b_lva)) => {
+                b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva))
+            }
         }
     }
 }
 
 impl MoveOrder {
-    pub fn classify(board: &Board, history: &[[i16; 64]; 64], conthist: &[[i16; 2*6*64]; 2*6*64], tt_move: Option<Move>, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move) -> Self {
+    pub fn classify(
+        board: &Board, history: &[[i16; 64]; 64], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64], tt_move: Option<Move>,
+        last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move,
+    ) -> Self {
         if let Some(tt_move) = tt_move {
             if tt_move == m {
                 return Self::TtMove;
@@ -160,13 +167,21 @@ impl MoveOrder {
 
         let mut score = history[m.from.into_inner() as usize][m.dest.into_inner() as usize] as i32;
         if let Some((last_piece, last_m)) = last_last_m {
-            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
-            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (last_piece as usize)
+                + usize::from(last_m.dest.into_inner());
+            let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + usize::from(m.dest.into_inner());
             score += conthist[last_index][curr_index] as i32;
         }
         if let Some((last_piece, last_m)) = last_m {
-            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
-            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (last_piece as usize)
+                + usize::from(last_m.dest.into_inner());
+            let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + usize::from(m.dest.into_inner());
             score += conthist[last_index][curr_index] as i32;
         }
         Self::Quiet(score)
@@ -190,7 +205,7 @@ pub struct Search<'a> {
     history: &'a mut [[i16; 64]; 64],
     tt: &'a [TtEntry],
     corrhist: &'a mut [[i32; 16384]; 2],
-    conthist: &'a mut [[i16; 2*6*64]; 2*6*64],
+    conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     path: ArrayVec<[Option<(Piece, Move)>; 64]>,
     eval: ArrayVec<[Option<i32>; 64]>,
     params: &'a SearchParams,
@@ -200,7 +215,7 @@ impl<'a> Search<'a> {
     #[must_use]
     pub fn new(
         start: Instant, stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[i16; 64]; 64],
-        corrhist: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2*6*64]; 2*6*64], params: &'a SearchParams,
+        corrhist: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64], params: &'a SearchParams,
     ) -> Self {
         Self {
             nodes: 0,
@@ -244,7 +259,9 @@ impl<'a> Search<'a> {
         (eval + entry / CORRHIST_GRAIN).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
     }
 
-    fn update_history(&mut self, board: &Board, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move, bonus: i32) {
+    fn update_history(
+        &mut self, board: &Board, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move, bonus: i32,
+    ) {
         const HISTORY_MAX: i32 = 16384;
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
         {
@@ -253,15 +270,23 @@ impl<'a> Search<'a> {
             *history += bonus as i16;
         }
         if let Some((last_piece, last_m)) = last_last_m {
-            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
-            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (last_piece as usize)
+                + usize::from(last_m.dest.into_inner());
+            let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + usize::from(m.dest.into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
             let bonus = bonus - (*conthist as i32) * bonus.abs() / HISTORY_MAX;
             *conthist += bonus as i16;
         }
         if let Some((last_piece, last_m)) = last_m {
-            let last_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(last_piece as usize) + usize::from(last_m.dest.into_inner());
-            let curr_index = 6*64*usize::from(board.side() == Colour::Black) + 64*(board.piece_from_square(m.from).unwrap() as usize) + usize::from(m.dest.into_inner());
+            let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (last_piece as usize)
+                + usize::from(last_m.dest.into_inner());
+            let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + usize::from(m.dest.into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
             let bonus = bonus - (*conthist as i32) * bonus.abs() / HISTORY_MAX;
             *conthist += bonus as i16;
@@ -431,7 +456,7 @@ impl<'a> Search<'a> {
                 }
             }
         }
-        
+
         if alpha != beta - 1 && (tt_entry.is_none() || tt_entry.unwrap().depth as i32 + 3 < depth) && depth >= 3 {
             // internal iterative reduction
             depth -= 1;
@@ -466,16 +491,7 @@ impl<'a> Search<'a> {
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
             self.path.push(None);
-            let score = -self.search(
-                &board,
-                depth - 1 - reduction,
-                -beta,
-                -beta + 1,
-                output,
-                &mut child_pv,
-                ply + 1,
-                keystack,
-            );
+            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, output, &mut child_pv, ply + 1, keystack);
             self.path.pop();
             keystack.pop();
 
@@ -503,7 +519,10 @@ impl<'a> Search<'a> {
             let tt_move = tt_entry.and_then(|e| e.m);
             let last_move = *self.path.last().unwrap_or(&None);
             let last_last_move = *self.path.iter().rev().nth(1).unwrap_or(&None);
-            moves.into_iter().map(|m| (m, MoveOrder::classify(board, self.history, self.conthist, tt_move, last_last_move, last_move, m))).collect::<ArrayVec<[(Move, MoveOrder); 256]>>()
+            moves
+                .into_iter()
+                .map(|m| (m, MoveOrder::classify(board, self.history, self.conthist, tt_move, last_last_move, last_move, m)))
+                .collect::<ArrayVec<[(Move, MoveOrder); 256]>>()
         };
         moves.sort_by_key(|(_, order)| *order);
 
@@ -528,7 +547,14 @@ impl<'a> Search<'a> {
             if ply == 0 {
                 let now = Instant::now();
                 if now >= self.start + Duration::from_secs(2) {
-                    output.new_move(board, depth + root_reduction, self.seldepth, now.duration_since(self.start), self.nodes() + self.qnodes(), m);
+                    output.new_move(
+                        board,
+                        depth + root_reduction,
+                        self.seldepth,
+                        now.duration_since(self.start),
+                        self.nodes() + self.qnodes(),
+                        m,
+                    );
                 }
             }
 
@@ -543,7 +569,7 @@ impl<'a> Search<'a> {
                     continue;
                 }
             }
-            
+
             // Late Move Pruning
             let lmp_threshold = (self.params.lmp_base + (self.params.lmp_mul * depth).pow(self.params.lmp_pow)) as usize;
             if !board.in_check() && !m.is_capture() && depth <= 3 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
@@ -568,42 +594,15 @@ impl<'a> Search<'a> {
             let mut score = 0;
 
             if movecount > 0 {
-                score = -self.search(
-                    &child_board,
-                    depth - reduction,
-                    -alpha - 1,
-                    -alpha,
-                    output,
-                    &mut child_pv,
-                    ply + 1,
-                    keystack,
-                );
+                score = -self.search(&child_board, depth - reduction, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack);
             }
             if movecount > 0 && reduction > 1 && score > alpha {
                 reduction = 1;
-                score = -self.search(
-                    &child_board,
-                    depth - reduction,
-                    -alpha - 1,
-                    -alpha,
-                    output,
-                    &mut child_pv,
-                    ply + 1,
-                    keystack,
-                );
+                score = -self.search(&child_board, depth - reduction, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack);
             }
             if movecount == 0 || alpha != beta - 1 && score > alpha {
                 reduction = 1;
-                score = -self.search(
-                    &child_board,
-                    depth - reduction,
-                    -beta,
-                    -alpha,
-                    output,
-                    &mut child_pv,
-                    ply + 1,
-                    keystack,
-                );
+                score = -self.search(&child_board, depth - reduction, -beta, -alpha, output, &mut child_pv, ply + 1, keystack);
             }
 
             self.path.pop();

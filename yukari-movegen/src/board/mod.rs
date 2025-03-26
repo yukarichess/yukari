@@ -18,11 +18,11 @@ use crate::{
 mod bitlist;
 mod data;
 mod eval;
+mod feature;
 mod index;
 mod piecelist;
 mod piecemask;
 mod pins;
-mod feature;
 mod zobrist;
 
 use bitlist::Bitlist;
