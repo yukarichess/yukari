@@ -484,7 +484,7 @@ impl<'a> Search<'a> {
             }
         }
 
-        let reduction = if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0);
+        let reduction = if depth > 10 { 5 } else if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0);
 
         if alpha == beta - 1 && !board.in_check() && depth >= 2 && eval_int >= beta {
             keystack.push(board.hash());
