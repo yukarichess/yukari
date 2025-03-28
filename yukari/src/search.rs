@@ -146,7 +146,7 @@ impl Ord for MoveOrder {
 
 impl MoveOrder {
     pub fn classify(
-        board: &Board, history: &[[i16; 64]; 64], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64], tt_move: Option<Move>,
+        board: &Board, history: &[[[i16; 64]; 64]; 12], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64], tt_move: Option<Move>,
         last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move,
     ) -> Self {
         if let Some(tt_move) = tt_move {
@@ -165,7 +165,8 @@ impl MoveOrder {
             }
         }
 
-        let mut score = history[m.from.into_inner() as usize][m.dest.into_inner() as usize] as i32;
+        let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
+        let mut score = history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize] as i32;
         if let Some((last_piece, last_m)) = last_last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
@@ -202,7 +203,7 @@ pub struct Search<'a> {
     q_beta_cutoffs: u64,
     start: Instant,
     stop_after: Option<Instant>,
-    history: &'a mut [[i16; 64]; 64],
+    history: &'a mut [[[i16; 64]; 64]; 12],
     tt: &'a [TtEntry],
     corrhist: &'a mut [[i32; 16384]; 2],
     conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64],
@@ -214,7 +215,7 @@ pub struct Search<'a> {
 impl<'a> Search<'a> {
     #[must_use]
     pub fn new(
-        start: Instant, stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[i16; 64]; 64],
+        start: Instant, stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[[i16; 64]; 64]; 12],
         corrhist: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64], params: &'a SearchParams,
     ) -> Self {
         Self {
@@ -265,7 +266,8 @@ impl<'a> Search<'a> {
         const HISTORY_MAX: i32 = 16384;
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
         {
-            let history = &mut self.history[m.from.into_inner() as usize][m.dest.into_inner() as usize];
+            let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
+            let history = &mut self.history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize];
             let bonus = bonus - (*history as i32) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
         }

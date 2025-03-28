@@ -48,7 +48,7 @@ pub struct Yukari {
     nodes_per_second: Option<u32>,
     mode: Mode,
     keystack: Vec<u64>,
-    history: [[i16; 64]; 64],
+    history: [[[i16; 64]; 64]; 12],
     corrhist: [[i32; 16384]; 2],
     conthist: [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     params: SearchParams,
@@ -68,7 +68,7 @@ impl Yukari {
             // Normal move making is on by default
             mode: Mode::Normal,
             keystack: Vec::new(),
-            history: [[0; 64]; 64],
+            history: [[[0; 64]; 64]; 12],
             corrhist: [[0; 16384]; 2],
             conthist: [[0; 2 * 6 * 64]; 2 * 6 * 64],
             params: SearchParams::default(),
@@ -298,9 +298,11 @@ impl Yukari {
         for fen in fens {
             let board = Board::from_fen(fen).unwrap();
             let start = Instant::now();
-            for from in 0..64 {
-                for dest in 0..64 {
-                    self.history[from][dest] = 0;
+            for piece in 0..12 {
+                for from in 0..64 {
+                    for dest in 0..64 {
+                        self.history[piece][from][dest] = 0;
+                    }
                 }
             }
             let mut s = Search::new(start, None, tt, &mut self.history, &mut self.corrhist, &mut self.conthist, &self.params);
