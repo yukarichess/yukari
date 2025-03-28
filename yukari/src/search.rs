@@ -403,7 +403,7 @@ impl<'a> Search<'a> {
     #[allow(clippy::too_many_arguments)]
     fn search(
         &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, output: &mut dyn output::Output,
-        pv: &mut ArrayVec<[Move; 64]>, ply: i32, keystack: &mut Vec<u64>,
+        pv: &mut ArrayVec<[Move; 64]>, ply: i32, keystack: &mut Vec<u64>, excluded_move: Option<Move>,
     ) -> i32 {
         self.seldepth = self.seldepth.max(ply);
 
@@ -441,7 +441,7 @@ impl<'a> Search<'a> {
 
         let tt_entry = self.probe_tt(board, ply);
         if let Some(entry) = tt_entry {
-            if alpha == beta - 1 && entry.depth as i32 >= depth {
+            if excluded_move.is_none() && alpha == beta - 1 && entry.depth as i32 >= depth {
                 let score = entry.score as i32;
                 match entry.flags {
                     TtFlags::Exact => return score,
@@ -459,12 +459,13 @@ impl<'a> Search<'a> {
             }
         }
 
-        if alpha != beta - 1 && (tt_entry.is_none() || tt_entry.unwrap().depth as i32 + 3 < depth) && depth >= 3 {
+        if excluded_move.is_none() && alpha != beta - 1 && (tt_entry.is_none() || tt_entry.unwrap().depth as i32 + 3 < depth) && depth >= 3 {
             // internal iterative reduction
             depth -= 1;
             root_reduction += 1;
         }
 
+        // Improving metric: are we doing better than we were two plies ago?
         let eval_int = self.eval_with_corrhist(board, board.eval(board.side()));
         let mut improving = false;
         if !board.in_check() {
@@ -472,28 +473,30 @@ impl<'a> Search<'a> {
             improving = last_eval.map(|last_eval| eval_int > last_eval).unwrap_or(false);
         }
 
+        // Reverse futility pruning: is the static eval so good we can prune?
         let rfp_margin = self.params.rfp_margin_base + self.params.rfp_margin_mul * depth;
         let rfp_depth = if improving { 5 } else { 4 };
-        if alpha == beta - 1 && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta {
+        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta {
             return eval_int - rfp_margin;
         }
 
+        // Razoring: is the static eval so low we can prune, and not improved by a quiescence search?
         let razor_margin = self.params.razor_margin_mul * depth;
-        if alpha == beta - 1 && !board.in_check() && depth <= 3 && alpha.abs() < 2000 && eval_int + razor_margin <= alpha {
+        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth <= 3 && alpha.abs() < 2000 && eval_int + razor_margin <= alpha {
             let score = self.quiesce(board, alpha, alpha + 1, pv, ply);
             if score <= alpha {
                 return score;
             }
         }
 
+        // Null-move pruning: can we skip a turn and still come off sufficiently winning we can prune?
         let reduction = if depth > 10 { 5 } else if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0);
-
-        if alpha == beta - 1 && !board.in_check() && depth >= 2 && eval_int >= beta {
+        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth >= 2 && eval_int >= beta {
             keystack.push(board.hash());
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
             self.path.push(None);
-            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, output, &mut child_pv, ply + 1, keystack);
+            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, output, &mut child_pv, ply + 1, keystack, None);
             self.path.pop();
             keystack.pop();
 
@@ -517,6 +520,11 @@ impl<'a> Search<'a> {
             return 0;
         }
 
+        // Is this a singular search where we have excluded the only legal move?
+        if moves.len() == 1 && excluded_move.is_some() {
+            return alpha;
+        }
+
         let mut moves = {
             let tt_move = tt_entry.and_then(|e| e.m);
             let last_move = *self.path.last().unwrap_or(&None);
@@ -533,14 +541,22 @@ impl<'a> Search<'a> {
         let mut raised_lower_bound = false;
 
         // Push the move to check for repetition draws
-        keystack.push(board.hash());
-        if board.in_check() {
-            self.eval.push(None);
-        } else {
-            self.eval.push(Some(eval_int));
+        if excluded_move.is_none() {
+            keystack.push(board.hash());
+            if board.in_check() {
+                self.eval.push(None);
+            } else {
+                self.eval.push(Some(eval_int));
+            }
         }
 
         for (movecount, (m, _)) in moves.into_iter().enumerate() {
+            if let Some(excluded_move) = excluded_move {
+                if excluded_move == m {
+                    continue;
+                }
+            }
+
             self.nodes += 1;
             if alpha == beta - 1 {
                 self.zw_nodes += 1;
@@ -578,9 +594,24 @@ impl<'a> Search<'a> {
                 continue;
             }
 
-            self.path.push(Some((board.piece_from_square(m.from).unwrap(), m)));
-
+            let mut extension = 0;
             let mut reduction = 1;
+
+            // Singular extension: is the TT move uniquely good?
+            if let Some(tt_entry) = tt_entry {
+                if excluded_move.is_none() && ply > 0 && depth >= 8 && Some(m) == tt_entry.m && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower) && tt_entry.score.abs() < 9500 {
+                    let singular_beta = (tt_entry.score as i32 - depth * 2).max(-MATE_VALUE + 1); 
+                    let singular_depth = (depth - 1) / 2;
+                    let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, output, pv, ply, keystack, Some(m));
+
+                    // The TT move seems uniquely good; extend.
+                    if score < singular_beta {
+                        extension += 1;
+                    }
+                }
+            }
+
+            self.path.push(Some((board.piece_from_square(m.from).unwrap(), m)));
 
             // Late Move Reduction
             if depth >= 3 && movecount >= 4 && !board.in_check() && !m.is_capture() {
@@ -596,15 +627,15 @@ impl<'a> Search<'a> {
             let mut score = 0;
 
             if movecount > 0 {
-                score = -self.search(&child_board, depth - reduction, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack);
+                score = -self.search(&child_board, depth - reduction + extension, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack, None);
             }
             if movecount > 0 && reduction > 1 && score > alpha {
                 reduction = 1;
-                score = -self.search(&child_board, depth - reduction, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack);
+                score = -self.search(&child_board, depth - reduction + extension, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack, None);
             }
             if movecount == 0 || alpha != beta - 1 && score > alpha {
                 reduction = 1;
-                score = -self.search(&child_board, depth - reduction, -beta, -alpha, output, &mut child_pv, ply + 1, keystack);
+                score = -self.search(&child_board, depth - reduction + extension, -beta, -alpha, output, &mut child_pv, ply + 1, keystack, None);
             }
 
             self.path.pop();
@@ -626,8 +657,10 @@ impl<'a> Search<'a> {
             if self.nodes.trailing_zeros() >= 10 {
                 if let Some(time) = self.stop_after {
                     if Instant::now() >= time {
-                        keystack.pop();
-                        self.eval.pop();
+                        if excluded_move.is_none() {
+                            keystack.pop();
+                            self.eval.pop();
+                        }
                         return best_score;
                     }
                 }
@@ -680,33 +713,37 @@ impl<'a> Search<'a> {
             }
         }
 
-        keystack.pop();
-        self.eval.pop();
+        if excluded_move.is_none() {
+            keystack.pop();
+            self.eval.pop();
+        }
 
-        self.write_tt(
-            board,
-            ply,
-            TtData {
-                m: best_move,
-                score: best_score as i16,
-                flags: if best_score >= beta {
-                    TtFlags::Lower
-                } else if raised_lower_bound {
-                    TtFlags::Exact
-                } else {
-                    TtFlags::Upper
+        if excluded_move.is_none() {
+            self.write_tt(
+                board,
+                ply,
+                TtData {
+                    m: best_move,
+                    score: best_score as i16,
+                    flags: if best_score >= beta {
+                        TtFlags::Lower
+                    } else if raised_lower_bound {
+                        TtFlags::Exact
+                    } else {
+                        TtFlags::Upper
+                    },
+                    depth: depth as u8,
                 },
-                depth: depth as u8,
-            },
-        );
+            );
 
-        if !board.in_check()
-            && !best_move.unwrap().is_capture()
-            && (raised_lower_bound
-                || (best_score >= beta && best_score >= eval_int)
-                || (best_score <= alpha && best_score <= eval_int))
-        {
-            self.update_corrhist(board, depth, best_score - eval_int);
+            if !board.in_check()
+                && !best_move.unwrap().is_capture()
+                && (raised_lower_bound
+                    || (best_score >= beta && best_score >= eval_int)
+                    || (best_score <= alpha && best_score <= eval_int))
+            {
+                self.update_corrhist(board, depth, best_score - eval_int);
+            }
         }
 
         best_score
@@ -718,7 +755,7 @@ impl<'a> Search<'a> {
         pv: &mut ArrayVec<[Move; 64]>, keystack: &mut Vec<u64>,
     ) -> i32 {
         self.seldepth = 0;
-        let score = self.search(board, depth, lower_bound, upper_bound, output, pv, 0, keystack);
+        let score = self.search(board, depth, lower_bound, upper_bound, output, pv, 0, keystack, None);
         assert_eq!(self.path.len(), 0);
         assert_eq!(self.eval.len(), 0);
         score
