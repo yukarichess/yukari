@@ -610,10 +610,12 @@ impl<'a> Search<'a> {
                         self.eval.pop();
                         return singular_beta;
                     }
-
-                    // The TT move seems uniquely good; extend.
+                    
                     if score < singular_beta {
+                        // The TT move seems uniquely good; extend.
                         extension += 1;
+                    } else if tt_entry.score as i32 >= beta {
+                        extension -= 1;
                     }
                 }
             }
