@@ -490,7 +490,7 @@ impl<'a> Search<'a> {
         }
 
         // Null-move pruning: can we skip a turn and still come off sufficiently winning we can prune?
-        let reduction = if depth > 10 { 5 } else if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0);
+        let reduction = if depth > 10 { 5 } else if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0) + i32::from(improving);
         if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth >= 2 && eval_int >= beta {
             keystack.push(board.hash());
             let board = board.make_null();
