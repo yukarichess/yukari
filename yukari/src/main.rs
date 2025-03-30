@@ -315,7 +315,7 @@ impl Yukari {
                 pv.set_len(0);
                 let lower_window = score - lower_bound;
                 let upper_window = score + upper_bound;
-                let mut output = output::Xboard::start(&self.board);
+                let mut output = output::Xboard::start(&board);
                 score = s.search_root(&board, 11, lower_window, upper_window, &mut output, &mut pv, &mut keystack);
                 if score <= lower_window {
                     lower_bound *= 2;

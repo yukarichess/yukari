@@ -123,11 +123,11 @@ impl BoardData {
         self.index.add_piece(piece_index, square);
         Zobrist::add_piece(colour, self.piece_from_bit(piece_index), square, &mut self.hash);
 
-        let white_king = self.king_square(Colour::White);
-        let black_king = self.king_square(Colour::Black);
-        self.eval.add_piece(piece, square, colour, white_king, black_king);
-
         if update {
+            let white_king = self.king_square(Colour::White);
+            let black_king = self.king_square(Colour::Black);
+            self.eval.add_piece(piece, square, colour, white_king, black_king);
+
             self.update_attacks(square, piece_index, piece, true);
             self.update_sliders(square, false, None);
             // fixup: add threats to new square
