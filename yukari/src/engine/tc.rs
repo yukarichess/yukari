@@ -79,7 +79,7 @@ impl TimeControl {
 /// Time controls can be operating in several modes which have different interpretations
 #[derive(Clone, Copy, Debug)]
 pub enum TimeMode {
-    /// MoveTime mode has a fixed number of milliseconds per move
+    /// `MoveTime` mode has a fixed number of milliseconds per move
     MoveTime(u32),
     /// Incremental mode gives us the whole game's clock, plus time to be added after each move
     Incremental {

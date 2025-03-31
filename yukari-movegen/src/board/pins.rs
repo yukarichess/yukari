@@ -1,7 +1,7 @@
 use crate::{
-    board::{bitlist::Bitlist, Board},
-    square::{Direction, Square16x8},
     Piece,
+    board::{Board, bitlist::Bitlist},
+    square::{Direction, Square16x8},
 };
 
 /// Pin information in a board.

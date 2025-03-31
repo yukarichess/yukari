@@ -1,6 +1,6 @@
 use crate::{
-    square::{Direction, Square16x8},
     Piece, Square,
+    square::{Direction, Square16x8},
 };
 
 const DIRECTIONS: [&[Direction]; 6] = [
@@ -164,7 +164,5 @@ pub fn index_threat(
         Piece::King => piece_threat(&KING_INDEX, &KING_ATTACKS, KING_OFFSET),
     };
 
-    let idx = 768 + (usize::from(!friendly) * MAX_OFFSET) + idx;
-    //print!(" {idx},");
-    idx
+    768 + (usize::from(!friendly) * MAX_OFFSET) + idx
 }

@@ -122,11 +122,7 @@ impl Eval {
     }
 
     pub fn mirror(king: Square) -> usize {
-        if HORIZONTAL_MIRROR && File::from(king) >= File::E {
-            7
-        } else {
-            0
-        }
+        if HORIZONTAL_MIRROR && File::from(king) >= File::E { 7 } else { 0 }
     }
 
     pub fn add_piece_for_acc(
@@ -177,6 +173,7 @@ impl Eval {
         self.black.add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_threat(
         &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
         white_king: Square, black_king: Square,
@@ -254,6 +251,7 @@ impl Eval {
         self.black.remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn remove_threat(
         &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
         white_king: Square, black_king: Square,

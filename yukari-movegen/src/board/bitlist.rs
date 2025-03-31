@@ -69,11 +69,13 @@ impl Bitlist {
     /// Return the lowest set bit of a `Bitlist` as a `PieceIndex`.
     pub const unsafe fn peek_nonzero(self) -> PieceIndex {
         if self.0 == 0 {
-            std::hint::unreachable_unchecked();
+            unsafe {
+                std::hint::unreachable_unchecked();
+            }
         }
         #[allow(clippy::cast_possible_truncation)]
         let bit = self.0.trailing_zeros() as u8;
-        PieceIndex::new_unchecked(bit)
+        unsafe { PieceIndex::new_unchecked(bit) }
     }
 
     /// Return the lowest set bit of a `Bitlist` as a `PieceIndex`, if it exists, and clear that bit.

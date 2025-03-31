@@ -6,6 +6,7 @@ use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Move};
 
 pub trait Output {
+    #[allow(clippy::too_many_arguments)]
     fn new_pv(&mut self, board: &Board, depth: i32, seldepth: i32, score: i32, time: Duration, nodes: u64, pv: &[Move]);
     fn new_move(&mut self, board: &Board, depth: i32, seldepth: i32, time: Duration, nodes: u64, m: Move);
     #[allow(clippy::too_many_arguments)]
@@ -21,6 +22,7 @@ pub struct Human {
 }
 
 impl Human {
+    #[must_use]
     pub fn start(board: &Board) -> Self {
         let mut moves = ArrayVec::new();
         board.generate(&mut moves);
@@ -111,6 +113,7 @@ pub struct Xboard {
 }
 
 impl Xboard {
+    #[must_use]
     pub fn start(board: &Board) -> Self {
         let mut moves = ArrayVec::new();
         board.generate(&mut moves);
@@ -171,6 +174,7 @@ pub struct Uci {
 }
 
 impl Uci {
+    #[must_use]
     pub fn start(_board: &Board) -> Self {
         Self { moves: 1 }
     }

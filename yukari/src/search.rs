@@ -160,13 +160,12 @@ impl MoveOrder {
             let from_piece = board.piece_from_square(m.from).unwrap();
             if (dest_piece >= from_piece) || board.static_exchange_evaluation(m) >= 0 {
                 return Self::GoodCapture(dest_piece, from_piece);
-            } else {
-                return Self::BadCapture(dest_piece, from_piece);
             }
+            return Self::BadCapture(dest_piece, from_piece);
         }
 
         let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
-        let mut score = history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize] as i32;
+        let mut score = i32::from(history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize]);
         if let Some((last_piece, last_m)) = last_last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
@@ -174,7 +173,7 @@ impl MoveOrder {
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (board.piece_from_square(m.from).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
-            score += conthist[last_index][curr_index] as i32;
+            score += i32::from(conthist[last_index][curr_index]);
         }
         if let Some((last_piece, last_m)) = last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
@@ -183,7 +182,7 @@ impl MoveOrder {
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (board.piece_from_square(m.from).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
-            score += conthist[last_index][curr_index] as i32;
+            score += i32::from(conthist[last_index][curr_index]);
         }
         Self::Quiet(score)
     }
@@ -268,7 +267,7 @@ impl<'a> Search<'a> {
         {
             let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
             let history = &mut self.history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize];
-            let bonus = bonus - (*history as i32) * bonus.abs() / HISTORY_MAX;
+            let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
         }
         if let Some((last_piece, last_m)) = last_last_m {
@@ -279,7 +278,7 @@ impl<'a> Search<'a> {
                 + 64 * (board.piece_from_square(m.from).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
-            let bonus = bonus - (*conthist as i32) * bonus.abs() / HISTORY_MAX;
+            let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
             *conthist += bonus as i16;
         }
         if let Some((last_piece, last_m)) = last_m {
@@ -290,7 +289,7 @@ impl<'a> Search<'a> {
                 + 64 * (board.piece_from_square(m.from).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
-            let bonus = bonus - (*conthist as i32) * bonus.abs() / HISTORY_MAX;
+            let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
             *conthist += bonus as i16;
         }
     }
@@ -314,7 +313,7 @@ impl<'a> Search<'a> {
 
         if let Some(entry) = self.probe_tt(board, 0) {
             if alpha == beta - 1 {
-                let score = entry.score as i32;
+                let score = i32::from(entry.score);
                 match entry.flags {
                     TtFlags::Exact => return score,
                     TtFlags::Upper => {
@@ -375,10 +374,10 @@ impl<'a> Search<'a> {
         let mut entry: TtData = unsafe { std::mem::transmute(entry_data) };
 
         if entry_key ^ entry_data == board.hash() {
-            if entry.score as i32 >= MATE_VALUE - 500 {
+            if i32::from(entry.score) >= MATE_VALUE - 500 {
                 entry.score -= ply as i16;
             }
-            if entry.score as i32 <= -MATE_VALUE + 500 {
+            if i32::from(entry.score) <= -MATE_VALUE + 500 {
                 entry.score += ply as i16;
             }
             return Some(entry);
@@ -441,8 +440,8 @@ impl<'a> Search<'a> {
 
         let tt_entry = self.probe_tt(board, ply);
         if let Some(entry) = tt_entry {
-            if excluded_move.is_none() && alpha == beta - 1 && entry.depth as i32 >= depth {
-                let score = entry.score as i32;
+            if excluded_move.is_none() && alpha == beta - 1 && i32::from(entry.depth) >= depth {
+                let score = i32::from(entry.score);
                 match entry.flags {
                     TtFlags::Exact => return score,
                     TtFlags::Upper => {
@@ -459,7 +458,11 @@ impl<'a> Search<'a> {
             }
         }
 
-        if excluded_move.is_none() && alpha != beta - 1 && (tt_entry.is_none() || tt_entry.unwrap().depth as i32 + 3 < depth) && depth >= 3 {
+        if excluded_move.is_none()
+            && alpha != beta - 1
+            && (tt_entry.is_none() || i32::from(tt_entry.unwrap().depth) + 3 < depth)
+            && depth >= 3
+        {
             // internal iterative reduction
             depth -= 1;
             root_reduction += 1;
@@ -470,19 +473,26 @@ impl<'a> Search<'a> {
         let mut improving = false;
         if !board.in_check() {
             let last_eval = *self.eval.iter().rev().nth(1).unwrap_or(&None);
-            improving = last_eval.map(|last_eval| eval_int > last_eval).unwrap_or(false);
+            improving = last_eval.is_some_and(|last_eval| eval_int > last_eval);
         }
 
         // Reverse futility pruning: is the static eval so good we can prune?
         let rfp_margin = self.params.rfp_margin_base + self.params.rfp_margin_mul * depth;
         let rfp_depth = if improving { 5 } else { 4 };
-        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta {
+        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta
+        {
             return eval_int - rfp_margin;
         }
 
         // Razoring: is the static eval so low we can prune, and not improved by a quiescence search?
         let razor_margin = self.params.razor_margin_mul * depth;
-        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth <= 3 && alpha.abs() < 2000 && eval_int + razor_margin <= alpha {
+        if excluded_move.is_none()
+            && alpha == beta - 1
+            && !board.in_check()
+            && depth <= 3
+            && alpha.abs() < 2000
+            && eval_int + razor_margin <= alpha
+        {
             let score = self.quiesce(board, alpha, alpha + 1, pv, ply);
             if score <= alpha {
                 return score;
@@ -490,13 +500,21 @@ impl<'a> Search<'a> {
         }
 
         // Null-move pruning: can we skip a turn and still come off sufficiently winning we can prune?
-        let reduction = if depth > 10 { 5 } else if depth > 6 { 4 } else { 3 } + ((eval_int - beta) / 200).max(0) + i32::from(improving);
+        let reduction = if depth > 10 {
+            5
+        } else if depth > 6 {
+            4
+        } else {
+            3
+        } + ((eval_int - beta) / 200).max(0)
+            + i32::from(improving);
         if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth >= 2 && eval_int >= beta {
             keystack.push(board.hash());
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
             self.path.push(None);
-            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, output, &mut child_pv, ply + 1, keystack, None);
+            let score =
+                -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, output, &mut child_pv, ply + 1, keystack, None);
             self.path.pop();
             keystack.pop();
 
@@ -599,10 +617,17 @@ impl<'a> Search<'a> {
 
             // Singular extension: is the TT move uniquely good?
             if let Some(tt_entry) = tt_entry {
-                if excluded_move.is_none() && ply > 0 && depth >= 8 && Some(m) == tt_entry.m && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower) && tt_entry.score.abs() < 9500 {
-                    let singular_beta = (tt_entry.score as i32 - depth * 2).max(-MATE_VALUE + 1); 
+                if excluded_move.is_none()
+                    && ply > 0
+                    && depth >= 8
+                    && Some(m) == tt_entry.m
+                    && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower)
+                    && tt_entry.score.abs() < 9500
+                {
+                    let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
                     let singular_depth = (depth - 1) / 2;
-                    let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, output, pv, ply, keystack, Some(m));
+                    let score =
+                        self.search(board, singular_depth, singular_beta - 1, singular_beta, output, pv, ply, keystack, Some(m));
 
                     // Another move failed high, so this node is very good; prune.
                     if score >= singular_beta && singular_beta >= beta {
@@ -610,11 +635,11 @@ impl<'a> Search<'a> {
                         self.eval.pop();
                         return singular_beta;
                     }
-                    
+
                     if score < singular_beta {
                         // The TT move seems uniquely good; extend.
                         extension += 1;
-                    } else if tt_entry.score as i32 >= beta {
+                    } else if i32::from(tt_entry.score) >= beta {
                         extension -= 1;
                     }
                 }
@@ -636,15 +661,45 @@ impl<'a> Search<'a> {
             let mut score = 0;
 
             if movecount > 0 {
-                score = -self.search(&child_board, depth - reduction + extension, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack, None);
+                score = -self.search(
+                    &child_board,
+                    depth - reduction + extension,
+                    -alpha - 1,
+                    -alpha,
+                    output,
+                    &mut child_pv,
+                    ply + 1,
+                    keystack,
+                    None,
+                );
             }
             if movecount > 0 && reduction > 1 && score > alpha {
                 reduction = 1;
-                score = -self.search(&child_board, depth - reduction + extension, -alpha - 1, -alpha, output, &mut child_pv, ply + 1, keystack, None);
+                score = -self.search(
+                    &child_board,
+                    depth - reduction + extension,
+                    -alpha - 1,
+                    -alpha,
+                    output,
+                    &mut child_pv,
+                    ply + 1,
+                    keystack,
+                    None,
+                );
             }
             if movecount == 0 || alpha != beta - 1 && score > alpha {
                 reduction = 1;
-                score = -self.search(&child_board, depth - reduction + extension, -beta, -alpha, output, &mut child_pv, ply + 1, keystack, None);
+                score = -self.search(
+                    &child_board,
+                    depth - reduction + extension,
+                    -beta,
+                    -alpha,
+                    output,
+                    &mut child_pv,
+                    ply + 1,
+                    keystack,
+                    None,
+                );
             }
 
             self.path.pop();

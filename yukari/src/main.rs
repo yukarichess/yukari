@@ -2,8 +2,8 @@ use std::{
     io::{self, BufWriter},
     str::FromStr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -13,11 +13,10 @@ use indicatif::{ParallelProgressIterator, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tinyvec::ArrayVec;
 use yukari::{
-    self, allocate_tt, datagen,
+    self, Search, SearchParams, TtEntry, allocate_tt, datagen,
     engine::{TimeControl, TimeMode},
     is_repetition_draw,
     output::{self, Output},
-    Search, SearchParams, TtEntry,
 };
 use yukari_movegen::{Board, Colour, Move, Piece, Square};
 
@@ -224,7 +223,7 @@ impl Yukari {
                 break;
             }
             if let Some(nodes) = nodes {
-                if s.nodes() + s.qnodes() >= nodes as u64 {
+                if s.nodes() + s.qnodes() >= u64::from(nodes) {
                     break;
                 }
             }
@@ -470,7 +469,7 @@ fn main() -> io::Result<()> {
             }
             "uci" => {
                 protocol = Protocol::Uci;
-                println!("id name Yukari 2025.3.4");
+                println!("id name Yukari 2025.4.1");
                 println!("id author Hannah Ravensloft");
                 println!("option name Hash type spin default 16 min 1 max 8192");
                 println!("option name Threads type spin default 1 min 1 max 1");
@@ -481,7 +480,7 @@ fn main() -> io::Result<()> {
                 // v1 won't send this anyway and we need v2
                 assert_eq!(args, "2");
                 // Do features individually
-                println!("feature myname=\"Yukari 2025.3.4\"");
+                println!("feature myname=\"Yukari 2025.4.1\"");
                 // No signals support
                 println!("feature sigint=0 sigterm=0");
                 // Ping feature helps with race conditions
@@ -516,25 +515,25 @@ fn main() -> io::Result<()> {
             "position" => {
                 engine.mode = Mode::Force;
                 engine.keystack.clear();
-                (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                 match cmd {
                     "startpos" => engine.board = Board::startpos(),
                     "fen" => {
-                        (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                        (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                         let mut fen = cmd.to_string();
-                        (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                        (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                         fen.push(' ');
                         fen.push_str(cmd);
-                        (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                        (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                         fen.push(' ');
                         fen.push_str(cmd);
-                        (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                        (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                         fen.push(' ');
                         fen.push_str(cmd);
-                        (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                        (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                         fen.push(' ');
                         fen.push_str(cmd);
-                        (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                        (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                         fen.push(' ');
                         fen.push_str(cmd);
                         engine.board = Board::from_fen(&fen).unwrap();
@@ -542,11 +541,11 @@ fn main() -> io::Result<()> {
                     _ => unreachable!("unrecognised position subcommand"),
                 }
                 if !args.is_empty() {
-                    (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                    (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                     assert_eq!(cmd, "moves");
                     engine.tc.reset_moves();
                     while !args.is_empty() {
-                        (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                        (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
 
                         let chars = cmd.as_bytes();
                         let from = Square::from_str(&cmd[..2]).unwrap();
@@ -583,7 +582,7 @@ fn main() -> io::Result<()> {
                 tt = allocate_tt(megabytes);
             }
             "option" => {
-                let (name, value) = args.split_once("=").unwrap();
+                let (name, value) = args.split_once('=').unwrap();
                 if name == "Hash" {
                     // UCIism. grumble grumble.
                     let value = value.parse::<i32>().unwrap();
@@ -607,12 +606,12 @@ fn main() -> io::Result<()> {
                 }
             }
             "setoption" => {
-                let (name, args) = args.split_once(" ").unwrap_or((args, ""));
+                let (name, args) = args.split_once(' ').unwrap_or((args, ""));
                 assert_eq!(name, "name");
-                let (name, args) = args.split_once(" ").unwrap_or((args, ""));
-                let (value, args) = args.split_once(" ").unwrap_or((args, ""));
+                let (name, args) = args.split_once(' ').unwrap_or((args, ""));
+                let (value, args) = args.split_once(' ').unwrap_or((args, ""));
                 assert_eq!(value, "value");
-                let (value, _) = args.split_once(" ").unwrap_or((args, ""));
+                let (value, _) = args.split_once(' ').unwrap_or((args, ""));
                 let value = value.parse::<i32>().unwrap();
                 match name {
                     "RfpMarginBase" => engine.params.rfp_margin_base = value,
@@ -660,47 +659,47 @@ fn main() -> io::Result<()> {
                 // is this a UCI go?
                 while !args.is_empty() {
                     uci = true;
-                    (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                    (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                     match cmd {
                         "wtime" => {
-                            (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             if engine.board.side() == Colour::White {
                                 engine.set_remaining((u32::from_str(cmd).unwrap() / 10) as f32);
                             }
                         }
                         "btime" => {
-                            (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             if engine.board.side() == Colour::Black {
                                 engine.set_remaining((u32::from_str(cmd).unwrap() / 10) as f32);
                             }
                         }
                         "winc" => {
-                            (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             if engine.board.side() == Colour::White {
                                 engine.tc.mode.increment(u32::from_str(cmd).unwrap());
                             }
                         }
                         "binc" => {
-                            (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             if engine.board.side() == Colour::Black {
                                 engine.tc.mode.increment(u32::from_str(cmd).unwrap());
                             }
                         }
                         "movetime" => {
-                            (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             engine.tc.mode.fixed_time_per_move((u32::from_str(cmd).unwrap() as f32) / 1000.0);
                         }
                         "depth" => {
-                            (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             engine.max_depth = Some(i32::from_str(cmd).unwrap());
                         }
                         "nodes" => {
-                            (cmd, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             engine.nodes_per_second = Some(u32::from_str(cmd).unwrap());
                             engine.tc.mode.fixed_time_per_move(1.0);
                         }
                         "mate" => {
-                            (_, args) = args.split_once(" ").unwrap_or((args, ""));
+                            (_, args) = args.split_once(' ').unwrap_or((args, ""));
                         }
                         "infinite" | "ponder" => {}
                         _ => {} // ignore anything we don't understand.

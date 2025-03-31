@@ -43,7 +43,7 @@ pub fn perft(board: &Board, depth: u32) -> u64 {
 
 #[cfg(test)]
 mod perft {
-    use crate::{perft, Board};
+    use crate::{Board, perft};
 
     #[test]
     fn perft_test1() {

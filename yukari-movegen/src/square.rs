@@ -615,7 +615,7 @@ impl Square {
     /// `sq` must be in the range 0-63.
     #[must_use]
     pub const unsafe fn from_u8_unchecked(sq: u8) -> Self {
-        Self(NonZeroU8::new_unchecked(sq + 1))
+        Self(unsafe { NonZeroU8::new_unchecked(sq + 1) })
     }
 
     /// Return the internal `u8` with the range 0-63.
@@ -636,55 +636,55 @@ impl Square {
 
     /// Return the `Square` in a given `Direction`, if one exists.
     #[must_use]
-    pub fn travel(self, direction: Direction) -> Option<Self> {
+    pub const fn travel(self, direction: Direction) -> Option<Self> {
         // Note to adventurous enbies: this gets inlined everywhere, so it needs to be branchless.
         // Don't get ambitious with optimisations.
         Square16x8::from_square(self).add_dir(direction).to_square()
     }
 
     #[must_use]
-    pub fn north(self) -> Option<Self> {
+    pub const fn north(self) -> Option<Self> {
         self.travel(Direction::North)
     }
 
     #[must_use]
-    pub fn north_east(self) -> Option<Self> {
+    pub const fn north_east(self) -> Option<Self> {
         self.travel(Direction::NorthEast)
     }
 
     #[must_use]
-    pub fn east(self) -> Option<Self> {
+    pub const fn east(self) -> Option<Self> {
         self.travel(Direction::East)
     }
 
     #[must_use]
-    pub fn south_east(self) -> Option<Self> {
+    pub const fn south_east(self) -> Option<Self> {
         self.travel(Direction::SouthEast)
     }
 
     #[must_use]
-    pub fn south(self) -> Option<Self> {
+    pub const fn south(self) -> Option<Self> {
         self.travel(Direction::South)
     }
 
     #[must_use]
-    pub fn south_west(self) -> Option<Self> {
+    pub const fn south_west(self) -> Option<Self> {
         self.travel(Direction::SouthWest)
     }
 
     #[must_use]
-    pub fn west(self) -> Option<Self> {
+    pub const fn west(self) -> Option<Self> {
         self.travel(Direction::West)
     }
 
     #[must_use]
-    pub fn north_west(self) -> Option<Self> {
+    pub const fn north_west(self) -> Option<Self> {
         self.travel(Direction::NorthWest)
     }
 
     /// The colour-dependent north of a square.
     #[must_use]
-    pub fn relative_north(self, colour: Colour) -> Option<Self> {
+    pub const fn relative_north(self, colour: Colour) -> Option<Self> {
         match colour {
             Colour::White => self.north(),
             Colour::Black => self.south(),
@@ -693,7 +693,7 @@ impl Square {
 
     /// The colour-dependent south of a square.
     #[must_use]
-    pub fn relative_south(self, colour: Colour) -> Option<Self> {
+    pub const fn relative_south(self, colour: Colour) -> Option<Self> {
         match colour {
             Colour::White => self.south(),
             Colour::Black => self.north(),
@@ -702,7 +702,7 @@ impl Square {
 
     /// An iterator over the squares a pawn attacks.
     #[must_use]
-    pub fn pawn_attacks(self, colour: Colour) -> PawnIter {
+    pub const fn pawn_attacks(self, colour: Colour) -> PawnIter {
         let relative_north = match colour {
             Colour::White => self.north(),
             Colour::Black => self.south(),

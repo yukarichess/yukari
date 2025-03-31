@@ -1,4 +1,4 @@
-use crate::{square::File, Colour, Piece, Square};
+use crate::{Colour, Piece, Square, square::File};
 
 // A big thank-you to @87flowers@mk.absturztau.be for understanding the math behind BCH codes.
 //

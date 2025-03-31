@@ -1,5 +1,4 @@
 # Yukari 💜
-(you can call it Dorpsgek H if you prefer)
 
 Yukari is a primarily xboard-protocol chess program.
 (UCI support exists, but xboard should be preferred if your GUI isn't from the stone age.)
@@ -16,6 +15,7 @@ make
 
 ## how strong is it?
 
+- 2025.4.1: approximately 3450 CCRL 40/4
 - 2025.3.4: 3376 CCRL 40/4; 3329 CCRL 40/40
 - 2025.2.4: 3081 CCRL 40/4; 3103 CCRL 40/40
 - 2024.12.1: 2825 CCRL 40/4; 2824 CCRL 40/40
@@ -29,6 +29,7 @@ in no particular order:
 - @dannyhammer for hosting and sharing the Toad OpenBench instance
 - @Ciekce for guiding the NNUE implementation
 - @JonathanHallstrom for running Yukari datagen
+- Jim Ablett, for building binaries
 - the Loftycord, for being amazing friends
 
 sometimes you *can* teach an old wolf new tricks.

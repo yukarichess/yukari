@@ -7,10 +7,10 @@ use super::{
     zobrist::Zobrist,
 };
 use crate::{
+    File,
     colour::Colour,
     piece::Piece,
     square::{Direction, Square, Square16x8},
-    File,
 };
 
 #[allow(clippy::module_name_repetitions)]
@@ -242,14 +242,7 @@ impl BoardData {
             );
         }
 
-        self.eval.remove_piece_for_acc(
-            piece,
-            from_square,
-            piece_index.colour(),
-            white_king,
-            black_king,
-            !piece_index.is_white(),
-        );
+        self.eval.remove_piece_for_acc(piece, from_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
         self.eval.add_piece_for_acc(piece, to_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
         // fixup: clear threats to old square
         for attack in self.bitlist[from_square] & !Bitlist::from_piece(piece_index) {
@@ -512,11 +505,7 @@ impl BoardData {
                     let to_colour = from_square.map_or_else(
                         || self.colour_from_square(dest),
                         |from_square| {
-                            if from_square == dest {
-                                self.colour_from_square(square)
-                            } else {
-                                self.colour_from_square(dest)
-                            }
+                            if from_square == dest { self.colour_from_square(square) } else { self.colour_from_square(dest) }
                         },
                     );
                     self.bitlist.remove_piece(dest, piece);

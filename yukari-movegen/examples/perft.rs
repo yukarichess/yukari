@@ -75,7 +75,7 @@ pub fn perft_with_hash(board: &Board, depth: u32, tt: &[PerftEntry]) -> u64 {
             let entry = (board.hash() & ((tt.len() - 1) as u64)) as usize;
             let entry = &tt[entry];
 
-            let entry_data = (depth as u64) << 56 | count;
+            let entry_data = u64::from(depth) << 56 | count;
             entry.key.store(board.hash() ^ entry_data, Ordering::Relaxed);
             entry.data.store(entry_data, Ordering::Relaxed);
         }
@@ -99,7 +99,7 @@ pub fn divide(board: &Board, depth: u32, tt: &[PerftEntry]) -> u64 {
             .map(|m| {
                 let board = board.make(*m);
                 let nodes = perft_with_hash(&board, depth - 1, tt);
-                println!("{} {}", m, nodes);
+                println!("{m} {nodes}");
                 nodes
             })
             .sum()
@@ -125,6 +125,6 @@ fn main() {
     let tt = allocate_perft_tt(256);
     let start = Instant::now();
     let nodes = divide(&board, depth, &tt);
-    println!("Perft {}: {}", depth, nodes);
+    println!("Perft {depth}: {nodes}");
     println!("time: {:.3}s", Instant::now().duration_since(start).as_secs_f32());
 }

@@ -16,7 +16,7 @@ impl PieceIndex {
     /// `x` must be in the range 0-31.
     #[must_use]
     pub const unsafe fn new_unchecked(x: u8) -> Self {
-        Self(NonZeroU8::new_unchecked(x + 1))
+        Self(unsafe { NonZeroU8::new_unchecked(x + 1) })
     }
 
     #[must_use]
@@ -36,11 +36,7 @@ impl PieceIndex {
 
     #[must_use]
     pub const fn colour(self) -> Colour {
-        if self.is_white() {
-            Colour::White
-        } else {
-            Colour::Black
-        }
+        if self.is_white() { Colour::White } else { Colour::Black }
     }
 }
 
@@ -59,11 +55,7 @@ impl TryFrom<u8> for PieceIndex {
 
 impl From<PieceIndex> for Colour {
     fn from(index: PieceIndex) -> Self {
-        if index.is_white() {
-            Self::White
-        } else {
-            Self::Black
-        }
+        if index.is_white() { Self::White } else { Self::Black }
     }
 }
 
