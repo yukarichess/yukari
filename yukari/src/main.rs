@@ -20,6 +20,7 @@ use yukari::{
 };
 use yukari_movegen::{Board, Colour, Move, Piece, Square};
 
+
 #[derive(Clone, Copy, Debug)]
 enum Mode {
     /// In normal mode (which is more properly probably called thinking mode), we respond
@@ -153,11 +154,13 @@ impl Yukari {
                     Protocol::Uci => &mut output::Uci::start(&self.board),
                 };
                 score = s.search_root(&self.board, depth, lower_window, upper_window, output, &mut pv, &mut self.keystack);
+
                 // If we have bailed out stop the loop
                 if stop_after.is_some() && Instant::now() >= hard_limit {
                     output.abort();
                     break;
                 }
+
                 if score <= lower_window {
                     lower_bound *= 2;
                     output.complete(
@@ -180,6 +183,7 @@ impl Yukari {
                         depth,
                         s.seldepth(),
                         score,
+
                         Instant::now().duration_since(start),
                         s.nodes() + s.qnodes(),
                         &pv,
@@ -316,6 +320,7 @@ impl Yukari {
                 let upper_window = score + upper_bound;
                 let mut output = output::Xboard::start(&board);
                 score = s.search_root(&board, 11, lower_window, upper_window, &mut output, &mut pv, &mut keystack);
+
                 if score <= lower_window {
                     lower_bound *= 2;
                     output.complete(
