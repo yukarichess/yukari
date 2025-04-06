@@ -134,7 +134,7 @@ impl Yukari {
             (None, Some(hard_limit))
         };
 
-        let mut s = Search::new(start, stop_after, tt, &mut self.history, &mut self.corrhist, &mut self.conthist, &self.params);
+        let mut s = Search::new(stop_after, tt, &mut self.history, &mut self.corrhist, &mut self.conthist, &self.params);
         // clone another to use inside the loop
         // Use a seperate backing data to record the current move set
         let mut depth = 1;
@@ -153,7 +153,7 @@ impl Yukari {
                     Protocol::Xboard => &mut output::Xboard::start(&self.board),
                     Protocol::Uci => &mut output::Uci::start(&self.board),
                 };
-                score = s.search_root(&self.board, depth, lower_window, upper_window, output, &mut pv, &mut self.keystack);
+                score = s.search_root(&self.board, depth, lower_window, upper_window, &mut pv, &mut self.keystack);
 
                 // If we have bailed out stop the loop
                 if stop_after.is_some() && Instant::now() >= hard_limit {
@@ -308,7 +308,7 @@ impl Yukari {
                     }
                 }
             }
-            let mut s = Search::new(start, None, tt, &mut self.history, &mut self.corrhist, &mut self.conthist, &self.params);
+            let mut s = Search::new(None, tt, &mut self.history, &mut self.corrhist, &mut self.conthist, &self.params);
             let mut keystack = Vec::new();
             let mut pv = ArrayVec::new();
             let mut score = 0;
@@ -319,7 +319,7 @@ impl Yukari {
                 let lower_window = score - lower_bound;
                 let upper_window = score + upper_bound;
                 let mut output = output::Xboard::start(&board);
-                score = s.search_root(&board, 11, lower_window, upper_window, &mut output, &mut pv, &mut keystack);
+                score = s.search_root(&board, 11, lower_window, upper_window, &mut pv, &mut keystack);
 
                 if score <= lower_window {
                     lower_bound *= 2;

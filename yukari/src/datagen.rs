@@ -9,7 +9,7 @@ use rand::seq::IteratorRandom;
 use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Colour, File, Move, Piece, Rank, Square};
 
-use crate::{output, search};
+use crate::search;
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
@@ -249,7 +249,6 @@ impl<'a, T: Write> DataGen<'a, T> {
         let start = Instant::now();
         let stop_after = start + Duration::from_secs_f32(if node_limit { 0.25 } else { 2.0 });
         let mut s = search::Search::new(
-            start,
             Some(stop_after),
             &self.tt,
             &mut self.history,
@@ -266,8 +265,7 @@ impl<'a, T: Write> DataGen<'a, T> {
                 pv.set_len(0);
                 let lower_window = score - lower_bound;
                 let upper_window = score + upper_bound;
-                let mut output = output::NoOp;
-                score = s.search_root(&board, depth, lower_window, upper_window, &mut output, &mut pv, keystack);
+                score = s.search_root(&board, depth, lower_window, upper_window, &mut pv, keystack);
                 if score <= lower_window {
                     lower_bound *= 2;
                     continue;

@@ -1,13 +1,11 @@
 use std::{
     cmp::Ordering,
     sync::atomic::AtomicU64,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Colour, Move, Piece};
-
-use crate::output;
 
 const MATE_VALUE: i32 = 10_000;
 
@@ -200,7 +198,6 @@ pub struct Search<'a> {
     beta_cutoffs: u64,
     q_beta_cutoff_index: u64,
     q_beta_cutoffs: u64,
-    start: Instant,
     stop_after: Option<Instant>,
     history: &'a mut [[[i16; 64]; 64]; 12],
     tt: &'a [TtEntry],
@@ -214,7 +211,7 @@ pub struct Search<'a> {
 impl<'a> Search<'a> {
     #[must_use]
     pub fn new(
-        start: Instant, stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[[i16; 64]; 64]; 12],
+        stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[[i16; 64]; 64]; 12],
         corrhist: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64], params: &'a SearchParams,
     ) -> Self {
         Self {
@@ -229,7 +226,6 @@ impl<'a> Search<'a> {
             beta_cutoffs: 0,
             q_beta_cutoff_index: 0,
             q_beta_cutoffs: 0,
-            start,
             stop_after,
             history,
             tt,
@@ -401,7 +397,7 @@ impl<'a> Search<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn search(
-        &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, output: &mut dyn output::Output,
+        &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32,
         pv: &mut ArrayVec<[Move; 64]>, ply: i32, keystack: &mut Vec<u64>, excluded_move: Option<Move>,
     ) -> i32 {
         self.seldepth = self.seldepth.max(ply);
@@ -424,12 +420,9 @@ impl<'a> Search<'a> {
             return 0;
         }
 
-        let mut root_reduction = 0;
-
         // Check extension
         if board.in_check() {
             depth += 1;
-            root_reduction += -1;
         }
 
         if depth <= 0 {
@@ -465,7 +458,6 @@ impl<'a> Search<'a> {
         {
             // internal iterative reduction
             depth -= 1;
-            root_reduction += 1;
         }
 
         // Improving metric: are we doing better than we were two plies ago?
@@ -514,7 +506,7 @@ impl<'a> Search<'a> {
             let mut child_pv = ArrayVec::new();
             self.path.push(None);
             let score =
-                -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, output, &mut child_pv, ply + 1, keystack, None);
+                -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, &mut child_pv, ply + 1, keystack, None);
             self.path.pop();
             keystack.pop();
 
@@ -580,20 +572,6 @@ impl<'a> Search<'a> {
                 self.zw_nodes += 1;
             }
 
-            if ply == 0 {
-                let now = Instant::now();
-                if now >= self.start + Duration::from_secs(2) {
-                    output.new_move(
-                        board,
-                        depth + root_reduction,
-                        self.seldepth,
-                        now.duration_since(self.start),
-                        self.nodes() + self.qnodes(),
-                        m,
-                    );
-                }
-            }
-
             // SEE Pruning
             if !board.in_check() && (2..=5).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
                 let threshold = if m.is_capture() {
@@ -627,7 +605,7 @@ impl<'a> Search<'a> {
                     let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
                     let singular_depth = (depth - 1) / 2;
                     let score =
-                        self.search(board, singular_depth, singular_beta - 1, singular_beta, output, pv, ply, keystack, Some(m));
+                        self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m));
 
                     // Another move failed high, so this node is very good; prune.
                     if score >= singular_beta && singular_beta >= beta {
@@ -666,7 +644,6 @@ impl<'a> Search<'a> {
                     depth - reduction + extension,
                     -alpha - 1,
                     -alpha,
-                    output,
                     &mut child_pv,
                     ply + 1,
                     keystack,
@@ -680,7 +657,6 @@ impl<'a> Search<'a> {
                     depth - reduction + extension,
                     -alpha - 1,
                     -alpha,
-                    output,
                     &mut child_pv,
                     ply + 1,
                     keystack,
@@ -694,7 +670,6 @@ impl<'a> Search<'a> {
                     depth - reduction + extension,
                     -beta,
                     -alpha,
-                    output,
                     &mut child_pv,
                     ply + 1,
                     keystack,
@@ -759,21 +734,6 @@ impl<'a> Search<'a> {
                     pv.push(m);
                 }
                 raised_lower_bound = true;
-
-                if ply == 0 {
-                    let now = Instant::now();
-                    if now >= self.start + Duration::from_secs(2) {
-                        output.new_pv(
-                            board,
-                            depth + root_reduction,
-                            self.seldepth,
-                            score,
-                            now.duration_since(self.start),
-                            self.nodes() + self.qnodes(),
-                            pv,
-                        );
-                    }
-                }
             }
         }
 
@@ -815,11 +775,11 @@ impl<'a> Search<'a> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn search_root(
-        &mut self, board: &Board, depth: i32, lower_bound: i32, upper_bound: i32, output: &mut dyn output::Output,
+        &mut self, board: &Board, depth: i32, lower_bound: i32, upper_bound: i32,
         pv: &mut ArrayVec<[Move; 64]>, keystack: &mut Vec<u64>,
     ) -> i32 {
         self.seldepth = 0;
-        let score = self.search(board, depth, lower_bound, upper_bound, output, pv, 0, keystack, None);
+        let score = self.search(board, depth, lower_bound, upper_bound, pv, 0, keystack, None);
         assert_eq!(self.path.len(), 0);
         assert_eq!(self.eval.len(), 0);
         score
