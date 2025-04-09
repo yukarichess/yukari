@@ -149,15 +149,14 @@ impl Yukari {
                 let lower_window = score - lower_bound;
                 let upper_window = score + upper_bound;
                 let output: &mut dyn output::Output = match protocol {
-                    Protocol::Human => &mut output::Human::start(&self.board),
-                    Protocol::Xboard => &mut output::Xboard::start(&self.board),
-                    Protocol::Uci => &mut output::Uci::start(&self.board),
+                    Protocol::Human => &mut output::Human,
+                    Protocol::Xboard => &mut output::Xboard,
+                    Protocol::Uci => &mut output::Uci,
                 };
                 score = s.search_root(&self.board, depth, lower_window, upper_window, &mut pv, &mut self.keystack);
 
                 // If we have bailed out stop the loop
                 if stop_after.is_some() && Instant::now() >= hard_limit {
-                    output.abort();
                     break;
                 }
 
@@ -183,7 +182,6 @@ impl Yukari {
                         depth,
                         s.seldepth(),
                         score,
-
                         Instant::now().duration_since(start),
                         s.nodes() + s.qnodes(),
                         &pv,
@@ -318,7 +316,7 @@ impl Yukari {
                 pv.set_len(0);
                 let lower_window = score - lower_bound;
                 let upper_window = score + upper_bound;
-                let mut output = output::Xboard::start(&board);
+                let mut output = output::Xboard;
                 score = s.search_root(&board, 11, lower_window, upper_window, &mut pv, &mut keystack);
 
                 if score <= lower_window {
