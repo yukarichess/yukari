@@ -237,6 +237,8 @@ impl Yukari {
         println!("# QS nodes: {} {:.3}%", s.qnodes(), (100 * s.qnodes()) as f64 / (s.nodes() as f64 + s.qnodes() as f64));
         println!("# ZW AB nodes: {:.3}%", s.zw_nodes());
         println!("# ZW QS nodes: {:.3}%", s.zw_qnodes());
+        println!("# TT hit rate: {:.3}%", s.tt_hit_rate());
+        println!("# TT cutoff rate: {:.3}%", s.tt_cutoff_rate());
         println!("# Branching factor: {:.3}", ((s.nodes() + s.qnodes()) as f64).powf(1.0 / f64::from(depth)));
     }
 

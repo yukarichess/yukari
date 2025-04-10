@@ -198,6 +198,9 @@ pub struct Search<'a> {
     beta_cutoffs: u64,
     q_beta_cutoff_index: u64,
     q_beta_cutoffs: u64,
+    hash_probes: u64,
+    hash_hits: u64,
+    hash_cutoffs: u64,
     stop_after: Option<Instant>,
     history: &'a mut [[[i16; 64]; 64]; 12],
     tt: &'a [TtEntry],
@@ -226,6 +229,9 @@ impl<'a> Search<'a> {
             beta_cutoffs: 0,
             q_beta_cutoff_index: 0,
             q_beta_cutoffs: 0,
+            hash_probes: 0,
+            hash_hits: 0,
+            hash_cutoffs: 0,
             stop_after,
             history,
             tt,
@@ -431,19 +437,26 @@ impl<'a> Search<'a> {
 
         pv.set_len(0);
 
+        self.hash_probes += 1;
         let tt_entry = self.probe_tt(board, ply);
         if let Some(entry) = tt_entry {
+            self.hash_hits += 1;
             if excluded_move.is_none() && alpha == beta - 1 && i32::from(entry.depth) >= depth {
                 let score = i32::from(entry.score);
                 match entry.flags {
-                    TtFlags::Exact => return score,
+                    TtFlags::Exact => {
+                        self.hash_cutoffs += 1;
+                        return score;
+                    }
                     TtFlags::Upper => {
                         if score <= alpha {
+                            self.hash_cutoffs += 1;
                             return score;
                         }
                     }
                     TtFlags::Lower => {
                         if score >= beta {
+                            self.hash_cutoffs += 1;
                             return score;
                         }
                     }
@@ -823,5 +836,15 @@ impl<'a> Search<'a> {
     #[must_use]
     pub fn seldepth(&self) -> i32 {
         self.seldepth
+    }
+
+    #[must_use]
+    pub fn tt_hit_rate(&self) -> f64 {
+        100.0 * (self.hash_hits as f64) / (self.hash_probes as f64)
+    }
+
+    #[must_use]
+    pub fn tt_cutoff_rate(&self) -> f64 {
+        100.0 * (self.hash_cutoffs as f64) / (self.hash_probes as f64)
     }
 }
