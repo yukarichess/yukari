@@ -3,6 +3,11 @@
 Yukari is a primarily xboard-protocol chess program.
 (UCI support exists, but xboard should be preferred if your GUI isn't from the stone age.)
 
+## important notice
+
+yukari is currently being [rewritten](https://github.com/yukarichess/yukari-rewrite).
+future development will occur in that repository, which may be moved to this location.
+
 ## how do I build it?
 
 Yukari uses nightly Rust features to accelerate NNUE evaluation without the author's eyes bleeding, and `cargo-pgo` to automate a profile-guided optimisation run.
