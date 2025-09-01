@@ -1200,8 +1200,8 @@ impl Board {
         let white_bishop_count = (self.data.piecemask().bishops() & Bitlist::mask_from_colour(Colour::White)).count_ones();
 
         let black_count = (self.data.piecemask().occupied() & Bitlist::mask_from_colour(Colour::Black)).count_ones();
-        let black_knight_count = (self.data.piecemask().knights() & Bitlist::mask_from_colour(Colour::White)).count_ones();
-        let black_bishop_count = (self.data.piecemask().bishops() & Bitlist::mask_from_colour(Colour::White)).count_ones();
+        let black_knight_count = (self.data.piecemask().knights() & Bitlist::mask_from_colour(Colour::Black)).count_ones();
+        let black_bishop_count = (self.data.piecemask().bishops() & Bitlist::mask_from_colour(Colour::Black)).count_ones();
 
         if white_count == 1 && black_count == 1 {
             return true;
