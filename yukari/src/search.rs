@@ -1,8 +1,4 @@
-use std::{
-    cmp::Ordering,
-    sync::atomic::AtomicU64,
-    time::Instant,
-};
+use std::{cmp::Ordering, sync::atomic::AtomicU64, time::Instant};
 
 use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Colour, Move, Piece};
@@ -147,10 +143,10 @@ impl MoveOrder {
         board: &Board, history: &[[[i16; 64]; 64]; 12], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64], tt_move: Option<Move>,
         last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move,
     ) -> Self {
-        if let Some(tt_move) = tt_move {
-            if tt_move == m {
-                return Self::TtMove;
-            }
+        if let Some(tt_move) = tt_move
+            && tt_move == m
+        {
+            return Self::TtMove;
         }
 
         if m.is_capture() {
@@ -313,20 +309,20 @@ impl<'a> Search<'a> {
         }
         alpha = alpha.max(best_score);
 
-        if let Some(entry) = self.probe_tt(board, 0) {
-            if alpha == beta - 1 {
-                let score = i32::from(entry.score);
-                match entry.flags {
-                    TtFlags::Exact => return score,
-                    TtFlags::Upper => {
-                        if score <= alpha {
-                            return score;
-                        }
+        if let Some(entry) = self.probe_tt(board, 0)
+            && alpha == beta - 1
+        {
+            let score = i32::from(entry.score);
+            match entry.flags {
+                TtFlags::Exact => return score,
+                TtFlags::Upper => {
+                    if score <= alpha {
+                        return score;
                     }
-                    TtFlags::Lower => {
-                        if score >= beta {
-                            return score;
-                        }
+                }
+                TtFlags::Lower => {
+                    if score >= beta {
+                        return score;
                     }
                 }
             }
@@ -403,8 +399,8 @@ impl<'a> Search<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn search(
-        &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32,
-        pv: &mut ArrayVec<[Move; 64]>, ply: i32, keystack: &mut Vec<u64>, excluded_move: Option<Move>,
+        &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, pv: &mut ArrayVec<[Move; 64]>, ply: i32,
+        keystack: &mut Vec<u64>, excluded_move: Option<Move>,
     ) -> i32 {
         self.seldepth = self.seldepth.max(ply);
 
@@ -518,8 +514,7 @@ impl<'a> Search<'a> {
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
             self.path.push(None);
-            let score =
-                -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, &mut child_pv, ply + 1, keystack, None);
+            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, &mut child_pv, ply + 1, keystack, None);
             self.path.pop();
             keystack.pop();
 
@@ -574,10 +569,10 @@ impl<'a> Search<'a> {
         }
 
         for (movecount, (m, _)) in moves.into_iter().enumerate() {
-            if let Some(excluded_move) = excluded_move {
-                if excluded_move == m {
-                    continue;
-                }
+            if let Some(excluded_move) = excluded_move
+                && excluded_move == m
+            {
+                continue;
             }
 
             self.nodes += 1;
@@ -607,32 +602,30 @@ impl<'a> Search<'a> {
             let mut reduction = 1;
 
             // Singular extension: is the TT move uniquely good?
-            if let Some(tt_entry) = tt_entry {
-                if excluded_move.is_none()
-                    && ply > 0
-                    && depth >= 8
-                    && Some(m) == tt_entry.m
-                    && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower)
-                    && tt_entry.score.abs() < 9500
-                {
-                    let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
-                    let singular_depth = (depth - 1) / 2;
-                    let score =
-                        self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m));
+            if let Some(tt_entry) = tt_entry
+                && excluded_move.is_none()
+                && ply > 0
+                && depth >= 8
+                && Some(m) == tt_entry.m
+                && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower)
+                && tt_entry.score.abs() < 9500
+            {
+                let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
+                let singular_depth = (depth - 1) / 2;
+                let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m));
 
-                    // Another move failed high, so this node is very good; prune.
-                    if score >= singular_beta && singular_beta >= beta {
-                        keystack.pop();
-                        self.eval.pop();
-                        return singular_beta;
-                    }
+                // Another move failed high, so this node is very good; prune.
+                if score >= singular_beta && singular_beta >= beta {
+                    keystack.pop();
+                    self.eval.pop();
+                    return singular_beta;
+                }
 
-                    if score < singular_beta {
-                        // The TT move seems uniquely good; extend.
-                        extension += 1;
-                    } else if i32::from(tt_entry.score) >= beta {
-                        extension -= 1;
-                    }
+                if score < singular_beta {
+                    // The TT move seems uniquely good; extend.
+                    extension += 1;
+                } else if i32::from(tt_entry.score) >= beta {
+                    extension -= 1;
                 }
             }
 
@@ -706,16 +699,15 @@ impl<'a> Search<'a> {
                 }
             }
 
-            if self.nodes.trailing_zeros() >= 10 {
-                if let Some(time) = self.stop_after {
-                    if Instant::now() >= time {
-                        if excluded_move.is_none() {
-                            keystack.pop();
-                            self.eval.pop();
-                        }
-                        return best_score;
-                    }
+            if self.nodes.trailing_zeros() >= 10
+                && let Some(time) = self.stop_after
+                && Instant::now() >= time
+            {
+                if excluded_move.is_none() {
+                    keystack.pop();
+                    self.eval.pop();
                 }
+                return best_score;
             }
 
             if score >= beta {
@@ -788,8 +780,8 @@ impl<'a> Search<'a> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn search_root(
-        &mut self, board: &Board, depth: i32, lower_bound: i32, upper_bound: i32,
-        pv: &mut ArrayVec<[Move; 64]>, keystack: &mut Vec<u64>,
+        &mut self, board: &Board, depth: i32, lower_bound: i32, upper_bound: i32, pv: &mut ArrayVec<[Move; 64]>,
+        keystack: &mut Vec<u64>,
     ) -> i32 {
         self.seldepth = 0;
         let score = self.search(board, depth, lower_bound, upper_bound, pv, 0, keystack, None);

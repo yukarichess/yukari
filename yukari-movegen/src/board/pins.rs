@@ -5,15 +5,10 @@ use crate::{
 };
 
 /// Pin information in a board.
+#[derive(Default)]
 pub struct PinInfo {
     pub pins: [Option<Direction>; 32],
     pub enpassant_pinned: Bitlist,
-}
-
-impl Default for PinInfo {
-    fn default() -> Self {
-        Self { pins: [None; 32], enpassant_pinned: Bitlist::new() }
-    }
 }
 
 impl PinInfo {

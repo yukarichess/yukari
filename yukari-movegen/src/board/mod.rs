@@ -546,10 +546,11 @@ impl Board {
             }
             if let Some(attacker_direction) = attacker_direction {
                 // Slider attacks x-ray through the king to attack that square.
-                if let Some(xray_square) = king_square.travel(attacker_direction) {
-                    if matches!(attacker_piece, Piece::Bishop | Piece::Rook | Piece::Queen) && xray_square == square {
-                        continue;
-                    }
+                if let Some(xray_square) = king_square.travel(attacker_direction)
+                    && matches!(attacker_piece, Piece::Bishop | Piece::Rook | Piece::Queen)
+                    && xray_square == square
+                {
+                    continue;
                 }
             }
 
@@ -587,20 +588,20 @@ impl Board {
             }
 
             // Slider attacks x-ray through the king to attack that square.
-            if let Some(attacker1_direction) = attacker1_direction {
-                if let Some(xray_square) = king_square.travel(attacker1_direction) {
-                    if matches!(attacker1_piece, Piece::Bishop | Piece::Rook | Piece::Queen) && xray_square == square {
-                        continue;
-                    }
-                }
+            if let Some(attacker1_direction) = attacker1_direction
+                && let Some(xray_square) = king_square.travel(attacker1_direction)
+                && matches!(attacker1_piece, Piece::Bishop | Piece::Rook | Piece::Queen)
+                && xray_square == square
+            {
+                continue;
             }
 
-            if let Some(attacker2_direction) = attacker2_direction {
-                if let Some(xray_square) = king_square.travel(attacker2_direction) {
-                    if matches!(attacker2_piece, Piece::Bishop | Piece::Rook | Piece::Queen) && xray_square == square {
-                        continue;
-                    }
-                }
+            if let Some(attacker2_direction) = attacker2_direction
+                && let Some(xray_square) = king_square.travel(attacker2_direction)
+                && matches!(attacker2_piece, Piece::Bishop | Piece::Rook | Piece::Queen)
+                && xray_square == square
+            {
+                continue;
             }
 
             v.push(Move::new(king_square, square, kind, None));

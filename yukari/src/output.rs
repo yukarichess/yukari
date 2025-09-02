@@ -8,12 +8,16 @@ const NORMALISE_B: [f64; 4] = [9.81632640_f64, -23.57246193, 67.77015515, 42.505
 
 /// Normalise score to a centipawn scale where 100 = 50% chance to win.
 fn normalise_centipawn(board: &Board, score: i32) -> i32 {
-    if score.abs() > 9500 || score == 0 { 
+    if score.abs() > 9500 || score == 0 {
         return score;
     }
 
     let piecemask = board.data().piecemask();
-    let material = piecemask.pawns().count_ones() + 3 * piecemask.knights().count_ones() + 3 * piecemask.bishops().count_ones() + 5 * piecemask.rooks().count_ones() + 9 * piecemask.queens().count_ones();
+    let material = piecemask.pawns().count_ones()
+        + 3 * piecemask.knights().count_ones()
+        + 3 * piecemask.bishops().count_ones()
+        + 5 * piecemask.rooks().count_ones()
+        + 9 * piecemask.queens().count_ones();
     let material = f64::from(material.clamp(17, 78)) / 58.0;
 
     let a = NORMALISE_A[0].mul_add(material, NORMALISE_A[1]).mul_add(material, NORMALISE_A[2]).mul_add(material, NORMALISE_A[3]);
@@ -23,7 +27,7 @@ fn normalise_centipawn(board: &Board, score: i32) -> i32 {
 
 /// Normalise score to a likelihood of winning, where 1000 = 100% chance to win.
 fn normalise_winrate(board: &Board, score: i32) -> i32 {
-    if score > 9500 { 
+    if score > 9500 {
         return 1000;
     }
     if score == 0 || score < -9500 {
@@ -31,7 +35,11 @@ fn normalise_winrate(board: &Board, score: i32) -> i32 {
     }
 
     let piecemask = board.data().piecemask();
-    let material = piecemask.pawns().count_ones() + 3 * piecemask.knights().count_ones() + 3 * piecemask.bishops().count_ones() + 5 * piecemask.rooks().count_ones() + 9 * piecemask.queens().count_ones();
+    let material = piecemask.pawns().count_ones()
+        + 3 * piecemask.knights().count_ones()
+        + 3 * piecemask.bishops().count_ones()
+        + 5 * piecemask.rooks().count_ones()
+        + 9 * piecemask.queens().count_ones();
     let material = f64::from(material.clamp(17, 78)) / 58.0;
 
     let a = NORMALISE_A[0].mul_add(material, NORMALISE_A[1]).mul_add(material, NORMALISE_A[2]).mul_add(material, NORMALISE_A[3]);
@@ -81,7 +89,7 @@ impl Output for Human {
         let win = format!("{:>5.1}", f64::from(win) / 10.0);
         let draw = format!("{:>5.1}", f64::from(draw) / 10.0);
         let loss = format!("{:>5.1}", f64::from(loss) / 10.0);
-        
+
         let win = if highlight_win { win.green().to_string() } else { win.dimmed().to_string() };
         let draw = if highlight_draw { draw.bold().to_string() } else { draw.dimmed().to_string() };
         let loss = if highlight_loss { loss.red().to_string() } else { loss.dimmed().to_string() };
@@ -118,8 +126,8 @@ pub struct Xboard;
 
 impl Output for Xboard {
     fn complete(
-        &mut self, board: &Board, depth: i32, _seldepth: i32, score: i32, time: Duration, nodes: u64, pv: &[Move],
-        success: bool, fail_high: bool,
+        &mut self, board: &Board, depth: i32, _seldepth: i32, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
+        fail_high: bool,
     ) {
         // Normalise score for display.
         let mut score = normalise_centipawn(board, score);

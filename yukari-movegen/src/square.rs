@@ -733,8 +733,26 @@ impl Square {
         const fn ray_indexes_for_square(square: Square) -> [Option<Square>; 64] {
             let mut indexes = [None; 64];
 
-            let slider_rays = [Direction::North, Direction::NorthEast, Direction::East, Direction::SouthEast, Direction::South, Direction::SouthWest, Direction::West, Direction::NorthWest];
-            let knight_rays = [Direction::NorthNorthEast, Direction::EastNorthEast, Direction::EastSouthEast, Direction::SouthSouthEast, Direction::SouthSouthWest, Direction::WestSouthWest, Direction::WestNorthWest, Direction::NorthNorthWest];
+            let slider_rays = [
+                Direction::North,
+                Direction::NorthEast,
+                Direction::East,
+                Direction::SouthEast,
+                Direction::South,
+                Direction::SouthWest,
+                Direction::West,
+                Direction::NorthWest,
+            ];
+            let knight_rays = [
+                Direction::NorthNorthEast,
+                Direction::EastNorthEast,
+                Direction::EastSouthEast,
+                Direction::SouthSouthEast,
+                Direction::SouthSouthWest,
+                Direction::WestSouthWest,
+                Direction::WestNorthWest,
+                Direction::NorthNorthWest,
+            ];
 
             let mut ray = 0;
             while ray != 8 {
@@ -745,12 +763,12 @@ impl Square {
                     if let Some(square) = sq {
                         sq = square.travel(slider_rays[ray]);
                     }
-                    indexes[8*ray + ray_hop] = sq;
+                    indexes[8 * ray + ray_hop] = sq;
                     ray_hop += 1;
                 }
 
                 // Knights
-                indexes[8*ray] = square.travel(knight_rays[ray]);
+                indexes[8 * ray] = square.travel(knight_rays[ray]);
 
                 ray += 1;
             }

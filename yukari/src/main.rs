@@ -20,7 +20,6 @@ use yukari::{
 };
 use yukari_movegen::{Board, Colour, Move, Piece, Square};
 
-
 #[derive(Clone, Copy, Debug)]
 enum Mode {
     /// In normal mode (which is more properly probably called thinking mode), we respond
@@ -224,10 +223,10 @@ impl Yukari {
             if stop_after.is_some() && Instant::now() >= soft_limit {
                 break;
             }
-            if let Some(nodes) = nodes {
-                if s.nodes() + s.qnodes() >= u64::from(nodes) {
-                    break;
-                }
+            if let Some(nodes) = nodes
+                && s.nodes() + s.qnodes() >= u64::from(nodes)
+            {
+                break;
             }
             depth += 1;
         }

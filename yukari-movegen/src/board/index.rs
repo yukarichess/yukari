@@ -4,7 +4,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::{board::piecemask::Piecemask, colour::Colour, square::Square, Piece};
+use crate::{Piece, board::piecemask::Piecemask, colour::Colour, square::Square};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -145,21 +145,21 @@ impl IndexMut<Square> for PieceIndexRays {
     }
 }
 
-const HORSE: u8      = 0b0000100;
-const ORTH: u8       = 0b0110000;
-const DIAG: u8       = 0b0101000;
-const ORTH_NEAR: u8  = 0b1110000;
-const WPAWN_NEAR: u8 = 0b1101001;
-const BPAWN_NEAR: u8 = 0b1101010;
+const HORSE: u8 = 0b000_0100;
+const ORTH: u8 = 0b011_0000;
+const DIAG: u8 = 0b010_1000;
+const ORTH_NEAR: u8 = 0b111_0000;
+const WPAWN_NEAR: u8 = 0b110_1001;
+const BPAWN_NEAR: u8 = 0b110_1010;
 
 static ATTACKER_LUT: [u8; 64] = [
-    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // N
+    HORSE, ORTH_NEAR, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // N
     HORSE, WPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // NE
-    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // E
+    HORSE, ORTH_NEAR, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // E
     HORSE, BPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // SE
-    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // S
+    HORSE, ORTH_NEAR, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // S
     HORSE, BPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // SW
-    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // W
+    HORSE, ORTH_NEAR, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // W
     HORSE, WPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // NW
 ];
 
@@ -203,10 +203,10 @@ impl PieceIndexRays {
     pub fn pieces_of_colour(&self, colour: Colour) -> RayMask {
         let mut mask = RayMask(0);
         for square in 0..64 {
-            if let Some(index) = self.0[square] {
-                if index.colour() == colour {
-                    mask.0 |= 1_u64 << square;
-                }
+            if let Some(index) = self.0[square]
+                && index.colour() == colour
+            {
+                mask.0 |= 1_u64 << square;
             }
         }
         mask
@@ -224,8 +224,8 @@ pub struct RayMask(u64);
 
 impl RayMask {
     pub const fn mask_to_nearest(self) -> Self {
-        let o = self.0 | 0x8181818181818181;
-        Self(o ^ (o - 0x0303030303030303))
+        let o = self.0 | 0x8181_8181_8181_8181;
+        Self(o ^ (o - 0x0303_0303_0303_0303))
     }
 
     pub const fn nearest(self) -> Self {
