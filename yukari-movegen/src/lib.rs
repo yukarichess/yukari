@@ -1,5 +1,5 @@
 #![warn(clippy::pedantic, clippy::nursery, clippy::perf, clippy::style)]
-#![feature(array_chunks, portable_simd)]
+#![feature(portable_simd)]
 
 mod board;
 mod chessmove;

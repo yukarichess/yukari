@@ -38,7 +38,9 @@ impl Network {
         let max = i16x64::splat(QA);
 
         // Side-To-Move Accumulator -> Output.
-        for (input, weight) in us.vals.array_chunks::<64>().zip(self.output_weights[output_bucket][0].vals.array_chunks::<64>()) {
+        let (us_vals, []) = us.vals.as_chunks::<64>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<64>() else { unreachable!() };
+        for (input, weight) in us_vals.into_iter().zip(output_weights.into_iter()) {
             // Squared Clipped `ReLU` - Activation Function.
             // Note that this takes the i16s in the accumulator to i32s.
             let input = i16x64::from_array(*input).simd_clamp(min, max);
@@ -47,7 +49,9 @@ impl Network {
         }
 
         // Not-Side-To-Move Accumulator -> Output.
-        for (input, weight) in them.vals.array_chunks::<64>().zip(self.output_weights[output_bucket][1].vals.array_chunks::<64>()) {
+        let (them_vals, []) = them.vals.as_chunks::<64>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<64>() else { unreachable!() };
+        for (input, weight) in them_vals.into_iter().zip(output_weights.into_iter()) {
             let input = i16x64::from_array(*input).simd_clamp(min, max);
             let weight = input * i16x64::from_array(*weight);
             output += input.cast::<i32>() * weight.cast::<i32>();
