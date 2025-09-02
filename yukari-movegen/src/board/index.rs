@@ -218,6 +218,17 @@ impl PieceIndexRays {
 #[repr(transparent)]
 pub struct PieceRays([Option<Piece>; 64]);
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct RayMask(u64);
+
+impl RayMask {
+    pub const fn mask_to_nearest(self) -> Self {
+        let o = self.0 | 0x8181818181818181;
+        Self(o ^ (o - 0x0303030303030303))
+    }
+
+    pub const fn nearest(self) -> Self {
+        Self(self.0 & self.mask_to_nearest().0)
+    }
+}
