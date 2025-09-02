@@ -593,8 +593,8 @@ impl<'a> Search<'a> {
             }
 
             // Late Move Pruning
-            let lmp_threshold = (self.params.lmp_base + (self.params.lmp_mul * depth).pow(self.params.lmp_pow)) as usize;
-            if !board.in_check() && !m.is_capture() && depth <= 3 && movecount >= lmp_threshold && best_score > -MATE_VALUE + 500 {
+            let lmp_threshold = self.params.lmp_base + (((self.params.lmp_mul * depth).pow(self.params.lmp_pow)) >> i32::from(!improving));
+            if !board.in_check() && !m.is_capture() && depth <= 3 && movecount >= lmp_threshold as usize && best_score > -MATE_VALUE + 500 {
                 continue;
             }
 
