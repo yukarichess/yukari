@@ -727,6 +727,90 @@ impl Square {
     pub const fn flip(self) -> Self {
         unsafe { Self::from_u8_unchecked(self.into_inner() ^ 56) }
     }
+
+    #[must_use]
+    pub const fn ray_perm(self) -> [Option<Self>; 64] {
+        const fn ray_indexes_for_square(square: Square) -> [Option<Square>; 64] {
+            let mut indexes = [None; 64];
+
+            let slider_rays = [Direction::North, Direction::NorthEast, Direction::East, Direction::SouthEast, Direction::South, Direction::SouthWest, Direction::West, Direction::NorthWest];
+            let knight_rays = [Direction::NorthNorthEast, Direction::EastNorthEast, Direction::EastSouthEast, Direction::SouthSouthEast, Direction::SouthSouthWest, Direction::WestSouthWest, Direction::WestNorthWest, Direction::NorthNorthWest];
+
+            let mut ray = 0;
+            while ray != 8 {
+                // Sliders
+                let mut sq = Some(square);
+                let mut ray_hop = 1;
+                while ray_hop != 8 {
+                    if let Some(square) = sq {
+                        sq = square.travel(slider_rays[ray]);
+                    }
+                    indexes[8*ray + ray_hop] = sq;
+                    ray_hop += 1;
+                }
+
+                // Knights
+                indexes[8*ray] = square.travel(knight_rays[ray]);
+
+                ray += 1;
+            }
+
+            indexes
+        }
+
+        const fn ray_indexes() -> [[Option<Square>; 64]; 64] {
+            let mut indexes = [[None; 64]; 64];
+
+            let mut square = 0_u8;
+            while square != 64 {
+                indexes[square as usize] = ray_indexes_for_square(unsafe { Square::from_u8_unchecked(square) });
+
+                square += 1;
+            }
+
+            indexes
+        }
+
+        const INDEXES: [[Option<Square>; 64]; 64] = ray_indexes();
+
+        INDEXES[self.into_inner() as usize]
+    }
+
+    #[must_use]
+    pub const fn ray_bperm(self) -> [Option<Self>; 64] {
+        const fn ray_indexes_for_square(square: Square) -> [Option<Square>; 64] {
+            let mut indexes = [None; 64];
+            let perm = square.ray_perm();
+
+            let mut target_square = 0_u8;
+            while target_square != 64 {
+                if let Some(perm) = perm[target_square as usize] {
+                    indexes[perm.into_inner() as usize] = Some(unsafe { Square::from_u8_unchecked(target_square) });
+                }
+
+                target_square += 1;
+            }
+
+            indexes
+        }
+
+        const fn ray_indexes() -> [[Option<Square>; 64]; 64] {
+            let mut indexes = [[None; 64]; 64];
+
+            let mut square = 0_u8;
+            while square != 64 {
+                indexes[square as usize] = ray_indexes_for_square(unsafe { Square::from_u8_unchecked(square) });
+
+                square += 1;
+            }
+
+            indexes
+        }
+
+        const INDEXES: [[Option<Square>; 64]; 64] = ray_indexes();
+
+        INDEXES[self.into_inner() as usize]
+    }
 }
 
 /// A chess direction.
