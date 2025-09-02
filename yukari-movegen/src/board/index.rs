@@ -145,6 +145,24 @@ impl IndexMut<Square> for PieceIndexRays {
     }
 }
 
+const HORSE: u8      = 0b0000100;
+const ORTH: u8       = 0b0110000;
+const DIAG: u8       = 0b0101000;
+const ORTH_NEAR: u8  = 0b1110000;
+const WPAWN_NEAR: u8 = 0b1101001;
+const BPAWN_NEAR: u8 = 0b1101010;
+
+static ATTACKER_LUT: [u8; 64] = [
+    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // N
+    HORSE, WPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // NE
+    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // E
+    HORSE, BPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // SE
+    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // S
+    HORSE, BPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // SW
+    HORSE, ORTH_NEAR,  ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // W
+    HORSE, WPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // NW
+];
+
 impl PieceIndexRays {
     pub fn to_piece_rays(&self, piecemasks: &Piecemask) -> PieceRays {
         let mut rays = PieceRays([None; 64]);
@@ -156,6 +174,20 @@ impl PieceIndexRays {
         }
 
         rays
+    }
+
+    pub fn attackers(&self, piecemasks: &Piecemask) -> RayMask {
+        let mut mask = RayMask(0);
+        for square in 0..64 {
+            let Some(index) = self.0[square] else { continue };
+            let Some(piece) = piecemasks.piece(index) else { unreachable!() };
+            let colour = index.colour();
+            let piece = piece as usize + if piece == Piece::Pawn { colour as usize } else { 1 };
+            let piece = 1 << piece;
+            let valid = (ATTACKER_LUT[square] & piece) == piece;
+            mask.0 |= u64::from(valid) << square;
+        }
+        mask
     }
 
     pub fn occupied(&self) -> RayMask {
