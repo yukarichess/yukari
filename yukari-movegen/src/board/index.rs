@@ -4,7 +4,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::{colour::Colour, square::Square};
+use crate::{board::piecemask::Piecemask, colour::Colour, square::Square, Piece};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -91,10 +91,24 @@ impl PieceIndexArray {
         }*/
     }
 
-    /// Move a piece from
+    /// Move a piece from `from_square` to `dest_square`
     pub fn move_piece(&mut self, piece_index: PieceIndex, from_square: Square, dest_square: Square) {
         self[from_square] = None;
         self[dest_square] = Some(piece_index);
+    }
+
+    /// Remap the array into ray-space for `square`.
+    pub fn to_rays(&self, square: Square) -> PieceIndexRays {
+        let mut rays = PieceIndexRays([None; 64]);
+        let perm = square.ray_perm();
+
+        for square in 0..64 {
+            if let Some(perm_square) = perm[square] {
+                rays.0[square] = self[perm_square];
+            }
+        }
+
+        rays
     }
 }
 
@@ -111,3 +125,67 @@ impl IndexMut<Square> for PieceIndexArray {
         &mut self.0[usize::from(index.into_inner())]
     }
 }
+
+/// A `Square` -> `PieceIndex` mapping in ray-space.
+#[derive(Clone)]
+#[repr(transparent)]
+pub struct PieceIndexRays([Option<PieceIndex>; 64]);
+
+impl Index<Square> for PieceIndexRays {
+    type Output = Option<PieceIndex>;
+
+    fn index(&self, index: Square) -> &Self::Output {
+        &self.0[usize::from(index.into_inner())]
+    }
+}
+
+impl IndexMut<Square> for PieceIndexRays {
+    fn index_mut(&mut self, index: Square) -> &mut Self::Output {
+        &mut self.0[usize::from(index.into_inner())]
+    }
+}
+
+impl PieceIndexRays {
+    pub fn to_piece_rays(&self, piecemasks: &Piecemask) -> PieceRays {
+        let mut rays = PieceRays([None; 64]);
+
+        for square in 0..64 {
+            if let Some(index) = self.0[square] {
+                rays.0[square] = piecemasks.piece(index);
+            }
+        }
+
+        rays
+    }
+
+    pub fn occupied(&self) -> RayMask {
+        let mut mask = RayMask(0);
+        for square in 0..64 {
+            if self.0[square].is_some() {
+                mask.0 |= 1_u64 << square;
+            }
+        }
+        mask
+    }
+
+    pub fn pieces_of_colour(&self, colour: Colour) -> RayMask {
+        let mut mask = RayMask(0);
+        for square in 0..64 {
+            if let Some(index) = self.0[square] {
+                if index.colour() == colour {
+                    mask.0 |= 1_u64 << square;
+                }
+            }
+        }
+        mask
+    }
+}
+
+/// A `Square` -> `Piece` mapping in ray-space.
+#[derive(Clone)]
+#[repr(transparent)]
+pub struct PieceRays([Option<Piece>; 64]);
+
+#[derive(Clone)]
+#[repr(transparent)]
+pub struct RayMask(u64);

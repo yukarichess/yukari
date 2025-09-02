@@ -729,7 +729,7 @@ impl Square {
     }
 
     #[must_use]
-    pub const fn ray_perm(self) -> [Option<Self>; 64] {
+    pub const fn ray_perm(self) -> &'static [Option<Self>; 64] {
         const fn ray_indexes_for_square(square: Square) -> [Option<Square>; 64] {
             let mut indexes = [None; 64];
 
@@ -771,13 +771,13 @@ impl Square {
             indexes
         }
 
-        const INDEXES: [[Option<Square>; 64]; 64] = ray_indexes();
+        static INDEXES: [[Option<Square>; 64]; 64] = ray_indexes();
 
-        INDEXES[self.into_inner() as usize]
+        &INDEXES[self.into_inner() as usize]
     }
 
     #[must_use]
-    pub const fn ray_bperm(self) -> [Option<Self>; 64] {
+    pub const fn ray_bperm(self) -> &'static [Option<Self>; 64] {
         const fn ray_indexes_for_square(square: Square) -> [Option<Square>; 64] {
             let mut indexes = [None; 64];
             let perm = square.ray_perm();
@@ -807,9 +807,9 @@ impl Square {
             indexes
         }
 
-        const INDEXES: [[Option<Square>; 64]; 64] = ray_indexes();
+        static INDEXES: [[Option<Square>; 64]; 64] = ray_indexes();
 
-        INDEXES[self.into_inner() as usize]
+        &INDEXES[self.into_inner() as usize]
     }
 }
 
