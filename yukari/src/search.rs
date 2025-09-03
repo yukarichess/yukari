@@ -632,7 +632,7 @@ impl<'a> Search<'a> {
             self.path.push(Some((board.piece_from_square(m.from).unwrap(), m)));
 
             // Late Move Reduction
-            if depth >= 3 && movecount >= 4 && !board.in_check() && !m.is_capture() {
+            if depth >= 3 && movecount >= 4 && !m.is_capture() {
                 let depth = (depth as f32).ln();
                 let movecount = (movecount as f32).ln();
                 reduction += (depth * movecount).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
