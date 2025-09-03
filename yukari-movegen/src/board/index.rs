@@ -259,6 +259,12 @@ impl PieceIndexRays {
             }
         }
     }
+
+    pub fn rotate_180(&mut self) {
+        for square in 0..32 {
+            self.0.swap(square, 32 + square);
+        }
+    }
 }
 
 /// A `Square` -> `Piece` mapping in ray-space.
