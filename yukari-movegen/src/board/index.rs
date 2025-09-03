@@ -244,6 +244,21 @@ impl PieceIndexRays {
             }
         }
     }
+
+    pub fn ray_broadcast(&mut self) {
+        for ray in 0..8 {
+            let mut possible_index = None;
+            for hop in 1..8 {
+                if let Some(index) = self.0[8*ray + hop] {
+                    possible_index = Some(index);
+                    break;
+                }
+            }
+            for hop in 1..8 {
+                self.0[8*ray + hop] = possible_index;
+            }
+        }
+    }
 }
 
 /// A `Square` -> `Piece` mapping in ray-space.
