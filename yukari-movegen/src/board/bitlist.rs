@@ -1,7 +1,7 @@
 use std::{
     fmt::Debug,
     iter::FusedIterator,
-    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Index, Not},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Index, Not},
 };
 
 use crate::{board::index::PieceIndex, colour::Colour, square::Square};
@@ -146,6 +146,20 @@ impl BitOrAssign for Bitlist {
     }
 }
 
+impl BitXor for Bitlist {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self(self.0 ^ rhs.0)
+    }
+}
+
+impl BitXorAssign for Bitlist {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        self.0 ^= rhs.0;
+    }
+}
+
 impl Not for Bitlist {
     type Output = Self;
 
@@ -217,6 +231,14 @@ impl Index<Square> for BitlistArray {
 impl Default for BitlistArray {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl BitXorAssign for BitlistArray {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        for square in 0..64 {
+            self.0[square] ^= rhs.0[square];
+        }
     }
 }
 

@@ -4,7 +4,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::{Piece, board::piecemask::Piecemask, colour::Colour, square::Square};
+use crate::{board::{bitlist::{Bitlist, BitlistArray}, piecemask::Piecemask}, colour::Colour, square::Square, Piece};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -109,6 +109,17 @@ impl PieceIndexArray {
         }
 
         rays
+    }
+
+    pub fn to_bitlist_array(&self) -> BitlistArray {
+        let mut array = BitlistArray::new();
+        for square in 0..64 {
+            let square = unsafe { Square::from_u8_unchecked(square) };
+            if let Some(piece) = self[square] {
+                array.add_piece(square, piece);
+            }
+        }
+        array
     }
 }
 
@@ -264,6 +275,19 @@ impl PieceIndexRays {
         for square in 0..32 {
             self.0.swap(square, 32 + square);
         }
+    }
+
+    pub fn to_mailbox(&self, square: Square) -> PieceIndexArray {
+        let mut mailbox = PieceIndexArray([None; 64]);
+        let bperm = square.ray_bperm();
+
+        for square in 0..64 {
+            if let Some(bperm_square) = bperm[square] {
+                mailbox.0[square] = self[bperm_square];
+            }
+        }
+
+        mailbox
     }
 }
 
