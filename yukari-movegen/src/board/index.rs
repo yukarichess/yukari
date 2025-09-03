@@ -236,6 +236,14 @@ impl PieceIndexRays {
         }
         mask
     }
+
+    pub fn mask(&mut self, mask: RayMask) {
+        for square in 0..64 {
+            if !mask.nth(square) {
+                self.0[square] = None;
+            }
+        }
+    }
 }
 
 /// A `Square` -> `Piece` mapping in ray-space.
@@ -255,5 +263,9 @@ impl RayMask {
 
     pub const fn nearest(self) -> Self {
         Self(self.0 & self.mask_to_nearest().0)
+    }
+
+    pub const fn nth(self, index: usize) -> bool {
+        (self.0 & (1_u64 << index)) != 0
     }
 }
