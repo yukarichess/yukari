@@ -163,6 +163,17 @@ static ATTACKER_LUT: [u8; 64] = [
     HORSE, BPAWN_NEAR, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // NW
 ];
 
+static SLIDER_LUT: [u8; 64] = [
+    0, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // N
+    0, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // NE
+    0, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // E
+    0, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // SE
+    0, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // S
+    0, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // SW
+    0, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, ORTH, // W
+    0, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, DIAG, // NW
+];
+
 impl PieceIndexRays {
     pub fn to_piece_rays(&self, piecemasks: &Piecemask) -> PieceRays {
         let mut rays = PieceRays([None; 64]);
@@ -185,6 +196,20 @@ impl PieceIndexRays {
             let piece = piece as usize + if piece == Piece::Pawn { colour as usize } else { 1 };
             let piece = 1 << piece;
             let valid = (ATTACKER_LUT[square] & piece) == piece;
+            mask.0 |= u64::from(valid) << square;
+        }
+        mask
+    }
+
+    pub fn sliders(&self, piecemasks: &Piecemask) -> RayMask {
+        let mut mask = RayMask(0);
+        for square in 0..64 {
+            let Some(index) = self.0[square] else { continue };
+            let Some(piece) = piecemasks.piece(index) else { unreachable!() };
+            let colour = index.colour();
+            let piece = piece as usize + if piece == Piece::Pawn { colour as usize } else { 1 };
+            let piece = 1 << piece;
+            let valid = (SLIDER_LUT[square] & piece) == piece;
             mask.0 |= u64::from(valid) << square;
         }
         mask
