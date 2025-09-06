@@ -1,4 +1,4 @@
-use std::simd::{cmp::SimdOrd, i16x64, i32x64, num::SimdInt};
+use std::simd::{cmp::SimdOrd, i16x64, i32x64, num::SimdInt, u16x64};
 
 use super::feature;
 use crate::{Colour, File, Piece, Square};
@@ -83,16 +83,22 @@ impl Accumulator {
     }
 
     /// Add a feature to an accumulator.
+    #[inline(never)]
     pub fn add_feature(&mut self, feature_idx: usize, net: &Network) {
-        for (i, d) in self.vals.iter_mut().zip(&net.feature_weights[feature_idx].vals) {
-            *i += *d;
+        let (acc_chunks, []) = self.vals.as_chunks_mut::<64>() else { unreachable!() };
+        let (weight_chunks, []) = net.feature_weights[feature_idx].vals.as_chunks::<64>() else { unreachable!() };
+        for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
+            *i = (i16x64::from_array(*i) + i16x64::from_array(*d)).to_array();
         }
     }
 
     /// Remove a feature from an accumulator.
+    #[inline(never)]
     pub fn remove_feature(&mut self, feature_idx: usize, net: &Network) {
-        for (i, d) in self.vals.iter_mut().zip(&net.feature_weights[feature_idx].vals) {
-            *i -= *d;
+        let (acc_chunks, []) = self.vals.as_chunks_mut::<64>() else { unreachable!() };
+        let (weight_chunks, []) = net.feature_weights[feature_idx].vals.as_chunks::<64>() else { unreachable!() };
+        for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
+            *i = (i16x64::from_array(*i) - i16x64::from_array(*d)).to_array();
         }
     }
 }
