@@ -1,3 +1,5 @@
+use std::simd::{cmp::SimdPartialEq, u32x64, u8x64};
+
 use super::{
     bitlist::{Bitlist, BitlistArray},
     eval::Eval,
@@ -128,7 +130,7 @@ impl BoardData {
             let black_king = self.king_square(Colour::Black);
             self.eval.add_piece(piece, square, colour, white_king, black_king);
 
-            self.update_attacks(square, piece_index, piece, true);
+            self.add_attacks(square, piece_index, piece);
             self.update_sliders(square, false, None);
             // fixup: add threats to new square
             for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
@@ -159,7 +161,7 @@ impl BoardData {
         self.eval.remove_piece(piece, square, piece_index.colour(), white_king, black_king);
 
         if update {
-            self.update_attacks(square, piece_index, piece, false);
+            self.remove_attacks(square, piece_index, piece);
             self.update_sliders(square, true, None);
             // fixup: clear threats to old square
             for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
@@ -278,14 +280,14 @@ impl BoardData {
         let piece_index = self.index[from_square].expect("attempted to move piece from empty square");
         let piece = self.piece_from_bit(piece_index);
 
-        self.update_attacks(from_square, piece_index, piece, false);
+        self.remove_attacks(from_square, piece_index, piece);
         self.update_sliders(from_square, true, None);
 
         self.piecelist.move_piece(piece_index, to_square);
         self.index.move_piece(piece_index, from_square, to_square);
         Zobrist::move_piece(piece_index.colour(), piece, from_square, to_square, &mut self.hash);
 
-        self.update_attacks(to_square, piece_index, piece, true);
+        self.add_attacks(to_square, piece_index, piece);
         self.update_sliders(to_square, false, Some(from_square));
 
         let white_king = self.king_square(Colour::White);
@@ -370,25 +372,45 @@ impl BoardData {
             let square = unsafe { Square::from_u8_unchecked(square) };
             if let Some(bit) = self.index[square] {
                 let piece = self.piece_from_bit(bit);
-                self.update_attacks(square, bit, piece, true);
+                self.add_attacks(square, bit, piece);
             }
         }
     }
 
-    /// Add or remove attacks for a square.
-    fn update_attacks(&mut self, square: Square, bit: PieceIndex, piece: Piece, add: bool) {
+    fn remove_attacks(&mut self, square: Square, bit: PieceIndex, piece: Piece) {
+        let white_king = self.king_square(Colour::White);
+        let black_king = self.king_square(Colour::Black);
+
+        // SIMD versions of internal data structures.
+        let mut bitlist = unsafe { std::mem::transmute::<BitlistArray, u32x64>(self.bitlist.clone()) };
+        let index = unsafe { std::mem::transmute::<PieceIndexArray, u8x64>(self.index.clone()) };
+
+        let bit_vector = u32x64::splat(1_u32 << bit.into_inner());
+
+        let occupied = index.simd_ne(u8x64::splat(0));
+        let mask_of_attacks = (bitlist & bit_vector).simd_ne(u32x64::splat(0)).cast::<i8>();
+        let mut threats = (occupied & mask_of_attacks).to_bitmask();
+
+        while threats != 0 {
+            let dest = threats.trailing_zeros();
+            let dest = unsafe { Square::from_u8_unchecked(dest as u8) };
+            threats &= threats - 1;
+            self.eval.remove_threat(piece, square, dest, bit.colour(), self.index[dest].map(PieceIndex::colour), white_king, black_king);
+        }
+
+        bitlist &= !bit_vector;
+        self.bitlist = unsafe { std::mem::transmute::<u32x64, BitlistArray>(bitlist) };
+    }
+
+    /// Add attacks for a square.
+    fn add_attacks(&mut self, square: Square, bit: PieceIndex, piece: Piece) {
         let white_king = self.king_square(Colour::White);
         let black_king = self.king_square(Colour::Black);
 
         let update = |bitlist: &mut BitlistArray, index: &PieceIndexArray, eval: &mut Eval, dest: Square| {
-            if add {
-                debug_assert!(dest != square);
-                bitlist.add_piece(dest, bit);
-                eval.add_threat(piece, square, dest, bit.colour(), index[dest].map(PieceIndex::colour), white_king, black_king);
-            } else {
-                bitlist.remove_piece(dest, bit);
-                eval.remove_threat(piece, square, dest, bit.colour(), index[dest].map(PieceIndex::colour), white_king, black_king);
-            }
+            debug_assert!(dest != square);
+            bitlist.add_piece(dest, bit);
+            eval.add_threat(piece, square, dest, bit.colour(), index[dest].map(PieceIndex::colour), white_king, black_king);
         };
 
         let slide = |bitlist: &mut BitlistArray, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
