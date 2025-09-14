@@ -293,6 +293,7 @@ impl<'a> Search<'a> {
     }
 
     fn quiesce(&mut self, board: &Board, mut alpha: i32, beta: i32, pv: &mut ArrayVec<[Move; 64]>, ply: i32) -> i32 {
+        let expected_pvnode = alpha != beta - 1;
         let mut best_score = self.eval_with_corrhist(board, board.eval(board.side()));
 
         pv.set_len(0);
@@ -310,7 +311,7 @@ impl<'a> Search<'a> {
         alpha = alpha.max(best_score);
 
         if let Some(entry) = self.probe_tt(board, 0)
-            && alpha == beta - 1
+            && !expected_pvnode
         {
             let score = i32::from(entry.score);
             match entry.flags {
@@ -331,7 +332,7 @@ impl<'a> Search<'a> {
         let mut index = 0;
         board.generate_captures_incremental(|m| {
             self.qnodes += 1;
-            if alpha == beta - 1 {
+            if !expected_pvnode {
                 self.zw_qnodes += 1;
             }
 
@@ -400,8 +401,10 @@ impl<'a> Search<'a> {
     #[allow(clippy::too_many_arguments)]
     fn search(
         &mut self, board: &Board, mut depth: i32, mut alpha: i32, beta: i32, pv: &mut ArrayVec<[Move; 64]>, ply: i32,
-        keystack: &mut Vec<u64>, excluded_move: Option<Move>,
+        keystack: &mut Vec<u64>, excluded_move: Option<Move>, expected_cutnode: bool,
     ) -> i32 {
+        let expected_pvnode = alpha != beta - 1;
+
         self.seldepth = self.seldepth.max(ply);
 
         // Emergency bailout
@@ -437,7 +440,7 @@ impl<'a> Search<'a> {
         let tt_entry = self.probe_tt(board, ply);
         if let Some(entry) = tt_entry {
             self.hash_hits += 1;
-            if excluded_move.is_none() && alpha == beta - 1 && i32::from(entry.depth) >= depth {
+            if excluded_move.is_none() && !expected_pvnode && i32::from(entry.depth) >= depth {
                 let score = i32::from(entry.score);
                 match entry.flags {
                     TtFlags::Exact => {
@@ -461,7 +464,7 @@ impl<'a> Search<'a> {
         }
 
         if excluded_move.is_none()
-            && alpha != beta - 1
+            && expected_pvnode
             && (tt_entry.is_none() || i32::from(tt_entry.unwrap().depth) + 3 < depth)
             && depth >= 3
         {
@@ -480,7 +483,7 @@ impl<'a> Search<'a> {
         // Reverse futility pruning: is the static eval so good we can prune?
         let rfp_margin = self.params.rfp_margin_base + self.params.rfp_margin_mul * depth;
         let rfp_depth = if improving { 5 } else { 4 };
-        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta
+        if excluded_move.is_none() && !expected_pvnode && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta
         {
             return eval_int - rfp_margin;
         }
@@ -488,7 +491,7 @@ impl<'a> Search<'a> {
         // Razoring: is the static eval so low we can prune, and not improved by a quiescence search?
         let razor_margin = self.params.razor_margin_mul * depth;
         if excluded_move.is_none()
-            && alpha == beta - 1
+            && !expected_pvnode
             && !board.in_check()
             && depth <= 3
             && alpha.abs() < 2000
@@ -509,12 +512,12 @@ impl<'a> Search<'a> {
             3
         } + ((eval_int - beta) / 200).max(0)
             + i32::from(improving);
-        if excluded_move.is_none() && alpha == beta - 1 && !board.in_check() && depth >= 2 && eval_int >= beta {
+        if excluded_move.is_none() && !expected_pvnode && !board.in_check() && depth >= 2 && eval_int >= beta {
             keystack.push(board.hash());
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
             self.path.push(None);
-            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, &mut child_pv, ply + 1, keystack, None);
+            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, &mut child_pv, ply + 1, keystack, None, !expected_cutnode);
             self.path.pop();
             keystack.pop();
 
@@ -576,7 +579,7 @@ impl<'a> Search<'a> {
             }
 
             self.nodes += 1;
-            if alpha == beta - 1 {
+            if !expected_pvnode {
                 self.zw_nodes += 1;
             }
 
@@ -612,7 +615,7 @@ impl<'a> Search<'a> {
             {
                 let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
                 let singular_depth = (depth - 1) / 2;
-                let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m));
+                let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m), expected_cutnode);
 
                 // Multicut: Another move failed high, so this position is very good; prune.
                 if score >= singular_beta && singular_beta >= beta {
@@ -636,7 +639,7 @@ impl<'a> Search<'a> {
                 let depth = (depth as f32).ln();
                 let movecount = (movecount as f32).ln();
                 reduction += (depth * movecount).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
-                reduction -= i32::from(alpha != beta - 1);
+                reduction -= i32::from(expected_pvnode);
                 // credit: adam
             }
 
@@ -654,6 +657,7 @@ impl<'a> Search<'a> {
                     ply + 1,
                     keystack,
                     None,
+                    reduction > 1,
                 );
             }
             if movecount > 0 && reduction > 1 && score > alpha {
@@ -667,9 +671,10 @@ impl<'a> Search<'a> {
                     ply + 1,
                     keystack,
                     None,
+                    !expected_cutnode,
                 );
             }
-            if movecount == 0 || alpha != beta - 1 && score > alpha {
+            if movecount == 0 || expected_pvnode && score > alpha {
                 reduction = 1;
                 score = -self.search(
                     &child_board,
@@ -680,6 +685,7 @@ impl<'a> Search<'a> {
                     ply + 1,
                     keystack,
                     None,
+                    !expected_pvnode && !expected_cutnode
                 );
             }
 
@@ -784,7 +790,7 @@ impl<'a> Search<'a> {
         keystack: &mut Vec<u64>,
     ) -> i32 {
         self.seldepth = 0;
-        let score = self.search(board, depth, lower_bound, upper_bound, pv, 0, keystack, None);
+        let score = self.search(board, depth, lower_bound, upper_bound, pv, 0, keystack, None, false);
         assert_eq!(self.path.len(), 0);
         assert_eq!(self.eval.len(), 0);
         score
