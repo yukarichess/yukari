@@ -614,7 +614,7 @@ impl<'a> Search<'a> {
                 let singular_depth = (depth - 1) / 2;
                 let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m));
 
-                // Another move failed high, so this node is very good; prune.
+                // Multicut: Another move failed high, so this position is very good; prune.
                 if score >= singular_beta && singular_beta >= beta {
                     keystack.pop();
                     self.eval.pop();
