@@ -657,7 +657,7 @@ impl<'a> Search<'a> {
                     ply + 1,
                     keystack,
                     None,
-                    reduction > 1,
+                    reduction > 1 || !expected_cutnode,
                 );
             }
             if movecount > 0 && reduction > 1 && score > alpha {
@@ -685,7 +685,7 @@ impl<'a> Search<'a> {
                     ply + 1,
                     keystack,
                     None,
-                    !expected_pvnode && !expected_cutnode
+                    false
                 );
             }
 
