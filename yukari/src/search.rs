@@ -608,7 +608,7 @@ impl<'a> Search<'a> {
             if let Some(tt_entry) = tt_entry
                 && excluded_move.is_none()
                 && ply > 0
-                && depth >= 8
+                && depth >= 7
                 && Some(m) == tt_entry.m
                 && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower)
                 && tt_entry.score.abs() < 9500
