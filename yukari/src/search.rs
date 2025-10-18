@@ -50,7 +50,7 @@ pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
     keystack.iter().filter(|key| **key == hash).count() >= 3
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 #[repr(u8)]
 enum TtFlags {
     #[default]
@@ -608,27 +608,33 @@ impl<'a> Search<'a> {
             if let Some(tt_entry) = tt_entry
                 && excluded_move.is_none()
                 && ply > 0
-                && depth >= 7
                 && Some(m) == tt_entry.m
-                && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower)
-                && tt_entry.score.abs() < 9500
             {
-                let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
-                let singular_depth = (depth - 1) / 2;
-                let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m), expected_cutnode);
 
-                // Multicut: Another move failed high, so this position is very good; prune.
-                if score >= singular_beta && singular_beta >= beta {
-                    keystack.pop();
-                    self.eval.pop();
-                    return singular_beta;
-                }
+                if depth >= 7
+                    && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower)
+                    && tt_entry.score.abs() < 9500
+                {
+                    let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
+                    let singular_depth = (depth - 1) / 2;
+                    let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m), expected_cutnode);
 
-                if score < singular_beta {
-                    // The TT move seems uniquely good; extend.
+                    // Multicut: Another move failed high, so this position is very good; prune.
+                    if score >= singular_beta && singular_beta >= beta {
+                        keystack.pop();
+                        self.eval.pop();
+                        return singular_beta;
+                    }
+
+                    if score < singular_beta {
+                        // The TT move seems uniquely good; extend.
+                        extension += 1;
+                    } else if i32::from(tt_entry.score) >= beta {
+                        extension -= 1;
+                    }
+                } else if depth <= 7 && !board.in_check() && eval_int <= alpha - 26 && tt_entry.flags == TtFlags::Lower {
+                    // Low-depth singular extension
                     extension += 1;
-                } else if i32::from(tt_entry.score) >= beta {
-                    extension -= 1;
                 }
             }
 
