@@ -201,6 +201,7 @@ pub struct Search<'a> {
     history: &'a mut [[[i16; 64]; 64]; 12],
     tt: &'a [TtEntry],
     corrhist: &'a mut [[i32; 16384]; 2],
+    corrhist_kbn: &'a mut [[i32; 16384]; 2],
     conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     path: ArrayVec<[Option<(Piece, Move)>; 64]>,
     eval: ArrayVec<[Option<i32>; 64]>,
@@ -211,7 +212,7 @@ impl<'a> Search<'a> {
     #[must_use]
     pub fn new(
         stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[[i16; 64]; 64]; 12],
-        corrhist: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64], params: &'a SearchParams,
+        corrhist: &'a mut [[i32; 16384]; 2], corrhist_kbn: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64], params: &'a SearchParams,
     ) -> Self {
         Self {
             nodes: 0,
@@ -232,6 +233,7 @@ impl<'a> Search<'a> {
             history,
             tt,
             corrhist,
+            corrhist_kbn,
             conthist,
             path: ArrayVec::new(),
             eval: ArrayVec::new(),
@@ -243,18 +245,28 @@ impl<'a> Search<'a> {
         const CORRHIST_GRAIN: i32 = 256;
         const CORRHIST_WEIGHT_SCALE: i32 = 256;
         const CORRHIST_MAX: i32 = 256 * 32;
-        let entry = &mut self.corrhist[board.side() as usize][board.hash_pawns() as usize & 16383];
+
         let diff = diff * CORRHIST_GRAIN;
         let weight = 16.min(depth + 1);
 
-        *entry = ((*entry * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
+        // pawns
+        let entry_p = &mut self.corrhist[board.side() as usize][board.data().hash_pawns() as usize & 16383];
+
+        *entry_p = ((*entry_p * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
+            .clamp(-CORRHIST_MAX, CORRHIST_MAX);
+
+        // kings, bishops, knights
+        let entry_kbn = &mut self.corrhist_kbn[board.side() as usize][board.data().hash_kbn() as usize & 16383];
+
+        *entry_kbn = ((*entry_kbn * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 
     fn eval_with_corrhist(&self, board: &Board, eval: i32) -> i32 {
         const CORRHIST_GRAIN: i32 = 256;
-        let entry = &self.corrhist[board.side() as usize][board.hash_pawns() as usize & 16383];
-        (eval + entry / CORRHIST_GRAIN).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
+        let entry_p = self.corrhist[board.side() as usize][board.hash_pawns() as usize & 16383] / CORRHIST_GRAIN;
+        let entry_krp = self.corrhist_kbn[board.side() as usize][board.data().hash_kbn() as usize & 16383] / CORRHIST_GRAIN;
+        (eval + entry_p + entry_krp).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
     }
 
     fn update_history(

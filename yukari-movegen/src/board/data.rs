@@ -118,6 +118,27 @@ impl BoardData {
         hash
     }
 
+    /// (king, bishop, knight)-only Zobrist hash of this position.
+    pub fn hash_kbn(&self) -> u64 {
+        let mut hash = 0;
+        for king in self.piecemask.kings() {
+            let square = self.square_of_piece(king);
+            let colour = king.colour();
+            Zobrist::add_piece(colour, Piece::King, square, &mut hash);
+        }
+        for bishop in self.piecemask.bishops() {
+            let square = self.square_of_piece(bishop);
+            let colour = bishop.colour();
+            Zobrist::add_piece(colour, Piece::Bishop, square, &mut hash);
+        }
+        for knight in self.piecemask.knights() {
+            let square = self.square_of_piece(knight);
+            let colour = knight.colour();
+            Zobrist::add_piece(colour, Piece::Knight, square, &mut hash);
+        }
+        hash
+    }
+
     /// Add a `Piece` to a `Square`.
     pub fn add_piece(&mut self, piece: Piece, colour: Colour, square: Square, update: bool) {
         let piece_index = self.piecemask.add_piece(piece, colour);
