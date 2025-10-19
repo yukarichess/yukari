@@ -125,6 +125,47 @@ impl BoardData {
         self.hash_pawns
     }
 
+    /// Non-pawn Zobrist hash of this position.
+    pub fn hash_nonpawn(&self, colour: Colour) -> u64 {
+        let mut hash = 0;
+        for king in self.piecemask.kings() {
+            let square = self.square_of_piece(king);
+            if king.colour() != colour {
+                continue;
+            }
+            Zobrist::add_piece(colour, Piece::King, square, &mut hash);
+        }
+        for queen in self.piecemask.queens() {
+            let square = self.square_of_piece(queen);
+            if queen.colour() != colour {
+                continue;
+            }
+            Zobrist::add_piece(colour, Piece::Queen, square, &mut hash);
+        }
+        for rook in self.piecemask.rooks() {
+            let square = self.square_of_piece(rook);
+            if rook.colour() != colour {
+                continue;
+            }
+            Zobrist::add_piece(colour, Piece::Rook, square, &mut hash);
+        }
+        for bishop in self.piecemask.bishops() {
+            let square = self.square_of_piece(bishop);
+            if bishop.colour() != colour {
+                continue;
+            }
+            Zobrist::add_piece(colour, Piece::Bishop, square, &mut hash);
+        }
+        for knight in self.piecemask.knights() {
+            let square = self.square_of_piece(knight);
+            if knight.colour() != colour {
+                continue;
+            }
+            Zobrist::add_piece(colour, Piece::Knight, square, &mut hash);
+        }
+        hash
+    }
+
     /// (king, bishop, knight)-only Zobrist hash of this position.
     pub const fn hash_kbn(&self) -> u64 {
         self.hash_knights ^ self.hash_bishops ^ self.hash_kings

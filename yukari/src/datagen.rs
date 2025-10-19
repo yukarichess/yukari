@@ -175,6 +175,8 @@ pub struct DataGen<'a, T: Write> {
     corrhist_p: [[i32; 16384]; 2],
     corrhist_kbn: [[i32; 16384]; 2],
     corrhist_kqr: [[i32; 16384]; 2],
+    corrhist_kqrbn_w: [[i32; 16384]; 2],
+    corrhist_kqrbn_b: [[i32; 16384]; 2],
     conthist: [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     positions: usize,
 }
@@ -190,6 +192,8 @@ impl<'a, T: Write> DataGen<'a, T> {
             corrhist_p: [[0; 16384]; 2],
             corrhist_kbn: [[0; 16384]; 2],
             corrhist_kqr: [[0; 16384]; 2],
+            corrhist_kqrbn_w: [[0; 16384]; 2],
+            corrhist_kqrbn_b: [[0; 16384]; 2],
             conthist: [[0; 2 * 6 * 64]; 2 * 6 * 64],
             positions: 0,
         }
@@ -259,6 +263,8 @@ impl<'a, T: Write> DataGen<'a, T> {
             &mut self.corrhist_p,
             &mut self.corrhist_kbn,
             &mut self.corrhist_kqr,
+            &mut self.corrhist_kqrbn_w,
+            &mut self.corrhist_kqrbn_b,
             &mut self.conthist,
             &self.params,
         );
