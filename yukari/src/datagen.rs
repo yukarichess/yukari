@@ -172,8 +172,9 @@ pub struct DataGen<'a, T: Write> {
     params: search::SearchParams,
     tt: Vec<search::TtEntry>,
     history: [[[i16; 64]; 64]; 12],
-    corrhist: [[i32; 16384]; 2],
+    corrhist_p: [[i32; 16384]; 2],
     corrhist_kbn: [[i32; 16384]; 2],
+    corrhist_kqr: [[i32; 16384]; 2],
     conthist: [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     positions: usize,
 }
@@ -186,8 +187,9 @@ impl<'a, T: Write> DataGen<'a, T> {
             params: search::SearchParams::default(),
             tt: search::allocate_tt(16),
             history: [[[0; 64]; 64]; 12],
-            corrhist: [[0; 16384]; 2],
+            corrhist_p: [[0; 16384]; 2],
             corrhist_kbn: [[0; 16384]; 2],
+            corrhist_kqr: [[0; 16384]; 2],
             conthist: [[0; 2 * 6 * 64]; 2 * 6 * 64],
             positions: 0,
         }
@@ -254,8 +256,9 @@ impl<'a, T: Write> DataGen<'a, T> {
             Some(stop_after),
             &self.tt,
             &mut self.history,
-            &mut self.corrhist,
+            &mut self.corrhist_p,
             &mut self.corrhist_kbn,
+            &mut self.corrhist_kqr,
             &mut self.conthist,
             &self.params,
         );

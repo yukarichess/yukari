@@ -48,8 +48,9 @@ pub struct Yukari {
     mode: Mode,
     keystack: Vec<u64>,
     history: [[[i16; 64]; 64]; 12],
-    corrhist: [[i32; 16384]; 2],
+    corrhist_p: [[i32; 16384]; 2],
     corrhist_kbn: [[i32; 16384]; 2],
+    corrhist_kqr: [[i32; 16384]; 2],
     conthist: [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     params: SearchParams,
 }
@@ -69,8 +70,9 @@ impl Yukari {
             mode: Mode::Normal,
             keystack: Vec::new(),
             history: [[[0; 64]; 64]; 12],
-            corrhist: [[0; 16384]; 2],
+            corrhist_p: [[0; 16384]; 2],
             corrhist_kbn: [[0; 16384]; 2],
+            corrhist_kqr: [[0; 16384]; 2],
             conthist: [[0; 2 * 6 * 64]; 2 * 6 * 64],
             params: SearchParams::default(),
         }
@@ -135,7 +137,7 @@ impl Yukari {
             (None, Some(hard_limit))
         };
 
-        let mut s = Search::new(stop_after, tt, &mut self.history, &mut self.corrhist, &mut self.corrhist_kbn, &mut self.conthist, &self.params);
+        let mut s = Search::new(stop_after, tt, &mut self.history, &mut self.corrhist_p, &mut self.corrhist_kbn, &mut self.corrhist_kqr, &mut self.conthist, &self.params);
         // clone another to use inside the loop
         // Use a seperate backing data to record the current move set
         let mut depth = 1;
@@ -309,7 +311,7 @@ impl Yukari {
                     }
                 }
             }
-            let mut s = Search::new(None, tt, &mut self.history, &mut self.corrhist, &mut self.corrhist_kbn, &mut self.conthist, &self.params);
+            let mut s = Search::new(None, tt, &mut self.history, &mut self.corrhist_p, &mut self.corrhist_kbn, &mut self.corrhist_kqr, &mut self.conthist, &self.params);
             let mut keystack = Vec::new();
             let mut pv = ArrayVec::new();
             let mut score = 0;
