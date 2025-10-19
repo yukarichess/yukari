@@ -23,7 +23,13 @@ pub struct BoardData {
     index: PieceIndexArray,
     piecemask: Piecemask,
     /// Zobrist hash.
-    hash: u64,
+    hash_pawns: u64,
+    hash_knights: u64,
+    hash_bishops: u64,
+    hash_rooks: u64,
+    hash_queens: u64,
+    hash_kings: u64,
+    hash_other: u64,
     /// Evaluation state.
     eval: Eval,
 }
@@ -42,8 +48,15 @@ impl BoardData {
             piecelist: Piecelist::new(),
             index: PieceIndexArray::new(),
             piecemask: Piecemask::new(),
-            hash: 0,
+            hash_pawns: 0,
+            hash_knights: 0,
+            hash_bishops: 0,
+            hash_rooks: 0,
+            hash_queens: 0,
+            hash_kings: 0,
+            hash_other: 0,
             eval: Eval::new(),
+
         }
     }
 
@@ -104,60 +117,22 @@ impl BoardData {
 
     /// Zobrist hash of this position.
     pub const fn hash(&self) -> u64 {
-        self.hash
+        self.hash_pawns ^ self.hash_knights ^ self.hash_bishops ^ self.hash_rooks ^ self.hash_queens ^ self.hash_kings ^ self.hash_other
     }
 
     /// Pawn-only Zobrist hash of this position.
-    pub fn hash_pawns(&self) -> u64 {
-        let mut hash = 0;
-        for pawn in self.piecemask.pawns() {
-            let square = self.square_of_piece(pawn);
-            let colour = pawn.colour();
-            Zobrist::add_piece(colour, Piece::Pawn, square, &mut hash);
-        }
-        hash
+    pub const fn hash_pawns(&self) -> u64 {
+        self.hash_pawns
     }
 
     /// (king, bishop, knight)-only Zobrist hash of this position.
-    pub fn hash_kbn(&self) -> u64 {
-        let mut hash = 0;
-        for king in self.piecemask.kings() {
-            let square = self.square_of_piece(king);
-            let colour = king.colour();
-            Zobrist::add_piece(colour, Piece::King, square, &mut hash);
-        }
-        for bishop in self.piecemask.bishops() {
-            let square = self.square_of_piece(bishop);
-            let colour = bishop.colour();
-            Zobrist::add_piece(colour, Piece::Bishop, square, &mut hash);
-        }
-        for knight in self.piecemask.knights() {
-            let square = self.square_of_piece(knight);
-            let colour = knight.colour();
-            Zobrist::add_piece(colour, Piece::Knight, square, &mut hash);
-        }
-        hash
+    pub const fn hash_kbn(&self) -> u64 {
+        self.hash_knights ^ self.hash_bishops ^ self.hash_kings
     }
 
     /// (king, queen, rook)-only Zobrist hash of this position.
-    pub fn hash_kqr(&self) -> u64 {
-        let mut hash = 0;
-        for king in self.piecemask.kings() {
-            let square = self.square_of_piece(king);
-            let colour = king.colour();
-            Zobrist::add_piece(colour, Piece::King, square, &mut hash);
-        }
-        for queen in self.piecemask.queens() {
-            let square = self.square_of_piece(queen);
-            let colour = queen.colour();
-            Zobrist::add_piece(colour, Piece::Queen, square, &mut hash);
-        }
-        for rook in self.piecemask.rooks() {
-            let square = self.square_of_piece(rook);
-            let colour = rook.colour();
-            Zobrist::add_piece(colour, Piece::Rook, square, &mut hash);
-        }
-        hash
+    pub const fn hash_kqr(&self) -> u64 {
+        self.hash_rooks ^ self.hash_queens ^ self.hash_kings
     }
 
     /// Add a `Piece` to a `Square`.
@@ -165,7 +140,16 @@ impl BoardData {
         let piece_index = self.piecemask.add_piece(piece, colour);
         self.piecelist.add_piece(piece_index, square);
         self.index.add_piece(piece_index, square);
-        Zobrist::add_piece(colour, self.piece_from_bit(piece_index), square, &mut self.hash);
+        let piece = self.piece_from_bit(piece_index);
+        let hash = match piece {
+            Piece::Pawn => &mut self.hash_pawns,
+            Piece::Knight => &mut self.hash_knights,
+            Piece::Bishop => &mut self.hash_bishops,
+            Piece::Rook => &mut self.hash_rooks,
+            Piece::Queen => &mut self.hash_queens,
+            Piece::King => &mut self.hash_kings,
+        };
+        Zobrist::add_piece(colour, piece, square, hash);
 
         if update {
             let white_king = self.king_square(Colour::White);
@@ -196,7 +180,15 @@ impl BoardData {
         self.piecemask.remove_piece(piece_index);
         self.piecelist.remove_piece(piece_index, square);
         self.index.remove_piece(piece_index, square);
-        Zobrist::remove_piece(piece_index.colour(), piece, square, &mut self.hash);
+        let hash = match piece {
+            Piece::Pawn => &mut self.hash_pawns,
+            Piece::Knight => &mut self.hash_knights,
+            Piece::Bishop => &mut self.hash_bishops,
+            Piece::Rook => &mut self.hash_rooks,
+            Piece::Queen => &mut self.hash_queens,
+            Piece::King => &mut self.hash_kings,
+        };
+        Zobrist::remove_piece(piece_index.colour(), piece, square, hash);
 
         let white_king = self.king_square(Colour::White);
         let black_king = self.king_square(Colour::Black);
@@ -327,7 +319,15 @@ impl BoardData {
 
         self.piecelist.move_piece(piece_index, to_square);
         self.index.move_piece(piece_index, from_square, to_square);
-        Zobrist::move_piece(piece_index.colour(), piece, from_square, to_square, &mut self.hash);
+        let hash = match piece {
+            Piece::Pawn => &mut self.hash_pawns,
+            Piece::Knight => &mut self.hash_knights,
+            Piece::Bishop => &mut self.hash_bishops,
+            Piece::Rook => &mut self.hash_rooks,
+            Piece::Queen => &mut self.hash_queens,
+            Piece::King => &mut self.hash_kings,
+        };
+        Zobrist::move_piece(piece_index.colour(), piece, from_square, to_square, hash);
 
         self.add_attacks(to_square, piece_index, piece);
         self.update_sliders(to_square, false, Some(from_square));
@@ -378,22 +378,22 @@ impl BoardData {
 
     /// Set the en-passant square.
     pub fn set_ep(&mut self, old: Option<Square>, new: Option<Square>) {
-        Zobrist::set_ep(old, new, &mut self.hash);
+        Zobrist::set_ep(old, new, &mut self.hash_other);
     }
 
     /// Add castling rights.
     pub fn add_castling(&mut self, kind: usize) {
-        Zobrist::add_castling(kind, &mut self.hash);
+        Zobrist::add_castling(kind, &mut self.hash_other);
     }
 
     /// Remove castling rights.
     pub fn remove_castling(&mut self, kind: usize) {
-        Zobrist::remove_castling(kind, &mut self.hash);
+        Zobrist::remove_castling(kind, &mut self.hash_other);
     }
 
     /// Toggle side to move.
     pub fn toggle_side(&mut self) {
-        Zobrist::toggle_side(&mut self.hash);
+        Zobrist::toggle_side(&mut self.hash_other);
     }
 
     /// Evaluation from the perspective of `colour`.
