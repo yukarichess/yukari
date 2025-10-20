@@ -215,7 +215,9 @@ impl<'a> Search<'a> {
     #[must_use]
     pub fn new(
         stop_after: Option<Instant>, tt: &'a [TtEntry], history: &'a mut [[[i16; 64]; 64]; 12],
-        corrhist_p: &'a mut [[i32; 16384]; 2], corrhist_kbn: &'a mut [[i32; 16384]; 2], corrhist_kqr: &'a mut [[i32; 16384]; 2], corrhist_kqrbn_w: &'a mut [[i32; 16384]; 2], corrhist_kqrbn_b: &'a mut [[i32; 16384]; 2], conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64], params: &'a SearchParams,
+        corrhist_p: &'a mut [[i32; 16384]; 2], corrhist_kbn: &'a mut [[i32; 16384]; 2], corrhist_kqr: &'a mut [[i32; 16384]; 2],
+        corrhist_kqrbn_w: &'a mut [[i32; 16384]; 2], corrhist_kqrbn_b: &'a mut [[i32; 16384]; 2],
+        conthist: &'a mut [[i16; 2 * 6 * 64]; 2 * 6 * 64], params: &'a SearchParams,
     ) -> Self {
         Self {
             nodes: 0,
@@ -262,13 +264,15 @@ impl<'a> Search<'a> {
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
 
         // nonpawns (white)
-        let entry_kqrbn_w = &mut self.corrhist_kqrbn_w[board.side() as usize][board.data().hash_nonpawn(Colour::White) as usize & 16383];
+        let entry_kqrbn_w =
+            &mut self.corrhist_kqrbn_w[board.side() as usize][board.data().hash_nonpawn(Colour::White) as usize & 16383];
 
         *entry_kqrbn_w = ((*entry_kqrbn_w * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
 
         // nonpawns (black)
-        let entry_kqrbn_b = &mut self.corrhist_kqrbn_b[board.side() as usize][board.data().hash_nonpawn(Colour::Black) as usize & 16383];
+        let entry_kqrbn_b =
+            &mut self.corrhist_kqrbn_b[board.side() as usize][board.data().hash_nonpawn(Colour::Black) as usize & 16383];
 
         *entry_kqrbn_b = ((*entry_kqrbn_b * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
@@ -523,8 +527,7 @@ impl<'a> Search<'a> {
         // Reverse futility pruning: is the static eval so good we can prune?
         let rfp_margin = self.params.rfp_margin_base + self.params.rfp_margin_mul * depth;
         let rfp_depth = if improving { 5 } else { 4 };
-        if excluded_move.is_none() && !expected_pvnode && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta
-        {
+        if excluded_move.is_none() && !expected_pvnode && !board.in_check() && depth <= rfp_depth && eval_int - rfp_margin >= beta {
             return eval_int - rfp_margin;
         }
 
@@ -557,7 +560,17 @@ impl<'a> Search<'a> {
             let board = board.make_null();
             let mut child_pv = ArrayVec::new();
             self.path.push(None);
-            let score = -self.search(&board, depth - 1 - reduction, -beta, -beta + 1, &mut child_pv, ply + 1, keystack, None, !expected_cutnode);
+            let score = -self.search(
+                &board,
+                depth - 1 - reduction,
+                -beta,
+                -beta + 1,
+                &mut child_pv,
+                ply + 1,
+                keystack,
+                None,
+                !expected_cutnode,
+            );
             self.path.pop();
             keystack.pop();
 
@@ -636,8 +649,14 @@ impl<'a> Search<'a> {
             }
 
             // Late Move Pruning
-            let lmp_threshold = self.params.lmp_base + (((self.params.lmp_mul * depth).pow(self.params.lmp_pow)) >> i32::from(!improving));
-            if !board.in_check() && !m.is_capture() && depth <= 3 && movecount >= lmp_threshold as usize && best_score > -MATE_VALUE + 500 {
+            let lmp_threshold =
+                self.params.lmp_base + (((self.params.lmp_mul * depth).pow(self.params.lmp_pow)) >> i32::from(!improving));
+            if !board.in_check()
+                && !m.is_capture()
+                && depth <= 3
+                && movecount >= lmp_threshold as usize
+                && best_score > -MATE_VALUE + 500
+            {
                 continue;
             }
 
@@ -650,14 +669,20 @@ impl<'a> Search<'a> {
                 && ply > 0
                 && Some(m) == tt_entry.m
             {
-
-                if depth >= 7
-                    && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower)
-                    && tt_entry.score.abs() < 9500
-                {
+                if depth >= 7 && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower) && tt_entry.score.abs() < 9500 {
                     let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
                     let singular_depth = (depth - 1) / 2;
-                    let score = self.search(board, singular_depth, singular_beta - 1, singular_beta, pv, ply, keystack, Some(m), expected_cutnode);
+                    let score = self.search(
+                        board,
+                        singular_depth,
+                        singular_beta - 1,
+                        singular_beta,
+                        pv,
+                        ply,
+                        keystack,
+                        Some(m),
+                        expected_cutnode,
+                    );
 
                     // Multicut: Another move failed high, so this position is very good; prune.
                     if score >= singular_beta && singular_beta >= beta {
@@ -731,7 +756,7 @@ impl<'a> Search<'a> {
                     ply + 1,
                     keystack,
                     None,
-                    false
+                    false,
                 );
             }
 

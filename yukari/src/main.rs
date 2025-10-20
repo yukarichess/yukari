@@ -141,7 +141,18 @@ impl Yukari {
             (None, Some(hard_limit))
         };
 
-        let mut s = Search::new(stop_after, tt, &mut self.history, &mut self.corrhist_p, &mut self.corrhist_kbn, &mut self.corrhist_kqr, &mut self.corrhist_kqrbn_w, &mut self.corrhist_kqrbn_b, &mut self.conthist, &self.params);
+        let mut s = Search::new(
+            stop_after,
+            tt,
+            &mut self.history,
+            &mut self.corrhist_p,
+            &mut self.corrhist_kbn,
+            &mut self.corrhist_kqr,
+            &mut self.corrhist_kqrbn_w,
+            &mut self.corrhist_kqrbn_b,
+            &mut self.conthist,
+            &self.params,
+        );
         // clone another to use inside the loop
         // Use a seperate backing data to record the current move set
         let mut depth = 1;
@@ -315,7 +326,18 @@ impl Yukari {
                     }
                 }
             }
-            let mut s = Search::new(None, tt, &mut self.history, &mut self.corrhist_p, &mut self.corrhist_kbn, &mut self.corrhist_kqr, &mut self.corrhist_kqrbn_w, &mut self.corrhist_kqrbn_b, &mut self.conthist, &self.params);
+            let mut s = Search::new(
+                None,
+                tt,
+                &mut self.history,
+                &mut self.corrhist_p,
+                &mut self.corrhist_kbn,
+                &mut self.corrhist_kqr,
+                &mut self.corrhist_kqrbn_w,
+                &mut self.corrhist_kqrbn_b,
+                &mut self.conthist,
+                &self.params,
+            );
             let mut keystack = Vec::new();
             let mut pv = ArrayVec::new();
             let mut score = 0;

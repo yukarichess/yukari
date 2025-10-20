@@ -1,4 +1,4 @@
-use std::simd::{cmp::SimdPartialEq, u32x64, u8x64};
+use std::simd::{cmp::SimdPartialEq, u8x64, u32x64};
 
 use super::{
     bitlist::{Bitlist, BitlistArray},
@@ -56,7 +56,6 @@ impl BoardData {
             hash_kings: 0,
             hash_other: 0,
             eval: Eval::new(),
-
         }
     }
 
@@ -117,7 +116,13 @@ impl BoardData {
 
     /// Zobrist hash of this position.
     pub const fn hash(&self) -> u64 {
-        self.hash_pawns ^ self.hash_knights ^ self.hash_bishops ^ self.hash_rooks ^ self.hash_queens ^ self.hash_kings ^ self.hash_other
+        self.hash_pawns
+            ^ self.hash_knights
+            ^ self.hash_bishops
+            ^ self.hash_rooks
+            ^ self.hash_queens
+            ^ self.hash_kings
+            ^ self.hash_other
     }
 
     /// Pawn-only Zobrist hash of this position.
@@ -478,7 +483,15 @@ impl BoardData {
             let dest = threats.trailing_zeros();
             let dest = unsafe { Square::from_u8_unchecked(dest as u8) };
             threats &= threats - 1;
-            self.eval.remove_threat(piece, square, dest, bit.colour(), self.index[dest].map(PieceIndex::colour), white_king, black_king);
+            self.eval.remove_threat(
+                piece,
+                square,
+                dest,
+                bit.colour(),
+                self.index[dest].map(PieceIndex::colour),
+                white_king,
+                black_king,
+            );
         }
 
         bitlist &= !bit_vector;

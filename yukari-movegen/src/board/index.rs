@@ -4,7 +4,15 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::{board::{bitlist::{Bitlist, BitlistArray}, piecemask::Piecemask}, colour::Colour, square::Square, Piece};
+use crate::{
+    Piece,
+    board::{
+        bitlist::{Bitlist, BitlistArray},
+        piecemask::Piecemask,
+    },
+    colour::Colour,
+    square::Square,
+};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -260,13 +268,13 @@ impl PieceIndexRays {
         for ray in 0..8 {
             let mut possible_index = None;
             for hop in 1..8 {
-                if let Some(index) = self.0[8*ray + hop] {
+                if let Some(index) = self.0[8 * ray + hop] {
                     possible_index = Some(index);
                     break;
                 }
             }
             for hop in 1..8 {
-                self.0[8*ray + hop] = possible_index;
+                self.0[8 * ray + hop] = possible_index;
             }
         }
     }
