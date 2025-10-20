@@ -288,12 +288,13 @@ impl<'a> Search<'a> {
 
     fn eval_with_corrhist(&self, board: &Board, eval: i32) -> i32 {
         const CORRHIST_GRAIN: i32 = 256;
-        let entry_p = self.corrhist_p[board.side() as usize][board.hash_pawns() as usize & 16383] / CORRHIST_GRAIN;
-        let entry_kbn = self.corrhist_kbn[board.side() as usize][board.data().hash_kbn() as usize & 16383] / CORRHIST_GRAIN;
-        let entry_kqr = self.corrhist_kqr[board.side() as usize][board.data().hash_kqr() as usize & 16383] / CORRHIST_GRAIN;
-        let entry_kqrbn_w = self.corrhist_kqrbn_w[board.side() as usize][board.data().hash_nonpawn(Colour::White) as usize & 16383] / CORRHIST_GRAIN;
-        let entry_kqrbn_b = self.corrhist_kqrbn_b[board.side() as usize][board.data().hash_nonpawn(Colour::Black) as usize & 16383] / CORRHIST_GRAIN;
-        (eval + entry_p + entry_kbn + entry_kqr + entry_kqrbn_w + entry_kqrbn_b).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
+        let entry_p = self.corrhist_p[board.side() as usize][board.hash_pawns() as usize & 16383];
+        let entry_kbn = self.corrhist_kbn[board.side() as usize][board.data().hash_kbn() as usize & 16383];
+        let entry_kqr = self.corrhist_kqr[board.side() as usize][board.data().hash_kqr() as usize & 16383];
+        let entry_kqrbn_w = self.corrhist_kqrbn_w[board.side() as usize][board.data().hash_nonpawn(Colour::White) as usize & 16383];
+        let entry_kqrbn_b = self.corrhist_kqrbn_b[board.side() as usize][board.data().hash_nonpawn(Colour::Black) as usize & 16383];
+        let corrhist = (entry_p + entry_kbn + entry_kqr + entry_kqrbn_w + entry_kqrbn_b) / CORRHIST_GRAIN;
+        (eval + corrhist).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
     }
 
     fn update_history(
