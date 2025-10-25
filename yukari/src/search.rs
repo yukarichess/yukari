@@ -21,6 +21,11 @@ pub struct SearchParams {
     pub lmp_pow: u32,
     pub see_pruning_capture: f32,
     pub see_pruning_quiet: f32,
+    pub corrhist_p_weight: i32,
+    pub corrhist_kbn_weight: i32,
+    pub corrhist_kqr_weight: i32,
+    pub corrhist_kqrbn_stm_weight: i32,
+    pub corrhist_kqrbn_nstm_weight: i32,
 }
 
 impl Default for SearchParams {
@@ -40,6 +45,11 @@ impl Default for SearchParams {
             lmp_pow: 2,
             see_pruning_capture: 0.489_161_5,
             see_pruning_quiet: 0.006_385_347,
+            corrhist_p_weight: 1024,
+            corrhist_kbn_weight: 1024,
+            corrhist_kqr_weight: 1024,
+            corrhist_kqrbn_stm_weight: 1024,
+            corrhist_kqrbn_nstm_weight: 1024,
         }
     }
 }
@@ -292,11 +302,15 @@ impl<'a> Search<'a> {
 
     fn eval_with_corrhist(&self, board: &Board, eval: i32) -> i32 {
         const CORRHIST_GRAIN: i32 = 256;
-        let entry_p = self.corrhist_p[board.side() as usize][board.hash_pawns() as usize & 16383];
-        let entry_kbn = self.corrhist_kbn[board.side() as usize][board.data().hash_kbn() as usize & 16383];
-        let entry_kqr = self.corrhist_kqr[board.side() as usize][board.data().hash_kqr() as usize & 16383];
-        let entry_kqrbn_w = self.corrhist_kqrbn_w[board.side() as usize][board.data().hash_nonpawn(Colour::White) as usize & 16383];
-        let entry_kqrbn_b = self.corrhist_kqrbn_b[board.side() as usize][board.data().hash_nonpawn(Colour::Black) as usize & 16383];
+
+        let corrhist_w_weight = if board.side() == Colour::White { self.params.corrhist_kqrbn_stm_weight } else { self.params.corrhist_kqrbn_nstm_weight };
+        let corrhist_b_weight = if board.side() == Colour::Black { self.params.corrhist_kqrbn_stm_weight } else { self.params.corrhist_kqrbn_nstm_weight };
+
+        let entry_p = self.corrhist_p[board.side() as usize][board.hash_pawns() as usize & 16383] * self.params.corrhist_p_weight / 1024;
+        let entry_kbn = self.corrhist_kbn[board.side() as usize][board.data().hash_kbn() as usize & 16383] * self.params.corrhist_kbn_weight / 1024;
+        let entry_kqr = self.corrhist_kqr[board.side() as usize][board.data().hash_kqr() as usize & 16383] * self.params.corrhist_kqr_weight / 1024;
+        let entry_kqrbn_w = self.corrhist_kqrbn_w[board.side() as usize][board.data().hash_nonpawn(Colour::White) as usize & 16383] * corrhist_w_weight / 1024;
+        let entry_kqrbn_b = self.corrhist_kqrbn_b[board.side() as usize][board.data().hash_nonpawn(Colour::Black) as usize & 16383] * corrhist_b_weight / 1024;
         let corrhist = (entry_p + entry_kbn + entry_kqr + entry_kqrbn_w + entry_kqrbn_b) / CORRHIST_GRAIN;
         (eval + corrhist).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
     }

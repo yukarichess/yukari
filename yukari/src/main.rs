@@ -528,17 +528,22 @@ fn main() -> io::Result<()> {
                 // We support nps for fixed-nodes search.
                 println!("feature nps=1");
                 // Tunables!
-                println!("feature option=\"RfpMarginBase -spin 0 0 100\"");
-                println!("feature option=\"RfpMarginMul -spin 37 0 1000\"");
-                println!("feature option=\"RazorMarginMul -spin 250 0 500\"");
-                println!("feature option=\"LmrBase -string 1.0\"");
-                println!("feature option=\"LmrMul -string 0.5\"");
-                println!("feature option=\"HistBonusBase -spin 250 0 500\"");
-                println!("feature option=\"HistBonusMul -spin 300 0 600\"");
-                println!("feature option=\"HistPenaltyBase -spin 250 0 500\"");
-                println!("feature option=\"HistPenaltyMul -spin 300 0 600\"");
-                println!("feature option=\"SeePruningCapture -string 0.5\"");
-                println!("feature option=\"SeePruningQuiet -string 0.0\"");
+                println!("feature option=\"RfpMarginBase -spin 3 0 100\"");
+                println!("feature option=\"RfpMarginMul -spin 36 0 1000\"");
+                println!("feature option=\"RazorMarginMul -spin 246 0 500\"");
+                println!("feature option=\"LmrBase -string 1.0186429\"");
+                println!("feature option=\"LmrMul -string 0.52110153\"");
+                println!("feature option=\"HistBonusBase -spin 260 0 500\"");
+                println!("feature option=\"HistBonusMul -spin 303 0 600\"");
+                println!("feature option=\"HistPenaltyBase -spin 251 0 500\"");
+                println!("feature option=\"HistPenaltyMul -spin 298 0 600\"");
+                println!("feature option=\"SeePruningCapture -string 0.4891615\"");
+                println!("feature option=\"SeePruningQuiet -string 0.006385347\"");
+                println!("feature option=\"CorrhistP -spin 1024 0 2048\"");
+                println!("feature option=\"CorrhistKQR -spin 1024 0 2048\"");
+                println!("feature option=\"CorrhistKBN -spin 1024 0 2048\"");
+                println!("feature option=\"CorrhistStmKQRBN -spin 1024 0 2048\"");
+                println!("feature option=\"CorrhistNstmKQRBN -spin 1024 0 2048\"");
                 println!("feature option=\"Hash -spin 16 1 8192\"");
                 println!("feature option=\"Threads -spin 1 1 1\"");
                 // Communicate that feature reporting is done
@@ -636,6 +641,11 @@ fn main() -> io::Result<()> {
                     "HistPenaltyMul" => engine.params.hist_pen_mul = value.parse::<i32>().unwrap(),
                     "SeePruningCapture" => engine.params.see_pruning_capture = value.parse::<f32>().unwrap(),
                     "SeePruningQuiet" => engine.params.see_pruning_quiet = value.parse::<f32>().unwrap(),
+                    "CorrhistP" => engine.params.corrhist_p_weight = value.parse::<i32>().unwrap(),
+                    "CorrhistKQR" => engine.params.corrhist_kqr_weight = value.parse::<i32>().unwrap(),
+                    "CorrhistKBN" => engine.params.corrhist_kbn_weight = value.parse::<i32>().unwrap(),
+                    "CorrhistStmKQRBN" => engine.params.corrhist_kqrbn_stm_weight = value.parse::<i32>().unwrap(),
+                    "CorrhistNstmKQRBN" => engine.params.corrhist_kqrbn_nstm_weight = value.parse::<i32>().unwrap(),
                     _ => (),
                 }
             }
