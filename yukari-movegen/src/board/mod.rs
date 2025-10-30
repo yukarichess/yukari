@@ -1084,7 +1084,7 @@ impl Board {
         Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from, m.dest, &mut hash);
 
         if matches!(m.kind, MoveType::Promotion | MoveType::CapturePromotion) {
-            Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), self.data.square_of_piece(piece_index), &mut hash);
+            Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), m.dest, &mut hash);
             Zobrist::add_piece(self.side, m.prom.unwrap(), m.dest, &mut hash);
         }
 
