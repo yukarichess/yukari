@@ -666,7 +666,7 @@ impl<'a> Search<'a> {
             }
 
             // SEE Pruning
-            if !board.in_check() && (2..=5).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
+            if !board.in_check() && (1..=5).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
                 let threshold = if m.is_capture() {
                     -(depth as f32 * self.params.see_pruning_capture) as i32
                 } else {
