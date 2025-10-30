@@ -1051,6 +1051,99 @@ impl Board {
         self.data.hash()
     }
 
+    #[inline]
+    #[must_use]
+    #[allow(clippy::too_many_lines)]
+    pub fn hash_after(&self, m: Move) -> u64 {
+        let mut hash = self.hash();
+
+        match m.kind {
+            MoveType::Promotion | MoveType::Normal | MoveType::DoublePush => {}
+            MoveType::Capture | MoveType::CapturePromotion => {
+                let piece_index =
+                    self.data.piece_index(m.dest).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
+                Zobrist::remove_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), self.data.square_of_piece(piece_index), &mut hash);
+            }
+            MoveType::Castle => {
+                let (rook_from, rook_to) = if m.dest > m.from {
+                    (m.dest.east().unwrap(), m.dest.west().unwrap())
+                } else {
+                    (m.dest.west().unwrap().west().unwrap(), m.dest.east().unwrap())
+                };
+                let piece_index = self.data.piece_index(rook_from).unwrap();
+                Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
+            }
+            MoveType::EnPassant => {
+                let target_square = self.ep.unwrap().relative_south(self.side).unwrap();
+                let target_piece = self.data.piece_index(target_square).unwrap();
+                Zobrist::remove_piece(target_piece.colour(), self.data.piece_from_bit(target_piece), self.data.square_of_piece(target_piece), &mut hash);
+            }
+        }
+
+        let piece_index = self.data.piece_index(m.from).unwrap();
+        Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from, m.dest, &mut hash);
+
+        if matches!(m.kind, MoveType::Promotion | MoveType::CapturePromotion) {
+            Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), self.data.square_of_piece(piece_index), &mut hash);
+            Zobrist::add_piece(self.side, m.prom.unwrap(), m.dest, &mut hash);
+        }
+
+        let candidate_ep = (|| {
+            let MoveType::DoublePush = m.kind else { return None };
+            let candidate_ep = m.from.relative_north(self.side)?;
+            let attacks = self.data().attacks_to(candidate_ep, !self.side());
+            if (attacks & self.data().piecemask().pawns()).empty() {
+                return None;
+            }
+            Some(candidate_ep)
+        })();
+        Zobrist::set_ep(self.ep, candidate_ep, &mut hash);
+
+        let a1 = Square::from_rank_file(Rank::One, File::A);
+        let a8 = Square::from_rank_file(Rank::Eight, File::A);
+        let e1 = Square::from_rank_file(Rank::One, File::E);
+        let e8 = Square::from_rank_file(Rank::Eight, File::E);
+        let h1 = Square::from_rank_file(Rank::One, File::H);
+        let h8 = Square::from_rank_file(Rank::Eight, File::H);
+
+        if m.from == e1 {
+            if self.castle.0 {
+                Zobrist::remove_castling(0, &mut hash);
+            }
+            if self.castle.1 {
+                Zobrist::remove_castling(1, &mut hash);
+            }
+        }
+
+        if m.from == e8 {
+            if self.castle.2 {
+                Zobrist::remove_castling(2, &mut hash);
+            }
+            if self.castle.3 {
+                Zobrist::remove_castling(3, &mut hash);
+            }
+        }
+
+        if (m.from == h1 || m.dest == h1) && self.castle.0 {
+            Zobrist::remove_castling(0, &mut hash);
+        }
+
+        if (m.from == a1 || m.dest == a1) && self.castle.1 {
+            Zobrist::remove_castling(1, &mut hash);
+        }
+
+        if (m.from == h8 || m.dest == h8) && self.castle.2 {
+            Zobrist::remove_castling(2, &mut hash);
+        }
+
+        if (m.from == a8 || m.dest == a8) && self.castle.3 {
+            Zobrist::remove_castling(3, &mut hash);
+        }
+
+        Zobrist::toggle_side(&mut hash);
+        hash
+    }
+
     #[must_use]
     pub fn hash_pawns(&self) -> u64 {
         self.data.hash_pawns()
