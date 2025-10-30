@@ -6,8 +6,8 @@ use yukari_movegen::{Board, Colour, Move, Piece};
 #[cfg(target_arch = "aarch64")]
 use core::arch::aarch64::{_prefetch, _PREFETCH_READ, _PREFETCH_LOCALITY3};
 
-// #[cfg(target_arch = "x86_64")]
-// use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
 
 const MATE_VALUE: i32 = 10_000;
 
@@ -448,7 +448,7 @@ impl<'a> Search<'a> {
         None
     }
 
-    // #[cfg(target_arch = "aarch64")]
+    #[cfg(target_arch = "aarch64")]
     #[inline(always)]
     fn prefetch_tt(&self, board: &Board, m: Move) {
         let entry = (board.hash_after(m) & ((self.tt.len() - 1) as u64)) as usize;
@@ -456,17 +456,17 @@ impl<'a> Search<'a> {
         unsafe { _prefetch(entry as *const _ as *const i8, _PREFETCH_READ, _PREFETCH_LOCALITY3) }
     }
 
-    // #[cfg(target_arch = "x86_64")]
-    // #[inline(always)]
-    // fn prefetch_tt(&self, board: &Board, m: Move) {
-    //     let entry = (board.hash_after(m) & ((self.tt.len() - 1) as u64)) as usize;
-    //     let entry = &self.tt[entry];
-    //     unsafe { _mm_prefetch::<_MM_HINT_T0>(entry as *const _ as *const i8) }
-    // }
-    //
-    // #[cfg(all(not(target_arch = "aarch64"), not(target_arch = "x86_64")))]
-    // #[inline(always)]
-    // fn prefetch_tt(&self, board: &Board, m: Move) {}
+    #[cfg(target_arch = "x86_64")]
+    #[inline(always)]
+    fn prefetch_tt(&self, board: &Board, m: Move) {
+        let entry = (board.hash_after(m) & ((self.tt.len() - 1) as u64)) as usize;
+        let entry = &self.tt[entry];
+        unsafe { _mm_prefetch::<_MM_HINT_T0>(entry as *const _ as *const i8) }
+    }
+
+    #[cfg(all(not(target_arch = "aarch64"), not(target_arch = "x86_64")))]
+    #[inline(always)]
+    fn prefetch_tt(&self, board: &Board, m: Move) {}
 
     fn write_tt(&self, board: &Board, ply: i32, mut data: TtData) {
         let entry = (board.hash() & ((self.tt.len() - 1) as u64)) as usize;
