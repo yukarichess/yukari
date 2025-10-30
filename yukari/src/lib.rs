@@ -1,3 +1,4 @@
+#![feature(stdarch_aarch64_prefetch)]
 #![warn(clippy::imprecise_flops, clippy::suboptimal_flops)]
 
 pub mod datagen;
