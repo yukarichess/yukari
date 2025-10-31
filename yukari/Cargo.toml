@@ -1,6 +1,6 @@
 [package]
 name = "yukari"
-version = "2025.4.1"
+version = "2025.11.1"
 authors = ["Yukari Chess <yukarichess@gmail.com>"]
 edition = "2024"
 license-file = "../LICENSE.md"
