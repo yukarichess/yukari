@@ -770,7 +770,12 @@ fn main() -> io::Result<()> {
                 }
             }
             "force" => engine.mode = Mode::Force,
-            "d" => println!("{}", engine.board),
+            "d" => {
+                println!("{}", engine.board);
+                if is_repetition_draw(&engine.keystack, engine.board.hash()) {
+                    println!("(threefold repetition)");
+                }
+            }
             _ => {
                 // Always ascii
                 let chars = trimmed.as_bytes();

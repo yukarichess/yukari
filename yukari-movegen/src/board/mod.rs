@@ -264,6 +264,10 @@ impl Board {
         b.data.rebuild_attacks();
         b.data.rebuild_accumulators();
 
+        if b.side == Colour::Black {
+            b.data.toggle_side();
+        }
+
         if b.illegal() {
             return None;
         }
