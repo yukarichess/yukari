@@ -1,3 +1,4 @@
+#![cfg_attr(target_arch = "aarch64", feature(stdarch_aarch64_prefetch))]
 #![warn(clippy::imprecise_flops, clippy::suboptimal_flops)]
 
 pub mod datagen;

@@ -3,9 +3,6 @@ use std::{cmp::Ordering, sync::atomic::AtomicU64, time::Instant};
 use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Colour, Move, Piece};
 
-#[cfg(target_arch = "x86_64")]
-use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-
 const MATE_VALUE: i32 = 10_000;
 
 #[derive(Clone)]
@@ -445,15 +442,27 @@ impl<'a> Search<'a> {
         None
     }
 
+    #[cfg(target_arch = "aarch64")]
+    #[inline(always)]
+    fn prefetch_tt(&self, board: &Board, m: Move) {
+        use core::arch::aarch64::{_prefetch, _PREFETCH_READ, _PREFETCH_LOCALITY3};
+
+        let entry = (board.hash_after(m) & ((self.tt.len() - 1) as u64)) as usize;
+        let entry = &self.tt[entry];
+        unsafe { _prefetch(entry as *const _ as *const i8, _PREFETCH_READ, _PREFETCH_LOCALITY3) }
+    }
+
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
     fn prefetch_tt(&self, board: &Board, m: Move) {
+        use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+
         let entry = (board.hash_after(m) & ((self.tt.len() - 1) as u64)) as usize;
         let entry = &self.tt[entry];
         unsafe { _mm_prefetch::<_MM_HINT_T0>(entry as *const _ as *const i8) }
     }
 
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     #[inline(always)]
     fn prefetch_tt(&self, board: &Board, m: Move) {}
 
