@@ -251,14 +251,13 @@ impl Board {
         }
         idx += 1;
         c = fen[idx];
-        if c == b'-' {
-            b.ep = None;
-        } else {
+        b.ep = None;
+        if c != b'-' {
             let file = File::try_from(c - b'a').unwrap();
             idx += 1;
             c = fen[idx];
             let rank = Rank::try_from(c - b'1').unwrap();
-            b.ep = Some(Square::from_rank_file(rank, file));
+            b.set_ep(Some(Square::from_rank_file(rank, file)));
         }
 
         b.data.rebuild_attacks();
