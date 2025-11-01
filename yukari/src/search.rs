@@ -669,11 +669,6 @@ impl<'a> Search<'a> {
                 continue;
             }
 
-            self.nodes += 1;
-            if !expected_pvnode {
-                self.zw_nodes += 1;
-            }
-
             // SEE Pruning
             if !board.in_check() && (1..=5).contains(&depth) && movecount > 1 && best_score > -MATE_VALUE + 500 {
                 let threshold = if m.is_capture() {
@@ -739,6 +734,11 @@ impl<'a> Search<'a> {
                     // Low-depth singular extension
                     extension += 1;
                 }
+            }
+
+            self.nodes += 1;
+            if !expected_pvnode {
+                self.zw_nodes += 1;
             }
 
             self.prefetch_tt(board, m);
