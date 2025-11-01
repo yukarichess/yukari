@@ -5,7 +5,7 @@ ifeq ($(OS),Windows_NT)
 	EXT := .exe
 	NAME := $(shell powershell -Command "(Get-Content yukari/Cargo.toml | Select-String '^name =').Line -replace '.*= ', '' -replace '\"', ''")
 	VERSION := $(shell powershell -Command "(Get-Content yukari/Cargo.toml | Select-String '^version =').Line -replace '.*= ', '' -replace '\"', ''")
-	TRIPLE := $(shell powershell -Command "(rustc -vV | Select-String '^host: ').Line -replace '^host: ' ''")
+	TRIPLE := $(shell powershell -Command "(rustc -vV | Select-String '^host: ').Line -replace '^host: ', ''")
 else
 	EXT := 
 	NAME := $(shell sed -n 's/^name = "\(.*\)"/\1/p' yukari/Cargo.toml | head -1)

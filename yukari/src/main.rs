@@ -444,7 +444,7 @@ const YUKARI: &str = "
                   @@@@@@
 ";
 
-fn main() -> io::Result<()> {
+fn run() -> io::Result<()> {
     let mut engine = Yukari::new();
     let mut tt = allocate_tt(16);
     let mut protocol = Protocol::Human;
@@ -837,4 +837,15 @@ fn main() -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn main() -> io::Result<()> {
+    // Hack to deal with Windows' small stack sizes:
+    let child = std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(run)
+        .unwrap();
+
+    // Wait for thread to join
+    child.join().unwrap()
 }
