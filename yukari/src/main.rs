@@ -133,6 +133,8 @@ impl Yukari {
 
         // Use a seperate backing data to record the current move set
         let mut depth = 0;
+        let mut valid_score = 0;
+
         let mut pv = Vec::new();
         let max_depth = self.max_depth.unwrap_or(63);
         while depth <= max_depth {
@@ -160,10 +162,6 @@ impl Yukari {
                 false,
             );
 
-            // If we have bailed out stop the loop
-            if stop_after.is_some() && Instant::now() >= hard_limit {
-                break;
-            }
             // Modify time to search based on best move stability.
             if matches!(self.tc.mode, TimeMode::Incremental { base: _, increment: _ }) && !pv.is_empty() && !best_pv.is_empty() {
                 if pv[0] == best_pv[0] {
@@ -177,6 +175,7 @@ impl Yukari {
 
             // If we have a pv that's not just empty from bailing out use that as our best moves
             best_pv.clone_from(&pv);
+            valid_score = score;
 
             if stop_after.is_some() && Instant::now() >= soft_limit {
                 break;
@@ -188,6 +187,24 @@ impl Yukari {
             }
             depth += 1;
         }
+
+        let output: &mut dyn output::Output = match protocol {
+            Protocol::Human => &mut output::Human,
+            Protocol::Xboard => &mut output::Xboard,
+            Protocol::Uci => &mut output::Uci,
+        };
+
+        output.complete(
+            &self.board,
+            depth,
+            self.search.seldepth(),
+            valid_score,
+            Instant::now().duration_since(start),
+            self.search.nodes() + self.search.qnodes(),
+            best_pv,
+            true,
+            false,
+        );
     }
 
     fn bench(&mut self) {

@@ -376,7 +376,15 @@ impl Thread {
                 self.board[ply+1] = self.board[ply].make(*m);
             }
 
-            let score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
+            let mut score;
+            if movecount == 0 {
+                score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
+            } else {
+                score = -self.search(depth - 1, -alpha - 1, -alpha, ply + 1, tt);
+                if score > alpha && score < beta {
+                    score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
+                }
+            }
 
             if score > best {
                 best = score;
