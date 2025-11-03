@@ -6,4 +6,4 @@ pub mod engine;
 pub mod output;
 mod search;
 
-pub use search::{Search, is_repetition_draw};
+pub use search::{Search, TtEntry, is_repetition_draw};

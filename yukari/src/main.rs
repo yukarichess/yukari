@@ -13,10 +13,7 @@ use indicatif::{ParallelProgressIterator, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tinyvec::ArrayVec;
 use yukari::{
-    self, Search, datagen,
-    engine::{TimeControl, TimeMode},
-    is_repetition_draw,
-    output::{self, Output},
+    self, Search, datagen, engine::{TimeControl, TimeMode}, is_repetition_draw, output::{self, Output}
 };
 use yukari_movegen::{Board, Colour, Move, Piece, Square};
 
@@ -39,7 +36,6 @@ pub enum Protocol {
 }
 
 /// The main engine state
-#[derive(Clone)]
 pub struct Yukari {
     board: Board,
     tc: TimeControl,
@@ -49,13 +45,14 @@ pub struct Yukari {
     keystack: Vec<u64>,
     search: Search,
     threads: usize,
+    hash_megabytes: usize,
 }
 
 impl Yukari {
     /// Create a new copy of the engine, starting with the typical position and unused time controls
     #[must_use]
-    pub fn new(threads: usize) -> Self {
-        Self {
+    pub fn new(threads: usize, hash_megabytes: usize) -> Self {
+        let mut this = Self {
             // Using startpos fixes knights
             board: Board::startpos(),
             // Time controls are uninitialized
@@ -67,7 +64,10 @@ impl Yukari {
             keystack: Vec::new(),
             search: Search::new(threads),
             threads,
-        }
+            hash_megabytes,
+        };
+        this.search.allocate_tt(hash_megabytes);
+        this
     }
 
     /// Sets the game board from FEN notation
@@ -278,12 +278,6 @@ impl Yukari {
     }
 }
 
-impl Default for Yukari {
-    fn default() -> Self {
-        Self::new(1)
-    }
-}
-
 const YUKARI: &str = "
            @@            @=            @@     @@
    .@     @@@@*         %@     @@      @      @@
@@ -322,7 +316,7 @@ const YUKARI: &str = "
 ";
 
 fn run() -> io::Result<()> {
-    let mut engine = Yukari::new(1);
+    let mut engine = Yukari::new(1, 16);
     let mut protocol = Protocol::Human;
 
     for arg in std::env::args() {
@@ -400,7 +394,7 @@ fn run() -> io::Result<()> {
                 // Technically needed to support those # <msg> lines
                 println!("feature debug=1");
                 // We support hash table allocation sizing.
-                //println!("feature memory=1");
+                println!("feature memory=1");
                 // We support nps for fixed-nodes search.
                 println!("feature nps=1");
                 // We support multi-threading.
@@ -423,7 +417,7 @@ fn run() -> io::Result<()> {
                 println!("feature option=\"CorrhistStmKQRBN -spin 1024 0 2048\"");
                 println!("feature option=\"CorrhistNstmKQRBN -spin 1024 0 2048\"");
                 println!("feature option=\"Hash -spin 16 1 8192\"");
-                println!("feature option=\"Threads -spin 1 1 1\"");
+                println!("feature option=\"Threads -spin 1 1 256\"");
                 // Communicate that feature reporting is done
                 println!("feature done=1");
             }
@@ -487,7 +481,7 @@ fn run() -> io::Result<()> {
                 }
             }
             // Reset the entire state of the engine
-            "new" | "ucinewgame" => engine = Yukari::new(engine.threads),
+            "new" | "ucinewgame" => engine = Yukari::new(engine.threads, engine.hash_megabytes),
             // Parse our two time controls from the whole commmand lines
             // TODO: This is rather xboard specific
             "level" => engine.parse_tc(trimmed),
@@ -496,12 +490,14 @@ fn run() -> io::Result<()> {
             // Allocate a hash table.
             "memory" => {
                 let megabytes = args.parse::<usize>().unwrap();
-                // TODO
+                engine.search.allocate_tt(megabytes);
+                engine.hash_megabytes = megabytes;
             }
             // Set number of threads.
             "cores" => {
                 let cores = args.parse::<usize>().unwrap();
                 engine.search = Search::new(cores);
+                engine.search.allocate_tt(engine.hash_megabytes);
             }
             "option" => {
                 let (name, value) = args.split_once('=').unwrap();
@@ -509,13 +505,15 @@ fn run() -> io::Result<()> {
                     // UCIism. grumble grumble.
                     let value = value.parse::<i32>().unwrap();
                     if value >= 1 {
-                        // TODO
+                        engine.search.allocate_tt(value as usize);
+                        engine.hash_megabytes = value as usize;
                     }
                 }
                 if name == "Threads" {
                     // UCIism. grumble grumble.
                     let value = value.parse::<usize>().unwrap();
                     engine.search = Search::new(value);
+                    engine.search.allocate_tt(engine.hash_megabytes);
                 }
             }
             "setoption" => {
@@ -527,8 +525,16 @@ fn run() -> io::Result<()> {
                 let (value, _) = args.split_once(' ').unwrap_or((args, ""));
                 let value = value.parse::<i32>().unwrap();
                 match name {
-                    "Hash" if value >= 1 => (),                                        // UCIism. grumble grumble.
-                    "Threads" => engine.search = Search::new(value as usize), // UCIism, grumble grumble.
+                    "Hash" if value >= 1 => {
+                        // UCIism. grumble grumble.
+                        engine.search.allocate_tt(value as usize);
+                        engine.hash_megabytes = value as usize;
+                    } 
+                    "Threads" => {
+                        // UCIism, grumble grumble.
+                        engine.search = Search::new(value as usize);
+                        engine.search.allocate_tt(engine.hash_megabytes);
+                    }
                     _ => (),
                 }
             }

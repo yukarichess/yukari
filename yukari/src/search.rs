@@ -12,6 +12,33 @@ pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
     keystack.iter().filter(|key| **key == hash).count() >= 3
 }
 
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
+#[repr(u8)]
+enum TtFlags {
+    #[default]
+    Exact = 0,
+    Upper = 1,
+    Lower = 2,
+}
+
+#[derive(Default)]
+#[repr(align(16))]
+pub struct TtEntry {
+    key: AtomicU64,
+    data: AtomicU64,
+}
+
+#[derive(Default, Clone, Copy)]
+struct TtData {
+    flags: TtFlags,
+    depth: u8,
+    score: i16,
+    m: Option<Move>,
+}
+
+const _TT_ENTRY_IS_16_BYTE: () = assert!(std::mem::size_of::<TtEntry>() == 16);
+const _TT_DATA_IS_8_BYTE: () = assert!(std::mem::size_of::<TtData>() == 8);
+
 #[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
 enum MoveOrder {
     #[default]
@@ -57,8 +84,11 @@ impl Ord for MoveOrder {
 
 impl MoveOrder {
     pub fn classify(
-        board: &Board, m: Move,
+        board: &Board, tt_move: Option<Move>, m: Move,
     ) -> Self {
+        if let Some(tt_move) = tt_move && tt_move == m {
+            return Self::TtMove;
+        }
         Self::Quiet(0)
     }
 }
@@ -130,7 +160,66 @@ impl Thread {
         best
     }
 
-    pub fn search(&mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize) -> i32 {
+    fn probe_tt(&self, tt: &[TtEntry], board: &Board, ply: usize) -> Option<TtData> {
+        let entry = (board.hash() & ((tt.len() - 1) as u64)) as usize;
+        let entry = &tt[entry];
+        let entry_key = entry.key.load(atomic::Ordering::Acquire);
+        let entry_data = entry.data.load(atomic::Ordering::Acquire);
+        let mut entry: TtData = unsafe { std::mem::transmute(entry_data) };
+
+        if entry_key ^ entry_data == board.hash() {
+            if i32::from(entry.score) >= MATE_VALUE - 500 {
+                entry.score -= ply as i16;
+            }
+            if i32::from(entry.score) <= -MATE_VALUE + 500 {
+                entry.score += ply as i16;
+            }
+            return Some(entry);
+        }
+        None
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    #[inline(always)]
+    fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {
+        use core::arch::aarch64::{_prefetch, _PREFETCH_READ, _PREFETCH_LOCALITY3};
+
+        let entry = (board.hash_after(m) & ((tt.len() - 1) as u64)) as usize;
+        let entry = &tt[entry];
+        unsafe { _prefetch(entry as *const _ as *const i8, _PREFETCH_READ, _PREFETCH_LOCALITY3) }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[inline(always)]
+    fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {
+        use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+
+        let entry = (board.hash_after(m) & ((tt.len() - 1) as u64)) as usize;
+        let entry = &tt[entry];
+        unsafe { _mm_prefetch::<_MM_HINT_T0>(entry as *const _ as *const i8) }
+    }
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[inline(always)]
+    fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {}
+
+    fn write_tt(&self, tt: &[TtEntry], board: &Board, ply: usize, mut data: TtData) {
+        let entry = (board.hash() & ((tt.len() - 1) as u64)) as usize;
+        let entry = &tt[entry];
+        if i32::from(data.score) >= MATE_VALUE - 500 {
+            data.score += ply as i16;
+        }
+        if i32::from(data.score) <= -MATE_VALUE + 500 {
+            data.score -= ply as i16;
+        }
+        let data = unsafe { std::mem::transmute::<TtData, u64>(data) };
+        entry.key.store(board.hash() ^ data, atomic::Ordering::Release);
+        entry.data.store(data, atomic::Ordering::Release);
+    }
+
+    pub fn search(&mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
+        let expected_pvnode = alpha != beta - 1;
+
         if self.pv.len() <= ply {
             self.pv.push(Vec::new());
         } else {
@@ -153,6 +242,8 @@ impl Thread {
             return self.quiesce(alpha, beta, ply);
         }
 
+        let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
+
         let mut moves = ArrayVec::new();
         self.board[ply].generate(&mut moves);
 
@@ -165,9 +256,10 @@ impl Thread {
         }
 
         let mut moves = {
+            let tt_move = tt_entry.and_then(|e| e.m);
             moves
                 .into_iter()
-                .map(|m| (m, MoveOrder::classify(&self.board[ply], m)))
+                .map(|m| (m, MoveOrder::classify(&self.board[ply], tt_move, m)))
                 .collect::<ArrayVec<[(Move, MoveOrder); 256]>>()
         };
         moves.sort_by_key(|(_, order)| *order);
@@ -175,9 +267,13 @@ impl Thread {
         self.keystack.push(self.board[ply].hash());
 
         let mut best = i32::MIN;
+        let mut best_move = None;
+        let mut raised_alpha = false;
 
         for (m, _) in &moves {
             self.nodes += 1;
+
+            self.prefetch_tt(tt, &self.board[ply], *m);
 
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make(*m));
@@ -185,10 +281,11 @@ impl Thread {
                 self.board[ply+1] = self.board[ply].make(*m);
             }
 
-            let score = -self.search(depth - 1, -beta, -alpha, ply + 1);
+            let score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
 
             if score > best {
                 best = score;
+                best_move = Some(*m);
 
                 self.pv[ply].clear();
                 self.pv[ply].push(*m);
@@ -214,23 +311,41 @@ impl Thread {
 
             if score > alpha {
                 alpha = score;
+                raised_alpha = true;
             }
 
             if score >= beta {
-                self.keystack.pop();
-                return score;
+                break;
             }
         }
 
         self.keystack.pop();
 
+        self.write_tt(
+            tt,
+            &self.board[ply],
+            ply,
+            TtData {
+                m: best_move,
+                score: best as i16,
+                flags: if best >= beta {
+                    TtFlags::Lower
+                } else if raised_alpha {
+                    TtFlags::Exact
+                } else {
+                    TtFlags::Upper
+                },
+                depth: depth as u8,
+            },
+        );
+
         best
     }
 }
 
-#[derive(Clone)]
 pub struct Search {
     threads: Vec<Thread>,
+    tt: Vec<TtEntry>,
     stop: Arc<AtomicBool>,
     stop_after: Option<Instant>,
 }
@@ -242,6 +357,7 @@ impl Search {
     ) -> Self {
         let mut this = Self {
             threads: vec![],
+            tt: vec![],
             stop: Arc::new(AtomicBool::new(false)),
             stop_after: None,
         };
@@ -281,11 +397,28 @@ impl Search {
         &mut self, depth: i32, alpha: i32, beta: i32, pv: &mut Vec<Move>,
     ) -> i32 {
         let scores = self.threads.par_iter_mut().map(|thread| {
-            thread.search(depth, alpha, beta, 0)
+            thread.search(depth, alpha, beta, 0, &self.tt)
         }).collect::<Vec<_>>();
 
         *pv = self.threads[0].pv[0].clone();
         scores[0]
+    }
+
+    pub fn allocate_tt(&mut self, megabytes: usize) {
+        let target_bytes = megabytes * 1024 * 1024;
+
+        let mut size = 1_usize;
+        loop {
+            if size > target_bytes {
+                break;
+            }
+            size *= 2;
+        }
+        size /= 2;
+        size /= std::mem::size_of::<TtEntry>();
+
+        self.tt = Vec::new();
+        self.tt.resize_with(size, Default::default);
     }
 
     #[must_use]

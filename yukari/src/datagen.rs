@@ -175,12 +175,14 @@ pub struct DataGen<'a, T: Write> {
 
 impl<'a, T: Write> DataGen<'a, T> {
     pub fn new(f: &'a Mutex<T>) -> DataGen<'a, T> {
-        Self {
+        let mut this = Self {
             f,
             search: search::Search::new(1),
             rng: rand::rng(),
             positions: 0,
-        }
+        };
+        this.search.allocate_tt(16);
+        this
     }
 
     #[must_use]
