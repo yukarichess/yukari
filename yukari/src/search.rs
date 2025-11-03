@@ -12,6 +12,57 @@ pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
     keystack.iter().filter(|key| **key == hash).count() >= 3
 }
 
+#[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
+enum MoveOrder {
+    #[default]
+    TtMove,
+    GoodCapture(Piece, Piece),
+    Quiet(i32),
+    BadCapture(Piece, Piece),
+}
+
+impl PartialOrd for MoveOrder {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MoveOrder {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            // TT Move sorts above all others
+            (MoveOrder::TtMove, MoveOrder::TtMove) => Ordering::Equal, // shouldn't happen?
+            (MoveOrder::TtMove, _) => Ordering::Less,
+            (_, MoveOrder::TtMove) => Ordering::Greater,
+
+            // Good captures sort above quiets and bad captures; ties broken by highest MVV/LVA score.
+            (MoveOrder::GoodCapture(a_mvv, a_lva), MoveOrder::GoodCapture(b_mvv, b_lva)) => {
+                b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva))
+            }
+            (MoveOrder::GoodCapture(_, _), _) => Ordering::Less,
+            (_, MoveOrder::GoodCapture(_, _)) => Ordering::Greater,
+
+            // Quiets sort above bad captures; ties broken by highest history score.
+            (MoveOrder::Quiet(a), MoveOrder::Quiet(b)) => b.cmp(a),
+            (MoveOrder::Quiet(_), _) => Ordering::Less,
+            (_, MoveOrder::Quiet(_)) => Ordering::Greater,
+
+            // Bad captures; ties broken by highest MVV/LVA score.
+            (MoveOrder::BadCapture(a_mvv, a_lva), MoveOrder::BadCapture(b_mvv, b_lva)) => {
+                b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva))
+            }
+        }
+    }
+}
+
+impl MoveOrder {
+    pub fn classify(
+        board: &Board, m: Move,
+    ) -> Self {
+        Self::Quiet(0)
+    }
+}
+
 #[derive(Clone)]
 #[repr(align(64))]
 struct Thread {
@@ -113,11 +164,19 @@ impl Thread {
             return 0;
         }
 
+        let mut moves = {
+            moves
+                .into_iter()
+                .map(|m| (m, MoveOrder::classify(&self.board[ply], m)))
+                .collect::<ArrayVec<[(Move, MoveOrder); 256]>>()
+        };
+        moves.sort_by_key(|(_, order)| *order);
+
         self.keystack.push(self.board[ply].hash());
 
         let mut best = i32::MIN;
 
-        for m in &moves {
+        for (m, _) in &moves {
             self.nodes += 1;
 
             if self.board.len() <= ply + 1 {
