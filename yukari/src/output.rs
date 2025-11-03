@@ -51,7 +51,7 @@ fn normalise_winrate(board: &Board, score: i32) -> i32 {
 pub trait Output {
     #[allow(clippy::too_many_arguments)]
     fn complete(
-        &mut self, board: &Board, depth: i32, seldepth: i32, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
+        &mut self, board: &Board, depth: i32, seldepth: usize, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
         fail_high: bool,
     );
 }
@@ -60,7 +60,7 @@ pub struct Human;
 
 impl Output for Human {
     fn complete(
-        &mut self, board: &Board, depth: i32, seldepth: i32, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
+        &mut self, board: &Board, depth: i32, seldepth: usize, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
         fail_high: bool,
     ) {
         // Normalise score for display.
@@ -126,7 +126,7 @@ pub struct Xboard;
 
 impl Output for Xboard {
     fn complete(
-        &mut self, board: &Board, depth: i32, _seldepth: i32, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
+        &mut self, board: &Board, depth: i32, _seldepth: usize, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
         fail_high: bool,
     ) {
         // Normalise score for display.
@@ -156,7 +156,7 @@ pub struct Uci;
 
 impl Output for Uci {
     fn complete(
-        &mut self, board: &Board, depth: i32, seldepth: i32, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
+        &mut self, board: &Board, depth: i32, seldepth: usize, score: i32, time: Duration, nodes: u64, pv: &[Move], success: bool,
         fail_high: bool,
     ) {
         // Normalise score for display.

@@ -661,6 +661,31 @@ impl Board {
         self.generate_pawn_enpassant(v, &pininfo);
     }
 
+    pub fn generate_quiesce(&self, v: &mut ArrayVec<[Move; 256]>) {
+        let king_square = self.data.king_square(self.side);
+        let checks = self.data.attacks_to(king_square, !self.side);
+
+        // special case: being in check.
+        if checks.count_ones() != 0 {
+            let mut v2 = ArrayVec::new();
+            v2.set_len(0);
+            if checks.count_ones() == 1 {
+                self.generate_single_check(&mut v2);
+            } else if checks.count_ones() == 2 {
+                self.generate_double_check(&mut v2);
+            }
+
+            for m in v2 {
+                if m.is_capture() {
+                    v.push(m);
+                }
+            }
+            return;
+        }
+
+        self.generate_captures(v);
+    }
+
     #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
     pub fn generate_captures_incremental<F: FnMut(Move) -> bool>(&self, mut f: F) {
         let king_square = self.data.king_square(self.side);
