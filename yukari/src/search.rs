@@ -242,6 +242,12 @@ impl Thread {
             return self.quiesce(alpha, beta, ply);
         }
 
+        let eval = self.board[ply].eval(self.board[ply].side());
+        let rfp_margin = 75 * depth;
+        if !self.board[ply].in_check() && depth == 1 && eval - rfp_margin >= beta {
+            return eval - rfp_margin;
+        }
+
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
 
         let mut moves = ArrayVec::new();
