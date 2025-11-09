@@ -243,7 +243,7 @@ impl Thread {
         }
 
         let eval = self.board[ply].eval(self.board[ply].side());
-        let rfp_margin = 60 * depth;
+        let rfp_margin = 45 * depth;
         if !self.board[ply].in_check() && depth <= 7 && eval - rfp_margin >= beta {
             return eval - rfp_margin;
         }
