@@ -89,6 +89,16 @@ impl MoveOrder {
         if let Some(tt_move) = tt_move && tt_move == m {
             return Self::TtMove;
         }
+
+        if m.is_capture() {
+            let dest_piece = board.piece_from_square(m.dest).unwrap_or(Piece::Pawn);
+            let from_piece = board.piece_from_square(m.from).unwrap();
+            //if (dest_piece >= from_piece) || board.static_exchange_evaluation(m) >= 0 {
+                return Self::GoodCapture(dest_piece, from_piece);
+            //}
+            //return Self::BadCapture(dest_piece, from_piece);
+        }
+
         Self::Quiet(0)
     }
 }
