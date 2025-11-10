@@ -252,6 +252,14 @@ impl Thread {
             return eval - rfp_margin;
         }
 
+        let razor_margin = 250 * depth;
+        if !self.board[ply].in_check() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
+            let score = self.quiesce(alpha, alpha + 1, ply);
+            if score <= alpha {
+                return score;
+            }
+        }
+
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
 
         let mut moves = ArrayVec::new();
