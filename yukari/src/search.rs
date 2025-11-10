@@ -128,6 +128,10 @@ impl Thread {
         self.board[ply].generate_quiesce(&mut moves);
 
         for m in &moves {
+            if self.board[ply].static_exchange_evaluation(*m) < 0 {
+                continue;
+            }
+
             self.qnodes += 1;
 
             if self.board.len() <= ply + 1 {
