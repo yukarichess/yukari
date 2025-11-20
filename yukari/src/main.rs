@@ -132,7 +132,7 @@ impl Yukari {
         self.search.prepare(&self.board, stop_after, node_limit, &self.keystack);
 
         // Use a seperate backing data to record the current move set
-        let mut depth = 1;
+        let mut depth = 0;
         let mut pv = Vec::new();
         let max_depth = self.max_depth.unwrap_or(63);
         while depth <= max_depth {

@@ -260,6 +260,27 @@ impl Thread {
             }
         }
 
+        let (try_probcut, a, b, sigma, s) = match depth {
+            1 => (true, 1.033601617168007, 5.614562147372069, 56.246074579421354, 0),
+            //2 => (true, 0.9792818798147819, 7.982408294169346, 135.69509725260528, 0),
+            //3 => (true, 0.9821229387171541, 9.92971239949656, 154.07081534120582, 0),
+            //8 => (true, 1.0417771,   1.3685266,  94.86876, 4),
+            _ => (false, 0.0, 0.0, 0.0, 0),
+        };
+        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && try_probcut {
+            let bound = ((beta as f32 + sigma - b) / a).round() as i32;
+            let score = self.search(s, bound - 1, bound, ply, tt);
+            if score >= bound {
+                return score;
+            }
+
+            let bound = ((alpha as f32 - sigma - b) / a).round() as i32;
+            let score = self.search(s, bound, bound + 1, ply, tt);
+            if score <= bound {
+                return score;
+            }
+        }
+
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
 
         let mut moves = ArrayVec::new();
