@@ -273,6 +273,26 @@ impl Thread {
             return self.quiesce(alpha, beta, ply);
         }
 
+        let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
+        if let Some(entry) = tt_entry && !expected_pvnode && i32::from(entry.depth) >= depth {
+            let score = i32::from(entry.score);
+            match entry.flags {
+                TtFlags::Exact => {
+                    return score;
+                }
+                TtFlags::Upper => {
+                    if score <= alpha {
+                        return score;
+                    }
+                }
+                TtFlags::Lower => {
+                    if score >= beta {
+                        return score;
+                    }
+                }
+            }
+        }
+
         let eval = self.board[ply].eval(self.board[ply].side());
         let rfp_margin = 45 * depth;
         if !self.board[ply].in_check() && depth <= 8 && eval - rfp_margin >= beta {
@@ -318,8 +338,6 @@ impl Thread {
                 return score;
             }
         }
-
-        let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
 
         let mut moves = ArrayVec::new();
         self.board[ply].generate(&mut moves);
