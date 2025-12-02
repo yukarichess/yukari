@@ -84,7 +84,7 @@ impl Ord for MoveOrder {
 
 impl MoveOrder {
     pub fn classify(
-        board: &Board, tt_move: Option<Move>, m: Move,
+        board: &Board, tt_move: Option<Move>, history: &[[[i16; 64]; 64]; 12], m: Move,
     ) -> Self {
         if let Some(tt_move) = tt_move && tt_move == m {
             return Self::TtMove;
@@ -99,7 +99,9 @@ impl MoveOrder {
             //return Self::BadCapture(dest_piece, from_piece);
         }
 
-        Self::Quiet(0)
+        let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
+        let score = i32::from(history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize]);
+        Self::Quiet(score)
     }
 }
 
@@ -116,6 +118,7 @@ struct Thread {
     pv: Vec<Vec<Move>>,
     keystack: Vec<u64>,
     index: usize,
+    history: [[[i16; 64]; 64]; 12]
 }
 
 impl Thread {
@@ -231,6 +234,20 @@ impl Thread {
         entry.data.store(data, atomic::Ordering::Release);
     }
 
+    fn update_history(
+        &mut self, ply: usize, m: Move, bonus: i32,
+    ) {
+        const HISTORY_MAX: i32 = 16384;
+        let board = &self.board[ply];
+        let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
+        {
+            let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
+            let history = &mut self.history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize];
+            let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
+            *history += bonus as i16;
+        }
+    }
+
     pub fn search(&mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
         let expected_pvnode = alpha != beta - 1;
 
@@ -271,10 +288,10 @@ impl Thread {
         }
 
         let (try_probcut, a, b, sigma, s) = match depth {
-            1 => (true, 1.033601617168007, 5.614562147372069, 56.246074579421354, 0),
-            2 => (true, 1.0392308194090178, 8.608924209787217, 65.64585094942981, 0),
-            3 => (true, 1.0339007683860018, -1.2010430497940432, 54.260298511342285, 1),
-            4 => (true, 1.0418302393990453, 1.4447248459930666, 66.8398021032819, 1),
+            1 => (true, 1.033_601_6, 5.614_562, 56.246_075, 0),
+            2 => (true, 1.039_230_8, 8.608_924, 65.645_85, 0),
+            3 => (true, 1.033_900_7, -1.201_043, 54.260_3, 1),
+            4 => (true, 1.041_830_2, 1.444_724_8, 66.839_806, 1),
             //8 => (true, 1.0417771,   1.3685266,  94.86876, 4),
             _ => (false, 0.0, 0.0, 0.0, 0),
         };
@@ -287,7 +304,7 @@ impl Thread {
         }
 
         let (try_probcut, a, b, sigma, s) = match depth {
-            1 => (true, 1.033601617168007, 5.614562147372069, 56.246074579421354, 0),
+            1 => (true, 1.033_601_6, 5.614_562, 56.246_075, 0),
             //2 => (true, 1.0392308194090178, 8.608924209787217, 65.64585094942981, 0),
             //3 => (true, 0.9821229387171541, 9.92971239949656, 154.07081534120582, 0),
             //8 => (true, 1.0417771,   1.3685266,  94.86876, 4),
@@ -319,7 +336,7 @@ impl Thread {
             let tt_move = tt_entry.and_then(|e| e.m);
             moves
                 .into_iter()
-                .map(|m| (m, MoveOrder::classify(&self.board[ply], tt_move, m)))
+                .map(|m| (m, MoveOrder::classify(&self.board[ply], tt_move, &self.history, m)))
                 .collect::<ArrayVec<[(Move, MoveOrder); 256]>>()
         };
         moves.sort_by_key(|(_, order)| *order);
@@ -330,7 +347,7 @@ impl Thread {
         let mut best_move = None;
         let mut raised_alpha = false;
 
-        for (m, _) in &moves {
+        for (movecount, (m, _)) in moves.iter().enumerate() {
             self.nodes += 1;
 
             self.prefetch_tt(tt, &self.board[ply], *m);
@@ -375,6 +392,17 @@ impl Thread {
             }
 
             if score >= beta {
+                let bonus = 250 * depth - 300;
+                if !m.is_capture() {
+                    for (m, _) in moves.into_iter().take(movecount) {
+                        if m.is_capture() {
+                            continue;
+                        }
+                        self.update_history(ply, m, -bonus);
+                    }
+                    self.update_history(ply, *m, bonus);
+                }
+
                 break;
             }
         }
@@ -432,6 +460,7 @@ impl Search {
                 stop_after: None,
                 node_limit: None,
                 index: 0,
+                history: [[[0; _]; _]; _],
             }; threads];
         this
     }
