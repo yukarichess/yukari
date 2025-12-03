@@ -93,10 +93,10 @@ impl MoveOrder {
         if m.is_capture() {
             let dest_piece = board.piece_from_square(m.dest).unwrap_or(Piece::Pawn);
             let from_piece = board.piece_from_square(m.from).unwrap();
-            //if (dest_piece >= from_piece) || board.static_exchange_evaluation(m) >= 0 {
+            if (dest_piece >= from_piece) || board.static_exchange_evaluation(m) >= 0 {
                 return Self::GoodCapture(dest_piece, from_piece);
-            //}
-            //return Self::BadCapture(dest_piece, from_piece);
+            }
+            return Self::BadCapture(dest_piece, from_piece);
         }
 
         let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
