@@ -273,11 +273,11 @@ impl Yukari {
             let mut pv = Vec::new();
 
             let mut output = output::Xboard;
-            let score = self.search.search(6, -i32::MAX, i32::MAX, &mut pv);
+            let score = self.search.search(7, -i32::MAX, i32::MAX, &mut pv);
 
             output.complete(
                 &board,
-                6,
+                7,
                 self.search.seldepth(),
                 score,
                 Instant::now().duration_since(start),
