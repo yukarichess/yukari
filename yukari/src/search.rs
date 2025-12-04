@@ -307,15 +307,15 @@ impl Thread {
             }
         }
 
-        let (try_probcut, a, b, sigma, s) = match depth {
-            1 => (true, 1.033_601_6, 5.614_562, 56.246_075, 0),
-            2 => (true, 1.039_230_8, 8.608_924, 65.645_85, 0),
-            3 => (true, 1.033_900_7, -1.201_043, 54.260_3, 1),
-            4 => (true, 1.041_830_2, 1.444_724_8, 66.839_806, 1),
+        let (try_probcut_beta, try_probcut_alpha, a, b, sigma, s) = match depth {
+            1 => (true, true, 1.033_601_6, 5.614_562, 56.246_075, 0),
+            2 => (true, false, 1.039_230_8, 8.608_924, 65.645_85, 0),
+            3 => (true, false, 1.033_900_7, -1.201_043, 54.260_3, 1),
+            4 => (true, false, 1.041_830_2, 1.444_724_8, 66.839_806, 1),
             //8 => (true, 1.0417771,   1.3685266,  94.86876, 4),
-            _ => (false, 0.0, 0.0, 0.0, 0),
+            _ => (false, false, 0.0, 0.0, 0.0, 0),
         };
-        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && try_probcut {
+        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && try_probcut_beta {
             let bound = ((beta as f32 + sigma - b) / a).round() as i32;
             let score = self.search(s, bound - 1, bound, ply, tt);
             if score >= bound {
@@ -323,15 +323,7 @@ impl Thread {
             }
         }
 
-        let (try_probcut, a, b, sigma, s) = match depth {
-            1 => (true, 1.033_601_6, 5.614_562, 56.246_075, 0),
-            //2 => (true, 1.0392308194090178, 8.608924209787217, 65.64585094942981, 0),
-            //3 => (true, 0.9821229387171541, 9.92971239949656, 154.07081534120582, 0),
-            //8 => (true, 1.0417771,   1.3685266,  94.86876, 4),
-            _ => (false, 0.0, 0.0, 0.0, 0),
-        };
-
-        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && try_probcut {
+        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && try_probcut_alpha {
             let bound = ((alpha as f32 - sigma - b) / a).round() as i32;
             let score = self.search(s, bound, bound + 1, ply, tt);
             if score <= bound {
