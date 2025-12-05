@@ -319,7 +319,7 @@ impl Thread {
             let bound = ((beta as f32 + sigma - b) / a).round() as i32;
             let score = self.search(s, bound - 1, bound, ply, tt);
             if score >= bound {
-                return score;
+                return beta;
             }
         }
 
@@ -327,7 +327,7 @@ impl Thread {
             let bound = ((alpha as f32 - sigma - b) / a).round() as i32;
             let score = self.search(s, bound, bound + 1, ply, tt);
             if score <= bound {
-                return score;
+                return alpha;
             }
         }
 
