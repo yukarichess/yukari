@@ -378,6 +378,7 @@ impl Thread {
                     let depth = (depth as f32).ln();
                     let movecount = (movecount as f32).ln();
                     reduction += (depth * movecount).mul_add(0.5, 1.0) as i32;
+                    reduction -= i32::from(expected_pvnode);
                     // credit: adam
                 }
 
