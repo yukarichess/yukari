@@ -372,7 +372,16 @@ impl Thread {
             if movecount == 0 {
                 score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
             } else {
-                score = -self.search(depth - 1, -alpha - 1, -alpha, ply + 1, tt);
+                // Late Move Reduction
+                let mut reduction = 0;
+                if depth >= 3 && movecount >= 4 && !m.is_capture() {
+                    let depth = (depth as f32).ln();
+                    let movecount = (movecount as f32).ln();
+                    reduction += (depth * movecount).mul_add(0.5, 1.0) as i32;
+                    // credit: adam
+                }
+
+                score = -self.search(depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, tt);
                 if score > alpha && score < beta {
                     score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
                 }
