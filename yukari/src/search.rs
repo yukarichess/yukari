@@ -84,7 +84,7 @@ impl Ord for MoveOrder {
 
 impl MoveOrder {
     pub fn classify(
-        board: &Board, tt_move: Option<Move>, history: &[[[i16; 64]; 64]; 12], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64], last_m: Option<(Piece, Move)>, m: Move,
+        board: &Board, tt_move: Option<Move>, history: &[[[i16; 64]; 64]; 12], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64], last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move,
     ) -> Self {
         if let Some(tt_move) = tt_move && tt_move == m {
             return Self::TtMove;
@@ -101,6 +101,15 @@ impl MoveOrder {
 
         let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
         let mut score = i32::from(history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize]);
+        if let Some((last_piece, last_m)) = last_last_m {
+            let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (last_piece as usize)
+                + usize::from(last_m.dest.into_inner());
+            let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + usize::from(m.dest.into_inner());
+            score += i32::from(conthist[last_index][curr_index]);
+        }
         if let Some((last_piece, last_m)) = last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
@@ -246,7 +255,7 @@ impl Thread {
     }
 
     fn update_history(
-        &mut self, ply: usize, last_m: Option<(Piece, Move)>, m: Move, bonus: i32,
+        &mut self, ply: usize, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move, bonus: i32,
     ) {
         const HISTORY_MAX: i32 = 16384;
         let board = &self.board[ply];
@@ -256,6 +265,17 @@ impl Thread {
             let history = &mut self.history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize];
             let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
+        }
+        if let Some((last_piece, last_m)) = last_last_m {
+            let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (last_piece as usize)
+                + usize::from(last_m.dest.into_inner());
+            let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
+                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + usize::from(m.dest.into_inner());
+            let conthist = &mut self.conthist[last_index][curr_index];
+            let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
+            *conthist += bonus as i16;
         }
         if let Some((last_piece, last_m)) = last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
@@ -367,9 +387,10 @@ impl Thread {
         let mut moves = {
             let tt_move = tt_entry.and_then(|e| e.m);
             let last_m = *self.path.last().unwrap_or(&None);
+            let last_last_m = *self.path.iter().rev().nth(1).unwrap_or(&None);
             moves
                 .into_iter()
-                .map(|m| (m, MoveOrder::classify(&self.board[ply], tt_move, &self.history, &self.conthist, last_m, m)))
+                .map(|m| (m, MoveOrder::classify(&self.board[ply], tt_move, &self.history, &self.conthist, last_last_m, last_m, m)))
                 .collect::<ArrayVec<[(Move, MoveOrder); 256]>>()
         };
         moves.sort_by_key(|(_, order)| *order);
@@ -449,14 +470,15 @@ impl Thread {
             if score >= beta {
                 let bonus = 250 * depth - 300;
                 let last_m = *self.path.last().unwrap_or(&None);
+                let last_last_m = *self.path.iter().rev().nth(1).unwrap_or(&None);
                 if !m.is_capture() {
                     for (m, _) in moves.into_iter().take(movecount) {
                         if m.is_capture() {
                             continue;
                         }
-                        self.update_history(ply, last_m, m, -bonus);
+                        self.update_history(ply, last_last_m, last_m, m, -bonus);
                     }
-                    self.update_history(ply, last_m, *m, bonus);
+                    self.update_history(ply, last_last_m, last_m, *m, bonus);
                 }
 
                 break;
