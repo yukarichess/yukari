@@ -357,7 +357,7 @@ impl Thread {
             //8 => (true, 1.0417771,   1.3685266,  94.86876, 4),
             _ => (false, false, 0.0, 0.0, 0.0, 0),
         };
-        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && try_probcut_beta {
+        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_beta {
             let bound = ((beta as f32 + sigma - b) / a).round() as i32;
             let score = self.search(s, bound - 1, bound, ply, tt);
             if score >= bound {
@@ -365,7 +365,7 @@ impl Thread {
             }
         }
 
-        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && try_probcut_alpha {
+        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_alpha {
             let bound = ((alpha as f32 - sigma - b) / a).round() as i32;
             let score = self.search(s, bound, bound + 1, ply, tt);
             if score <= bound {
