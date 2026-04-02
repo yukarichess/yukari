@@ -142,7 +142,9 @@ struct Thread {
 }
 
 impl Thread {
-    pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize) -> i32 {
+    pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
+        let expected_pvnode = alpha != beta - 1;
+
         if self.pv.len() <= ply {
             self.pv.push(Vec::new());
         } else {
@@ -156,6 +158,26 @@ impl Thread {
             return best;
         }
         alpha = alpha.max(best);
+
+        let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
+        if let Some(entry) = tt_entry && !expected_pvnode {
+            let score = i32::from(entry.score);
+            match entry.flags {
+                TtFlags::Exact => {
+                    return score;
+                }
+                TtFlags::Upper => {
+                    if score <= alpha {
+                        return score;
+                    }
+                }
+                TtFlags::Lower => {
+                    if score >= beta {
+                        return score;
+                    }
+                }
+            }
+        }
 
         let mut moves = ArrayVec::new();
         self.board[ply].generate_quiesce(&mut moves);
@@ -173,7 +195,7 @@ impl Thread {
                 self.board[ply+1] = self.board[ply].make(*m);
             }
 
-            let score = -self.quiesce(-beta, -alpha, ply + 1);
+            let score = -self.quiesce(-beta, -alpha, ply + 1, tt);
 
             if score > best {
                 best = score;
@@ -312,7 +334,7 @@ impl Thread {
         }
 
         if depth <= 0 {
-            return self.quiesce(alpha, beta, ply);
+            return self.quiesce(alpha, beta, ply, tt);
         }
 
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
@@ -343,7 +365,7 @@ impl Thread {
 
         let razor_margin = 250 * depth;
         if !self.board[ply].in_check() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
-            let score = self.quiesce(alpha, alpha + 1, ply);
+            let score = self.quiesce(alpha, alpha + 1, ply, tt);
             if score <= alpha {
                 return score;
             }
