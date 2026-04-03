@@ -315,7 +315,6 @@ impl Yukari {
 
             let mut pv = Vec::new();
 
-
             let mut score = 0;
             for depth in 1..=9 {
                 let mut lower_margin = 50;

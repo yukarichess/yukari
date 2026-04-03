@@ -338,7 +338,7 @@ impl Thread {
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 
-    pub fn search(&mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
+    pub fn search(&mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry], excluded_move: Option<Move>) -> i32 {
         let expected_pvnode = alpha != beta - 1;
 
         if self.pv.len() <= ply {
@@ -364,7 +364,7 @@ impl Thread {
         }
 
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
-        if let Some(entry) = tt_entry && !expected_pvnode && i32::from(entry.depth) >= depth {
+        if let Some(entry) = tt_entry && excluded_move.is_none() && !expected_pvnode && i32::from(entry.depth) >= depth {
             let score = i32::from(entry.score);
             match entry.flags {
                 TtFlags::Exact => {
@@ -385,12 +385,12 @@ impl Thread {
 
         let eval = self.eval(ply);
         let rfp_margin = 45 * depth;
-        if !self.board[ply].in_check() && depth <= 8 && eval - rfp_margin >= beta {
+        if excluded_move.is_none() && !self.board[ply].in_check() && depth <= 8 && eval - rfp_margin >= beta {
             return eval - rfp_margin;
         }
 
         let razor_margin = 250 * depth;
-        if !self.board[ply].in_check() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
+        if excluded_move.is_none() && !self.board[ply].in_check() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
             let score = self.quiesce(alpha, alpha + 1, ply, tt);
             if score <= alpha {
                 return score;
@@ -406,17 +406,17 @@ impl Thread {
             //8 => (true, 1.0417771,   1.3685266,  94.86876, 4),
             _ => (false, false, 0.0, 0.0, 0.0, 0),
         };
-        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_beta {
+        if excluded_move.is_none() && !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_beta {
             let bound = ((beta as f32 + sigma - b) / a).round() as i32;
-            let score = self.search(s, bound - 1, bound, ply, tt);
+            let score = self.search(s, bound - 1, bound, ply, tt, None);
             if score >= bound {
                 return beta;
             }
         }
 
-        if !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_alpha {
+        if excluded_move.is_none() && !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_alpha {
             let bound = ((alpha as f32 - sigma - b) / a).round() as i32;
-            let score = self.search(s, bound, bound + 1, ply, tt);
+            let score = self.search(s, bound, bound + 1, ply, tt, None);
             if score <= bound {
                 return alpha;
             }
@@ -433,6 +433,11 @@ impl Thread {
             return 0;
         }
 
+        // Is this a singular search where we have excluded the only legal move?
+        if moves.len() == 1 && excluded_move.is_some() {
+            return alpha;
+        }
+
         let mut moves = {
             let tt_move = tt_entry.and_then(|e| e.m);
             let last_m = *self.path.last().unwrap_or(&None);
@@ -444,13 +449,19 @@ impl Thread {
         };
         moves.sort_by_key(|(_, order)| *order);
 
-        self.keystack.push(self.board[ply].hash());
+        if excluded_move.is_none() {
+            self.keystack.push(self.board[ply].hash());
+        }
 
         let mut best = i32::MIN;
         let mut best_move = None;
         let mut raised_alpha = false;
 
         for (movecount, (m, _)) in moves.iter().enumerate() {
+            if Some(*m) == excluded_move {
+                continue;
+            }
+
             self.nodes += 1;
 
             self.prefetch_tt(tt, &self.board[ply], *m);
@@ -465,6 +476,26 @@ impl Thread {
                 }
             }
 
+            let mut extension = 0;
+
+            // Singular extension: is the TT move uniquely good?
+            if let Some(tt_entry) = tt_entry
+                && excluded_move.is_none()
+                && ply > 0
+                && Some(*m) == tt_entry.m
+            {
+                if depth >= 7 && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower) && tt_entry.score.abs() < 9500 {
+                    let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
+                    let singular_depth = (depth - 1) / 2;
+                    let score = self.search(singular_depth, singular_beta - 1, singular_beta, ply, tt, Some(*m));
+
+                    // The TT move seems uniquely good; extend.
+                    if score < singular_beta {
+                        extension += 1;
+                    }
+                }
+            }
+
             self.path.push(Some((self.board[ply].piece_from_square(m.from).unwrap(), *m)));
 
             if self.board.len() <= ply + 1 {
@@ -475,7 +506,7 @@ impl Thread {
 
             let mut score;
             if movecount == 0 {
-                score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
+                score = -self.search(depth - 1 + extension, -beta, -alpha, ply + 1, tt, None);
             } else {
                 // Late Move Reduction
                 let mut reduction = 0;
@@ -487,9 +518,9 @@ impl Thread {
                     // credit: adam
                 }
 
-                score = -self.search(depth - 1 - reduction, -alpha - 1, -alpha, ply + 1, tt);
+                score = -self.search(depth - 1 - reduction + extension, -alpha - 1, -alpha, ply + 1, tt, None);
                 if score > alpha && score < beta {
-                    score = -self.search(depth - 1, -beta, -alpha, ply + 1, tt);
+                    score = -self.search(depth - 1 + extension, -beta, -alpha, ply + 1, tt, None);
                 }
             }
 
@@ -517,7 +548,9 @@ impl Thread {
             }
 
             if self.stop.load(atomic::Ordering::Acquire) {
-                self.keystack.pop();
+                if excluded_move.is_none() {
+                    self.keystack.pop();
+                }
                 return best;
             }
 
@@ -544,33 +577,35 @@ impl Thread {
             }
         }
 
-        self.keystack.pop();
+        if excluded_move.is_none() {
+            self.keystack.pop();
 
-        self.write_tt(
-            tt,
-            &self.board[ply],
-            ply,
-            TtData {
-                m: best_move,
-                score: best as i16,
-                flags: if best >= beta {
-                    TtFlags::Lower
-                } else if raised_alpha {
-                    TtFlags::Exact
-                } else {
-                    TtFlags::Upper
+            self.write_tt(
+                tt,
+                &self.board[ply],
+                ply,
+                TtData {
+                    m: best_move,
+                    score: best as i16,
+                    flags: if best >= beta {
+                        TtFlags::Lower
+                    } else if raised_alpha {
+                        TtFlags::Exact
+                    } else {
+                        TtFlags::Upper
+                    },
+                    depth: depth as u8,
                 },
-                depth: depth as u8,
-            },
-        );
+            );
 
-        if !self.board[ply].in_check()
-            && !best_move.unwrap().is_capture()
-            && (raised_alpha
-                || (best >= beta && best >= eval)
-                || (best <= alpha && best <= eval))
-        {
-            self.update_corrhist(ply, depth, best - eval);
+            if !self.board[ply].in_check()
+                && !best_move.unwrap().is_capture()
+                && (raised_alpha
+                    || (best >= beta && best >= eval)
+                    || (best <= alpha && best <= eval))
+            {
+                self.update_corrhist(ply, depth, best - eval);
+            }
         }
 
         best
@@ -638,7 +673,7 @@ impl Search {
     ) -> i32 {
         let scores = self.pool.install(|| {
             self.threads.par_iter_mut().map(|thread| {
-                thread.search(depth, alpha, beta, 0, &self.tt)
+                thread.search(depth, alpha, beta, 0, &self.tt, None)
             }).collect::<Vec<_>>()
         });
 
