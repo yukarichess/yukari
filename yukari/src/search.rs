@@ -138,10 +138,21 @@ struct Thread {
     index: usize,
     history: [[[i16; 64]; 64]; 12],
     conthist: [[i16; 2 * 6 * 64]; 2 * 6 * 64],
+    corrhist_p: [[i32; 16384]; 2],
     path: Vec<Option<(Piece, Move)>>,
 }
 
 impl Thread {
+    fn eval(&self, ply: usize) -> i32 {
+        const CORRHIST_GRAIN: i32 = 256;
+
+        let eval = self.board[ply].eval(self.board[ply].side());
+
+        let entry_p = self.corrhist_p[self.board[ply].side() as usize][self.board[ply].hash_pawns() as usize & 16383];
+        let corrhist = entry_p / CORRHIST_GRAIN;
+        (eval + corrhist).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
+    }
+
     pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
         let expected_pvnode = alpha != beta - 1;
 
@@ -153,7 +164,7 @@ impl Thread {
 
         self.seldepth = self.seldepth.max(ply);
 
-        let mut best = self.board[ply].eval(self.board[ply].side());
+        let mut best = self.eval(ply);
         if best >= beta {
             return best;
         }
@@ -312,6 +323,21 @@ impl Thread {
         }
     }
 
+    fn update_corrhist(&mut self, ply: usize, depth: i32, diff: i32) {
+        const CORRHIST_GRAIN: i32 = 256;
+        const CORRHIST_WEIGHT_SCALE: i32 = 256;
+        const CORRHIST_MAX: i32 = 256 * 32;
+
+        let diff = diff * CORRHIST_GRAIN;
+        let weight = 16.min(depth + 1);
+
+        // pawns
+        let entry_p = &mut self.corrhist_p[self.board[ply].side() as usize][self.board[ply].data().hash_pawns() as usize & 16383];
+
+        *entry_p = ((*entry_p * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
+            .clamp(-CORRHIST_MAX, CORRHIST_MAX);
+    }
+
     pub fn search(&mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
         let expected_pvnode = alpha != beta - 1;
 
@@ -357,7 +383,7 @@ impl Thread {
             }
         }
 
-        let eval = self.board[ply].eval(self.board[ply].side());
+        let eval = self.eval(ply);
         let rfp_margin = 45 * depth;
         if !self.board[ply].in_check() && depth <= 8 && eval - rfp_margin >= beta {
             return eval - rfp_margin;
@@ -537,6 +563,15 @@ impl Thread {
             },
         );
 
+        if !self.board[ply].in_check()
+            && !best_move.unwrap().is_capture()
+            && (raised_alpha
+                || (best >= beta && best >= eval)
+                || (best <= alpha && best <= eval))
+        {
+            self.update_corrhist(ply, depth, best - eval);
+        }
+
         best
     }
 }
@@ -572,6 +607,7 @@ impl Search {
                 index: 0,
                 history: [[[0; _]; _]; _],
                 conthist: [[0; _]; _],
+                corrhist_p: [[0; _]; _],
                 path: vec![],
             }; threads];
         this
