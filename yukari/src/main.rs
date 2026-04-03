@@ -317,7 +317,7 @@ impl Yukari {
 
 
             let mut score = 0;
-            for depth in 1..=7 {
+            for depth in 1..=9 {
                 let mut lower_margin = 50;
                 let mut upper_margin = 50;
                 loop {
