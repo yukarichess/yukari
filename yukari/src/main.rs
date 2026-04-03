@@ -133,35 +133,76 @@ impl Yukari {
 
         // Use a seperate backing data to record the current move set
         let mut depth = 0;
+        let mut score = 0;
         let mut valid_score = 0;
         let mut valid_depth = 0;
 
         let mut pv = Vec::new();
         let max_depth = self.max_depth.unwrap_or(63);
-        while depth <= max_depth {
-            let output: &mut dyn output::Output = match protocol {
-                Protocol::Human => &mut output::Human,
-                Protocol::Xboard => &mut output::Xboard,
-                Protocol::Uci => &mut output::Uci,
-            };
-            let score = self.search.search(depth, -i32::MAX, i32::MAX, &mut pv);
+        'depth_loop: while depth <= max_depth {
+            let mut lower_margin = 50;
+            let mut upper_margin = 50;
+            loop {
+                let alpha = score - lower_margin;
+                let beta = score + upper_margin;
+                score = self.search.search(depth, alpha, beta, &mut pv);
 
-            // If we have bailed out stop the loop
-            if stop_after.is_some() && Instant::now() >= hard_limit {
+                // If we have bailed out stop the loop
+                if stop_after.is_some() && Instant::now() >= hard_limit {
+                    break 'depth_loop;
+                }
+
+                let output: &mut dyn output::Output = match protocol {
+                    Protocol::Human => &mut output::Human,
+                    Protocol::Xboard => &mut output::Xboard,
+                    Protocol::Uci => &mut output::Uci,
+                };
+
+                if score <= alpha {
+                    lower_margin *= 2;
+                    output.complete(
+                        &self.board,
+                        depth,
+                        self.search.seldepth(),
+                        score,
+                        Instant::now().duration_since(start),
+                        self.search.nodes() + self.search.qnodes(),
+                        &pv,
+                        false,
+                        false,
+                    );
+                    continue;
+                }
+
+                if score >= beta {
+                    upper_margin *= 2;
+                    output.complete(
+                        &self.board,
+                        depth,
+                        self.search.seldepth(),
+                        score,
+                        Instant::now().duration_since(start),
+                        self.search.nodes() + self.search.qnodes(),
+                        &pv,
+                        false,
+                        true,
+                    );
+                    continue;
+                }
+
+                output.complete(
+                    &self.board,
+                    depth,
+                    self.search.seldepth(),
+                    score,
+                    Instant::now().duration_since(start),
+                    self.search.nodes() + self.search.qnodes(),
+                    &pv,
+                    true,
+                    false,
+                );
                 break;
             }
-
-            output.complete(
-                &self.board,
-                depth,
-                self.search.seldepth(),
-                score,
-                Instant::now().duration_since(start),
-                self.search.nodes() + self.search.qnodes(),
-                &pv,
-                true,
-                false,
-            );
 
             // Modify time to search based on best move stability.
             if matches!(self.tc.mode, TimeMode::Incremental { base: _, increment: _ }) && !pv.is_empty() && !best_pv.is_empty() {
@@ -274,20 +315,64 @@ impl Yukari {
 
             let mut pv = Vec::new();
 
-            let mut output = output::Xboard;
-            let score = self.search.search(7, -i32::MAX, i32::MAX, &mut pv);
 
-            output.complete(
-                &board,
-                7,
-                self.search.seldepth(),
-                score,
-                Instant::now().duration_since(start),
-                self.search.nodes() + self.search.qnodes(),
-                &pv,
-                true,
-                false,
-            );
+            let mut score = 0;
+            for depth in 1..=7 {
+                let mut lower_margin = 50;
+                let mut upper_margin = 50;
+                loop {
+                    let alpha = score - lower_margin;
+                    let beta = score + upper_margin;
+                    score = self.search.search(depth, alpha, beta, &mut pv);
+
+                    let mut output = output::Xboard;
+
+                    if score <= alpha {
+                        lower_margin *= 2;
+                        output.complete(
+                            &self.board,
+                            depth,
+                            self.search.seldepth(),
+                            score,
+                            Instant::now().duration_since(start),
+                            self.search.nodes() + self.search.qnodes(),
+                            &pv,
+                            false,
+                            false,
+                        );
+                        continue;
+                    }
+                    
+                    if score >= beta {
+                        upper_margin *= 2;
+                        output.complete(
+                            &self.board,
+                            depth,
+                            self.search.seldepth(),
+                            score,
+                            Instant::now().duration_since(start),
+                            self.search.nodes() + self.search.qnodes(),
+                            &pv,
+                            false,
+                            true,
+                        );
+                        continue;
+                    }
+
+                    output.complete(
+                        &self.board,
+                        depth,
+                        self.search.seldepth(),
+                        score,
+                        Instant::now().duration_since(start),
+                        self.search.nodes() + self.search.qnodes(),
+                        &pv,
+                        true,
+                        false,
+                    );
+                    break;
+                }
+            }
 
             nodes += self.search.nodes() + self.search.qnodes();
         }
