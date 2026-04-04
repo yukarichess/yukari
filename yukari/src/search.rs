@@ -577,6 +577,7 @@ impl Thread {
 }
 
 pub struct Search {
+    pool: rayon::ThreadPool,
     threads: Vec<Thread>,
     tt: Vec<TtEntry>,
     stop: Arc<AtomicBool>,
@@ -589,6 +590,7 @@ impl Search {
         threads: usize,
     ) -> Self {
         let mut this = Self {
+            pool: rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap(),
             threads: vec![],
             tt: vec![],
             stop: Arc::new(AtomicBool::new(false)),
@@ -633,9 +635,11 @@ impl Search {
     pub fn search(
         &mut self, depth: i32, alpha: i32, beta: i32, pv: &mut Vec<Move>,
     ) -> i32 {
-        let scores = self.threads.par_iter_mut().map(|thread| {
-            thread.search(depth, alpha, beta, 0, &self.tt)
-        }).collect::<Vec<_>>();
+        let scores = self.pool.install(|| {
+            self.threads.par_iter_mut().map(|thread| {
+                thread.search(depth, alpha, beta, 0, &self.tt)
+            }).collect::<Vec<_>>()
+        });
 
         *pv = self.threads[0].pv[0].clone();
         scores[0]
