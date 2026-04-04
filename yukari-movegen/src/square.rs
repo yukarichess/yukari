@@ -509,13 +509,21 @@ impl Square16x8 {
 
 /// A square on a chessboard.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(transparent)]
-pub struct Square(NonZeroU8);
+#[repr(u8)]
+pub enum Square {
+    A1, B1, C1, D1, E1, F1, G1, H1,
+    A2, B2, C2, D2, E2, F2, G2, H2,
+    A3, B3, C3, D3, E3, F3, G3, H3,
+    A4, B4, C4, D4, E4, F4, G4, H4,
+    A5, B5, C5, D5, E5, F5, G5, H5,
+    A6, B6, C6, D6, E6, F6, G6, H6,
+    A7, B7, C7, D7, E7, F7, G7, H7,
+    A8, B8, C8, D8, E8, F8, G8, H8,
+}
 
 impl Default for Square {
     fn default() -> Self {
-        // SAFETY: One is not zero.
-        Self(unsafe { NonZeroU8::new_unchecked(1) })
+        Self::A1
     }
 }
 
@@ -583,9 +591,10 @@ impl FromStr for Square {
         }
         let file = chars[0] - b'a';
         let rank = chars[1] - b'1';
+        // TODO: update below comment
         // SAFETY: values are constrained above and the "plus one" ensures this will never be zero.
-        let square = unsafe { NonZeroU8::new_unchecked((8 * rank + file) + 1) };
-        Ok(Self(square))
+        let square = unsafe { std::mem::transmute(8 * rank + file) };
+        Ok(square)
     }
 }
 
@@ -603,9 +612,10 @@ impl Square {
     pub fn from_rank_file(rank: Rank, file: File) -> Self {
         let rank = u8::from(rank);
         let file = u8::from(file);
+        // TODO: update below comment
         // SAFETY: the "plus one" ensures this will never be zero.
-        let square = unsafe { NonZeroU8::new_unchecked((8 * rank + file) + 1) };
-        Self(square)
+        let square = unsafe { std::mem::transmute(8 * rank + file) };
+        square
     }
 
     /// Construct a `Square` directly from a `u8`.
@@ -615,14 +625,13 @@ impl Square {
     /// `sq` must be in the range 0-63.
     #[must_use]
     pub const unsafe fn from_u8_unchecked(sq: u8) -> Self {
-        Self(unsafe { NonZeroU8::new_unchecked(sq + 1) })
+        unsafe { std::mem::transmute(sq) }
     }
 
     /// Return the internal `u8` with the range 0-63.
     #[must_use]
     pub const fn into_inner(self) -> u8 {
-        // The "& 63" is to hint to the compiler that this will never be greater than it.
-        (self.0.get() - 1) & 63
+        self as u8
     }
 
     /// Return the `Direction` between two squares, if any exists.
