@@ -463,8 +463,8 @@ fn run() -> io::Result<()> {
         line.clear();
         let count = io::stdin().read_line(&mut line)?;
         if count == 0 {
-            println!("# got zero read");
-            continue;
+            // broken pipe? EOF??
+            break;
         }
         let trimmed = line.trim();
         let (mut cmd, mut args) = trimmed.split_once(' ').unwrap_or((trimmed, ""));
