@@ -293,12 +293,15 @@ impl Thread {
         const HISTORY_MAX: i32 = 16384;
         let board = &self.board[ply];
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
+        // History Heuristic
         {
             let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
             let history = &mut self.history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize];
             let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
         }
+
+        // N-2 Continuation History (Follow Up History)
         if let Some((last_piece, last_m)) = last_last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
@@ -310,6 +313,8 @@ impl Thread {
             let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
             *conthist += bonus as i16;
         }
+
+        // N-1 Continuation History (Counter Move History)
         if let Some((last_piece, last_m)) = last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
@@ -462,8 +467,6 @@ impl Thread {
                 continue;
             }
 
-            self.nodes += 1;
-
             self.prefetch_tt(tt, &self.board[ply], *m);
 
             // SEE Pruning
@@ -506,6 +509,8 @@ impl Thread {
                     extension += 1;
                 }
             }
+
+            self.nodes += 1;
 
             self.path.push(Some((self.board[ply].piece_from_square(m.from).unwrap(), *m)));
 
