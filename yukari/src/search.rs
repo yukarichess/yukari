@@ -489,6 +489,12 @@ impl Thread {
                     let singular_depth = (depth - 1) / 2;
                     let score = self.search(singular_depth, singular_beta - 1, singular_beta, ply, tt, Some(*m));
 
+                    // Multicut: Another move failed high, so this position is very good; prune.
+                    if score >= singular_beta && singular_beta >= beta {
+                        self.keystack.pop();
+                        return singular_beta;
+                    }
+
                     // The TT move seems uniquely good; extend.
                     if score < singular_beta {
                         extension += 1;
