@@ -140,8 +140,8 @@ impl Yukari {
         let mut pv = Vec::new();
         let max_depth = self.max_depth.unwrap_or(63);
         'depth_loop: while depth <= max_depth {
-            let mut lower_margin = 50;
-            let mut upper_margin = 50;
+            let mut lower_margin = 25;
+            let mut upper_margin = 25;
             loop {
                 let alpha = score - lower_margin;
                 let beta = score + upper_margin;
@@ -317,8 +317,8 @@ impl Yukari {
 
             let mut score = 0;
             for depth in 1..=9 {
-                let mut lower_margin = 50;
-                let mut upper_margin = 50;
+                let mut lower_margin = 25;
+                let mut upper_margin = 25;
                 loop {
                     let alpha = score - lower_margin;
                     let beta = score + upper_margin;
