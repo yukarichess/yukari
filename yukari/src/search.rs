@@ -246,6 +246,7 @@ struct Thread {
     conthist:     [[i16; 2 * 6 * 64]; 2 * 6 * 64],
     corrhist_p:   [[i32; 16384]; 2],
     corrhist_kbn: [[i32; 16384]; 2],
+    corrhist_kqr: [[i32; 16384]; 2],
     path:         Vec<Option<(Piece, Move)>>,
 }
 
@@ -267,7 +268,9 @@ impl Thread {
         let entry_p = self.corrhist_p[self.board[ply].side() as usize][self.board[ply].hash_pawns() as usize & 16383];
         // kings, bishops, knights
         let entry_kbn = self.corrhist_kbn[self.board[ply].side() as usize][self.board[ply].data().hash_kbn() as usize & 16383];
-        let corrhist = (entry_p + entry_kbn) / CORRHIST_GRAIN;
+        // kings, queens, rooks
+        let entry_kqr = self.corrhist_kqr[self.board[ply].side() as usize][self.board[ply].data().hash_kqr() as usize & 16383] / CORRHIST_GRAIN;
+        let corrhist = (entry_p + entry_kbn + entry_kqr) / CORRHIST_GRAIN;
         (eval + corrhist).clamp(-MATE_VALUE + 501, MATE_VALUE - 501)
     }
 
@@ -498,6 +501,12 @@ impl Thread {
         let entry_kbn = &mut self.corrhist_kbn[self.board[ply].side() as usize][self.board[ply].data().hash_kbn() as usize & 16383];
 
         *entry_kbn = ((*entry_kbn * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
+            .clamp(-CORRHIST_MAX, CORRHIST_MAX);
+
+        // kings, queens, rooks
+        let entry_kqr = &mut self.corrhist_kqr[self.board[ply].side() as usize][self.board[ply].data().hash_kqr() as usize & 16383];
+
+        *entry_kqr = ((*entry_kqr * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 
@@ -854,6 +863,7 @@ impl Search {
                 conthist:     [[0; _]; _],
                 corrhist_p:   [[0; _]; _],
                 corrhist_kbn: [[0; _]; _],
+                corrhist_kqr: [[0; _]; _],
                 path:         vec![],
             };
             threads
