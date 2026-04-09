@@ -8,7 +8,7 @@ use crate::{
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub struct Move {
     from: Square,
-    pub dest: Square,
+    dest: Square,
     pub kind: MoveType,
 }
 
@@ -74,6 +74,11 @@ impl Move {
     #[must_use]
     pub const fn from(self) -> Square {
         self.from
+    }
+
+    #[must_use]
+    pub const fn dest(self) -> Square {
+        self.dest
     }
 }
 

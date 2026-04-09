@@ -292,15 +292,15 @@ impl Board {
             MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
             MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
                 let piece_index =
-                    b.data.piece_index(m.dest).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
+                    b.data.piece_index(m.dest()).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
                 b.data.remove_piece(piece_index, true);
             }
             MoveType::KingsideCastle => {
-                let (rook_from, rook_to) = (m.dest.east().unwrap(), m.dest.west().unwrap());
+                let (rook_from, rook_to) = (m.dest().east().unwrap(), m.dest().west().unwrap());
                 b.data.move_piece(rook_from, rook_to);
             }
             MoveType::QueensideCastle => {
-                let (rook_from, rook_to) = (m.dest.west().unwrap().west().unwrap(), m.dest.east().unwrap());
+                let (rook_from, rook_to) = (m.dest().west().unwrap().west().unwrap(), m.dest().east().unwrap());
                 b.data.move_piece(rook_from, rook_to);
             }
             MoveType::EnPassant => {
@@ -310,12 +310,12 @@ impl Board {
             }
         }
 
-        b.data.move_piece(m.from(), m.dest);
+        b.data.move_piece(m.from(), m.dest());
 
         if m.is_promotion() {
-            let piece_index = b.data.piece_index(m.dest).unwrap();
+            let piece_index = b.data.piece_index(m.dest()).unwrap();
             b.data.remove_piece(piece_index, true);
-            b.data.add_piece(m.promotion_piece().unwrap(), b.side, m.dest, true);
+            b.data.add_piece(m.promotion_piece().unwrap(), b.side, m.dest(), true);
         }
 
         let candidate_ep = (|| {
@@ -358,22 +358,22 @@ impl Board {
             }
         }
 
-        if (m.from() == h1 || m.dest == h1) && b.castle.0 {
+        if (m.from() == h1 || m.dest() == h1) && b.castle.0 {
             b.castle.0 = false;
             b.data.remove_castling(0);
         }
 
-        if (m.from() == a1 || m.dest == a1) && b.castle.1 {
+        if (m.from() == a1 || m.dest() == a1) && b.castle.1 {
             b.castle.1 = false;
             b.data.remove_castling(1);
         }
 
-        if (m.from() == h8 || m.dest == h8) && b.castle.2 {
+        if (m.from() == h8 || m.dest() == h8) && b.castle.2 {
             b.castle.2 = false;
             b.data.remove_castling(2);
         }
 
-        if (m.from() == a8 || m.dest == a8) && b.castle.3 {
+        if (m.from() == a8 || m.dest() == a8) && b.castle.3 {
             b.castle.3 = false;
             b.data.remove_castling(3);
         }
@@ -768,8 +768,8 @@ impl Board {
     #[must_use]
     #[allow(clippy::too_many_lines, clippy::missing_panics_doc)]
     pub fn static_exchange_evaluation(&self, m: Move) -> i32 {
-        let mut our_attacks = self.data.attacks_to(m.dest, self.side());
-        let mut their_attacks = self.data.attacks_to(m.dest, !self.side());
+        let mut our_attacks = self.data.attacks_to(m.dest(), self.side());
+        let mut their_attacks = self.data.attacks_to(m.dest(), !self.side());
         let mut moved_pieces = Bitlist::new();
 
         let add_xrays = |mover_square: Square, our_attacks: &mut Bitlist, their_attacks: &mut Bitlist, moved_pieces: &Bitlist| {
@@ -779,7 +779,7 @@ impl Board {
                 mover_bitlist & (self.data.piecemask().bishops() | self.data.piecemask().rooks() | self.data.piecemask().queens());
             let mover_bitlist = mover_bitlist & moved_pieces.invert();
 
-            let target_square_16x8 = Square16x8::from_square(m.dest);
+            let target_square_16x8 = Square16x8::from_square(m.dest());
             let mover_square_16x8 = Square16x8::from_square(mover_square);
             let Some(direction) = mover_square_16x8.direction(target_square_16x8) else { return };
 
@@ -875,7 +875,7 @@ impl Board {
         moved_pieces |= Bitlist::from_piece(self.data.piece_index(m.from()).unwrap());
         add_xrays(m.from(), &mut our_attacks, &mut their_attacks, &moved_pieces);
 
-        let mut victim = self.piece_from_square(m.dest);
+        let mut victim = self.piece_from_square(m.dest());
         let mut attacker = self.piece_from_square(m.from());
         let mut score = if m.kind == MoveType::EnPassant { 1 } else { piece_value(victim) };
 
@@ -961,16 +961,16 @@ impl Board {
             MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
             MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
                 let piece_index =
-                    self.data.piece_index(m.dest).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
+                    self.data.piece_index(m.dest()).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
                 Zobrist::remove_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), self.data.square_of_piece(piece_index), &mut hash);
             }
             MoveType::KingsideCastle => {
-                let (rook_from, rook_to) = (m.dest.east().unwrap(), m.dest.west().unwrap());
+                let (rook_from, rook_to) = (m.dest().east().unwrap(), m.dest().west().unwrap());
                 let piece_index = self.data.piece_index(rook_from).unwrap();
                 Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
             }
             MoveType::QueensideCastle => {
-                let (rook_from, rook_to) = (m.dest.west().unwrap().west().unwrap(), m.dest.east().unwrap());
+                let (rook_from, rook_to) = (m.dest().west().unwrap().west().unwrap(), m.dest().east().unwrap());
                 let piece_index = self.data.piece_index(rook_from).unwrap();
                 Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
             }
@@ -982,11 +982,11 @@ impl Board {
         }
 
         let piece_index = self.data.piece_index(m.from()).unwrap();
-        Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from(), m.dest, &mut hash);
+        Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from(), m.dest(), &mut hash);
 
         if m.is_promotion() {
-            Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), m.dest, &mut hash);
-            Zobrist::add_piece(self.side, m.promotion_piece().unwrap(), m.dest, &mut hash);
+            Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), m.dest(), &mut hash);
+            Zobrist::add_piece(self.side, m.promotion_piece().unwrap(), m.dest(), &mut hash);
         }
 
         let candidate_ep = (|| {
@@ -1025,19 +1025,19 @@ impl Board {
             }
         }
 
-        if (m.from() == h1 || m.dest == h1) && self.castle.0 {
+        if (m.from() == h1 || m.dest() == h1) && self.castle.0 {
             Zobrist::remove_castling(0, &mut hash);
         }
 
-        if (m.from() == a1 || m.dest == a1) && self.castle.1 {
+        if (m.from() == a1 || m.dest() == a1) && self.castle.1 {
             Zobrist::remove_castling(1, &mut hash);
         }
 
-        if (m.from() == h8 || m.dest == h8) && self.castle.2 {
+        if (m.from() == h8 || m.dest() == h8) && self.castle.2 {
             Zobrist::remove_castling(2, &mut hash);
         }
 
-        if (m.from() == a8 || m.dest == a8) && self.castle.3 {
+        if (m.from() == a8 || m.dest() == a8) && self.castle.3 {
             Zobrist::remove_castling(3, &mut hash);
         }
 
@@ -1103,7 +1103,7 @@ impl Board {
 
         let mut ambiguities = Vec::new();
         for mv in moves {
-            if mv.dest == m.dest && self.piece_from_square(mv.from()) == self.piece_from_square(m.from()) && mv.from() != m.from() {
+            if mv.dest() == m.dest() && self.piece_from_square(mv.from()) == self.piece_from_square(m.from()) && mv.from() != m.from() {
                 ambiguities.push(mv);
             }
         }
@@ -1139,8 +1139,8 @@ impl Board {
             write!(san, "x").unwrap();
         }
 
-        let rank = Rank::from(m.dest);
-        let file = File::from(m.dest);
+        let rank = Rank::from(m.dest());
+        let file = File::from(m.dest());
         write!(san, "{file}{rank}").unwrap();
 
         // Promotion?
@@ -1243,7 +1243,7 @@ mod tests {
         };
         let mut moves = tinyvec::ArrayVec::new();
         board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from() == from && m.dest == dest && m.promotion_piece() == prom).unwrap()
+        moves.into_iter().find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom).unwrap()
     }
 
     #[test]

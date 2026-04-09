@@ -91,7 +91,7 @@ impl MoveOrder {
         }
 
         if m.is_capture() {
-            let dest_piece = board.piece_from_square(m.dest).unwrap_or(Piece::Pawn);
+            let dest_piece = board.piece_from_square(m.dest()).unwrap_or(Piece::Pawn);
             let from_piece = board.piece_from_square(m.from()).unwrap();
             if (dest_piece >= from_piece) || board.static_exchange_evaluation(m) >= 0 {
                 return Self::GoodCapture(dest_piece, from_piece);
@@ -100,23 +100,23 @@ impl MoveOrder {
         }
 
         let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from()).unwrap() as usize;
-        let mut score = i32::from(history[coloured_piece][m.from().into_inner() as usize][m.dest.into_inner() as usize]);
+        let mut score = i32::from(history[coloured_piece][m.from().into_inner() as usize][m.dest().into_inner() as usize]);
         if let Some((last_piece, last_m)) = last_last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
-                + usize::from(last_m.dest.into_inner());
+                + usize::from(last_m.dest().into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
-                + usize::from(m.dest.into_inner());
+                + usize::from(m.dest().into_inner());
             score += i32::from(conthist[last_index][curr_index]);
         }
         if let Some((last_piece, last_m)) = last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
-                + usize::from(last_m.dest.into_inner());
+                + usize::from(last_m.dest().into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
-                + usize::from(m.dest.into_inner());
+                + usize::from(m.dest().into_inner());
             score += i32::from(conthist[last_index][curr_index]);
         }
         Self::Quiet(score)
@@ -300,7 +300,7 @@ impl Thread {
         // History Heuristic
         {
             let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from()).unwrap() as usize;
-            let history = &mut self.history[coloured_piece][m.from().into_inner() as usize][m.dest.into_inner() as usize];
+            let history = &mut self.history[coloured_piece][m.from().into_inner() as usize][m.dest().into_inner() as usize];
             let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
         }
@@ -309,10 +309,10 @@ impl Thread {
         if let Some((last_piece, last_m)) = last_last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
-                + usize::from(last_m.dest.into_inner());
+                + usize::from(last_m.dest().into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
-                + usize::from(m.dest.into_inner());
+                + usize::from(m.dest().into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
             let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
             *conthist += bonus as i16;
@@ -322,10 +322,10 @@ impl Thread {
         if let Some((last_piece, last_m)) = last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
-                + usize::from(last_m.dest.into_inner());
+                + usize::from(last_m.dest().into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
-                + usize::from(m.dest.into_inner());
+                + usize::from(m.dest().into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
             let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
             *conthist += bonus as i16;
