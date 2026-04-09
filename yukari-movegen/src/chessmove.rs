@@ -9,7 +9,7 @@ use crate::{
 pub struct Move {
     from: Square,
     dest: Square,
-    pub kind: MoveType,
+    kind: MoveType,
 }
 
 const _NICHE_OPTIMISED: () = assert!(std::mem::size_of::<Move>() == std::mem::size_of::<Option<Move>>());
@@ -79,6 +79,11 @@ impl Move {
     #[must_use]
     pub const fn dest(self) -> Square {
         self.dest
+    }
+
+    #[must_use]
+    pub const fn kind(self) -> MoveType {
+        self.kind
     }
 }
 

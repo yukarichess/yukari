@@ -288,7 +288,7 @@ impl Board {
     #[allow(clippy::too_many_lines)]
     pub fn make(&self, m: Move) -> Self {
         let mut b = self.clone();
-        match m.kind {
+        match m.kind() {
             MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
             MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
                 let piece_index =
@@ -319,7 +319,7 @@ impl Board {
         }
 
         let candidate_ep = (|| {
-            let MoveType::DoublePush = m.kind else { return None };
+            let MoveType::DoublePush = m.kind() else { return None };
             let candidate_ep = m.from().relative_north(b.side)?;
             let attacks = b.data().attacks_to(candidate_ep, !b.side());
             if (attacks & b.data().piecemask().pawns()).empty() {
@@ -877,7 +877,7 @@ impl Board {
 
         let mut victim = self.piece_from_square(m.dest());
         let mut attacker = self.piece_from_square(m.from());
-        let mut score = if m.kind == MoveType::EnPassant { 1 } else { piece_value(victim) };
+        let mut score = if m.kind() == MoveType::EnPassant { 1 } else { piece_value(victim) };
 
         if let Some(prom) = m.promotion_piece() {
             score += piece_value(Some(prom)) - piece_value(Some(Piece::Pawn));
@@ -957,7 +957,7 @@ impl Board {
     pub fn hash_after(&self, m: Move) -> u64 {
         let mut hash = self.hash();
 
-        match m.kind {
+        match m.kind() {
             MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
             MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
                 let piece_index =
@@ -990,7 +990,7 @@ impl Board {
         }
 
         let candidate_ep = (|| {
-            let MoveType::DoublePush = m.kind else { return None };
+            let MoveType::DoublePush = m.kind() else { return None };
             let candidate_ep = m.from().relative_north(self.side)?;
             let attacks = self.data().attacks_to(candidate_ep, !self.side());
             if (attacks & self.data().piecemask().pawns()).empty() {
@@ -1076,11 +1076,11 @@ impl Board {
         let mut san = String::new();
 
         // Special case: castling
-        if m.kind == MoveType::KingsideCastle {
+        if m.kind() == MoveType::KingsideCastle {
             write!(san, "O-O").unwrap();
             return san;
         }
-        if m.kind == MoveType::QueensideCastle {
+        if m.kind() == MoveType::QueensideCastle {
             write!(san, "O-O-O").unwrap();
             return san;
         }

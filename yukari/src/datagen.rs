@@ -96,7 +96,7 @@ struct ViriMove(u16);
 
 impl From<Move> for ViriMove {
     fn from(m: Move) -> Self {
-        let (from, dest) = if matches!(m.kind, MoveType::KingsideCastle | MoveType::QueensideCastle) {
+        let (from, dest) = if matches!(m.kind(), MoveType::KingsideCastle | MoveType::QueensideCastle) {
             // convert from yukari's "king two squares" castling to viridithas' "king takes rook" castling.
             let rank = Rank::from(m.dest());
             let file = File::from(m.dest());
@@ -120,7 +120,7 @@ impl From<Move> for ViriMove {
             Some(Piece::Queen) => 3,
             Some(_) => unreachable!("invalid promotion piece"),
         };
-        let flags = match m.kind {
+        let flags = match m.kind() {
             yukari_movegen::MoveType::Normal => 0,
             yukari_movegen::MoveType::Capture => 0,
             yukari_movegen::MoveType::KingsideCastle => 2,
