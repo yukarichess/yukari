@@ -1,25 +1,21 @@
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, num::NonZeroU16};
 
 use crate::{
     piece::Piece,
     square::{File, Rank, Square},
 };
 
-#[derive(Copy, Clone, Default, PartialEq, Eq)]
-pub struct Move {
-    from: Square,
-    dest: Square,
-    kind: MoveType,
-}
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct Move(NonZeroU16);
 
 const _NICHE_OPTIMISED: () = assert!(std::mem::size_of::<Move>() == std::mem::size_of::<Option<Move>>());
 
 impl Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let from_file: u8 = b'a' + u8::from(File::from(self.from));
-        let from_rank: u8 = b'1' + u8::from(Rank::from(self.from));
-        let dest_file: u8 = b'a' + u8::from(File::from(self.dest));
-        let dest_rank: u8 = b'1' + u8::from(Rank::from(self.dest));
+        let from_file: u8 = b'a' + u8::from(File::from(self.from()));
+        let from_rank: u8 = b'1' + u8::from(Rank::from(self.from()));
+        let dest_file: u8 = b'a' + u8::from(File::from(self.dest()));
+        let dest_rank: u8 = b'1' + u8::from(Rank::from(self.dest()));
         write!(f, "{}{}{}{}", from_file as char, from_rank as char, dest_file as char, dest_rank as char)?;
 
         if let Some(prom) = self.promotion_piece() {
@@ -33,10 +29,10 @@ impl Display for Move {
 
 impl Debug for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let from_file: u8 = b'a' + u8::from(File::from(self.from));
-        let from_rank: u8 = b'1' + u8::from(Rank::from(self.from));
-        let dest_file: u8 = b'a' + u8::from(File::from(self.dest));
-        let dest_rank: u8 = b'1' + u8::from(Rank::from(self.dest));
+        let from_file: u8 = b'a' + u8::from(File::from(self.from()));
+        let from_rank: u8 = b'1' + u8::from(Rank::from(self.from()));
+        let dest_file: u8 = b'a' + u8::from(File::from(self.dest()));
+        let dest_rank: u8 = b'1' + u8::from(Rank::from(self.dest()));
         write!(f, "{}{}{}{}", from_file as char, from_rank as char, dest_file as char, dest_rank as char)?;
 
         if let Some(prom) = self.promotion_piece() {
@@ -48,42 +44,51 @@ impl Debug for Move {
     }
 }
 
+impl Default for Move {
+    fn default() -> Self {
+        Self(NonZeroU16::new(0xFFFF).unwrap())
+    }
+}
+
 impl Move {
     /// Create a new Move.
     #[must_use]
     pub const fn new(from: Square, dest: Square, kind: MoveType) -> Self {
-        //assert!(dest != from);
-        Self { from, dest, kind }
+        let from = from.into_inner() as u16;
+        let dest = dest.into_inner() as u16;
+        let kind = kind as u16;
+        let value = (kind << 12) | (dest << 6) | from;
+        Self(NonZeroU16::new(value).unwrap())
     }
 
     #[must_use]
     pub const fn is_capture(&self) -> bool {
-        self.kind.is_capture()
+        self.kind().is_capture()
     }
 
     #[must_use]
     pub const fn is_promotion(&self) -> bool {
-        self.kind.is_promotion()
+        self.kind().is_promotion()
     }
 
     #[must_use]
     pub const fn promotion_piece(&self) -> Option<Piece> {
-        self.kind.promotion_piece()
+        self.kind().promotion_piece()
     }
 
     #[must_use]
     pub const fn from(self) -> Square {
-        self.from
+        unsafe { Square::from_u8_unchecked((self.0.get() & 0x003F) as u8) }
     }
 
     #[must_use]
     pub const fn dest(self) -> Square {
-        self.dest
+        unsafe { Square::from_u8_unchecked(((self.0.get() & 0x0FC0) >> 6) as u8) }
     }
 
     #[must_use]
     pub const fn kind(self) -> MoveType {
-        self.kind
+        unsafe { std::mem::transmute::<u8, MoveType>(((self.0.get() & 0xF000) >> 12) as u8) }
     }
 }
 

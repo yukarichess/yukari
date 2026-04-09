@@ -34,6 +34,7 @@ struct TtData {
     depth: u8,
     score: i16,
     m: Option<Move>,
+    eval: i16,
 }
 
 const _TT_ENTRY_IS_16_BYTE: () = assert!(std::mem::size_of::<TtEntry>() == 16);
@@ -636,6 +637,7 @@ impl Thread {
                         TtFlags::Upper
                     },
                     depth: depth as u8,
+                    eval: eval as i16,
                 },
             );
 
