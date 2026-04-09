@@ -154,7 +154,7 @@ impl Thread {
         // kings, bishops, knights
         let entry_kbn = self.corrhist_kbn[self.board[ply].side() as usize][self.board[ply].data().hash_kbn() as usize & 16383];
         let corrhist = (entry_p + entry_kbn) / CORRHIST_GRAIN;
-        (eval + corrhist).clamp(-MATE_VALUE + 1, MATE_VALUE - 1)
+        (eval + corrhist).clamp(-MATE_VALUE + 501, MATE_VALUE - 501)
     }
 
     pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
