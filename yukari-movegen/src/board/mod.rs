@@ -310,7 +310,7 @@ impl Board {
             }
         }
 
-        b.data.move_piece(m.from, m.dest);
+        b.data.move_piece(m.from(), m.dest);
 
         if m.is_promotion() {
             let piece_index = b.data.piece_index(m.dest).unwrap();
@@ -320,7 +320,7 @@ impl Board {
 
         let candidate_ep = (|| {
             let MoveType::DoublePush = m.kind else { return None };
-            let candidate_ep = m.from.relative_north(b.side)?;
+            let candidate_ep = m.from().relative_north(b.side)?;
             let attacks = b.data().attacks_to(candidate_ep, !b.side());
             if (attacks & b.data().piecemask().pawns()).empty() {
                 return None;
@@ -336,7 +336,7 @@ impl Board {
         let h1 = Square::from_rank_file(Rank::One, File::H);
         let h8 = Square::from_rank_file(Rank::Eight, File::H);
 
-        if m.from == e1 {
+        if m.from() == e1 {
             if b.castle.0 {
                 b.castle.0 = false;
                 b.data.remove_castling(0);
@@ -347,7 +347,7 @@ impl Board {
             }
         }
 
-        if m.from == e8 {
+        if m.from() == e8 {
             if b.castle.2 {
                 b.castle.2 = false;
                 b.data.remove_castling(2);
@@ -358,22 +358,22 @@ impl Board {
             }
         }
 
-        if (m.from == h1 || m.dest == h1) && b.castle.0 {
+        if (m.from() == h1 || m.dest == h1) && b.castle.0 {
             b.castle.0 = false;
             b.data.remove_castling(0);
         }
 
-        if (m.from == a1 || m.dest == a1) && b.castle.1 {
+        if (m.from() == a1 || m.dest == a1) && b.castle.1 {
             b.castle.1 = false;
             b.data.remove_castling(1);
         }
 
-        if (m.from == h8 || m.dest == h8) && b.castle.2 {
+        if (m.from() == h8 || m.dest == h8) && b.castle.2 {
             b.castle.2 = false;
             b.data.remove_castling(2);
         }
 
-        if (m.from == a8 || m.dest == a8) && b.castle.3 {
+        if (m.from() == a8 || m.dest == a8) && b.castle.3 {
             b.castle.3 = false;
             b.data.remove_castling(3);
         }
@@ -871,12 +871,12 @@ impl Board {
             PIECE_VALUES[piece as usize]
         };
 
-        our_attacks &= Bitlist::from_piece(self.data.piece_index(m.from).unwrap()).invert();
-        moved_pieces |= Bitlist::from_piece(self.data.piece_index(m.from).unwrap());
-        add_xrays(m.from, &mut our_attacks, &mut their_attacks, &moved_pieces);
+        our_attacks &= Bitlist::from_piece(self.data.piece_index(m.from()).unwrap()).invert();
+        moved_pieces |= Bitlist::from_piece(self.data.piece_index(m.from()).unwrap());
+        add_xrays(m.from(), &mut our_attacks, &mut their_attacks, &moved_pieces);
 
         let mut victim = self.piece_from_square(m.dest);
-        let mut attacker = self.piece_from_square(m.from);
+        let mut attacker = self.piece_from_square(m.from());
         let mut score = if m.kind == MoveType::EnPassant { 1 } else { piece_value(victim) };
 
         if let Some(prom) = m.promotion_piece() {
@@ -981,8 +981,8 @@ impl Board {
             }
         }
 
-        let piece_index = self.data.piece_index(m.from).unwrap();
-        Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from, m.dest, &mut hash);
+        let piece_index = self.data.piece_index(m.from()).unwrap();
+        Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from(), m.dest, &mut hash);
 
         if m.is_promotion() {
             Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), m.dest, &mut hash);
@@ -991,7 +991,7 @@ impl Board {
 
         let candidate_ep = (|| {
             let MoveType::DoublePush = m.kind else { return None };
-            let candidate_ep = m.from.relative_north(self.side)?;
+            let candidate_ep = m.from().relative_north(self.side)?;
             let attacks = self.data().attacks_to(candidate_ep, !self.side());
             if (attacks & self.data().piecemask().pawns()).empty() {
                 return None;
@@ -1007,7 +1007,7 @@ impl Board {
         let h1 = Square::from_rank_file(Rank::One, File::H);
         let h8 = Square::from_rank_file(Rank::Eight, File::H);
 
-        if m.from == e1 {
+        if m.from() == e1 {
             if self.castle.0 {
                 Zobrist::remove_castling(0, &mut hash);
             }
@@ -1016,7 +1016,7 @@ impl Board {
             }
         }
 
-        if m.from == e8 {
+        if m.from() == e8 {
             if self.castle.2 {
                 Zobrist::remove_castling(2, &mut hash);
             }
@@ -1025,19 +1025,19 @@ impl Board {
             }
         }
 
-        if (m.from == h1 || m.dest == h1) && self.castle.0 {
+        if (m.from() == h1 || m.dest == h1) && self.castle.0 {
             Zobrist::remove_castling(0, &mut hash);
         }
 
-        if (m.from == a1 || m.dest == a1) && self.castle.1 {
+        if (m.from() == a1 || m.dest == a1) && self.castle.1 {
             Zobrist::remove_castling(1, &mut hash);
         }
 
-        if (m.from == h8 || m.dest == h8) && self.castle.2 {
+        if (m.from() == h8 || m.dest == h8) && self.castle.2 {
             Zobrist::remove_castling(2, &mut hash);
         }
 
-        if (m.from == a8 || m.dest == a8) && self.castle.3 {
+        if (m.from() == a8 || m.dest == a8) && self.castle.3 {
             Zobrist::remove_castling(3, &mut hash);
         }
 
@@ -1086,7 +1086,7 @@ impl Board {
         }
 
         // Moving piece
-        let piece = self.piece_from_square(m.from).unwrap_or_else(|| panic!("{m} has no origin piece on board\n{self}"));
+        let piece = self.piece_from_square(m.from()).unwrap_or_else(|| panic!("{m} has no origin piece on board\n{self}"));
         let piece_char = match piece {
             Piece::Pawn => "",
             Piece::Knight => "N",
@@ -1103,7 +1103,7 @@ impl Board {
 
         let mut ambiguities = Vec::new();
         for mv in moves {
-            if mv.dest == m.dest && self.piece_from_square(mv.from) == self.piece_from_square(m.from) && mv.from != m.from {
+            if mv.dest == m.dest && self.piece_from_square(mv.from()) == self.piece_from_square(m.from()) && mv.from() != m.from() {
                 ambiguities.push(mv);
             }
         }
@@ -1112,11 +1112,11 @@ impl Board {
         let mut piece_on_same_rank = false;
         let mut piece_on_same_file = false;
 
-        let rank = Rank::from(m.from);
-        let file = File::from(m.from);
+        let rank = Rank::from(m.from());
+        let file = File::from(m.from());
         for ambiguity in ambiguities {
-            let attacker_rank = Rank::from(ambiguity.from);
-            let attacker_file = File::from(ambiguity.from);
+            let attacker_rank = Rank::from(ambiguity.from());
+            let attacker_file = File::from(ambiguity.from());
             piece_on_same_rank |= attacker_rank == rank;
             piece_on_same_file |= attacker_file == file;
         }
@@ -1243,7 +1243,7 @@ mod tests {
         };
         let mut moves = tinyvec::ArrayVec::new();
         board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from == from && m.dest == dest && m.promotion_piece() == prom).unwrap()
+        moves.into_iter().find(|&m| m.from() == from && m.dest == dest && m.promotion_piece() == prom).unwrap()
     }
 
     #[test]

@@ -92,21 +92,21 @@ impl MoveOrder {
 
         if m.is_capture() {
             let dest_piece = board.piece_from_square(m.dest).unwrap_or(Piece::Pawn);
-            let from_piece = board.piece_from_square(m.from).unwrap();
+            let from_piece = board.piece_from_square(m.from()).unwrap();
             if (dest_piece >= from_piece) || board.static_exchange_evaluation(m) >= 0 {
                 return Self::GoodCapture(dest_piece, from_piece);
             }
             return Self::BadCapture(dest_piece, from_piece);
         }
 
-        let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
-        let mut score = i32::from(history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize]);
+        let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from()).unwrap() as usize;
+        let mut score = i32::from(history[coloured_piece][m.from().into_inner() as usize][m.dest.into_inner() as usize]);
         if let Some((last_piece, last_m)) = last_last_m {
             let last_index = 6 * 64 * usize::from(board.side() == Colour::Black)
                 + 64 * (last_piece as usize)
                 + usize::from(last_m.dest.into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
-                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
             score += i32::from(conthist[last_index][curr_index]);
         }
@@ -115,7 +115,7 @@ impl MoveOrder {
                 + 64 * (last_piece as usize)
                 + usize::from(last_m.dest.into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
-                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
             score += i32::from(conthist[last_index][curr_index]);
         }
@@ -299,8 +299,8 @@ impl Thread {
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
         // History Heuristic
         {
-            let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from).unwrap() as usize;
-            let history = &mut self.history[coloured_piece][m.from.into_inner() as usize][m.dest.into_inner() as usize];
+            let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from()).unwrap() as usize;
+            let history = &mut self.history[coloured_piece][m.from().into_inner() as usize][m.dest.into_inner() as usize];
             let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
         }
@@ -311,7 +311,7 @@ impl Thread {
                 + 64 * (last_piece as usize)
                 + usize::from(last_m.dest.into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
-                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
             let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
@@ -324,7 +324,7 @@ impl Thread {
                 + 64 * (last_piece as usize)
                 + usize::from(last_m.dest.into_inner());
             let curr_index = 6 * 64 * usize::from(board.side() == Colour::Black)
-                + 64 * (board.piece_from_square(m.from).unwrap() as usize)
+                + 64 * (board.piece_from_square(m.from()).unwrap() as usize)
                 + usize::from(m.dest.into_inner());
             let conthist = &mut self.conthist[last_index][curr_index];
             let bonus = bonus - i32::from(*conthist) * bonus.abs() / HISTORY_MAX;
@@ -537,7 +537,7 @@ impl Thread {
 
             self.nodes += 1;
 
-            self.path.push(Some((self.board[ply].piece_from_square(m.from).unwrap(), *m)));
+            self.path.push(Some((self.board[ply].piece_from_square(m.from()).unwrap(), *m)));
 
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make(*m));

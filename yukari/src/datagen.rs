@@ -100,7 +100,7 @@ impl From<Move> for ViriMove {
             // convert from yukari's "king two squares" castling to viridithas' "king takes rook" castling.
             let rank = Rank::from(m.dest);
             let file = File::from(m.dest);
-            let from = u16::from(m.from.into_inner());
+            let from = u16::from(m.from().into_inner());
             let dest = match (rank, file) {
                 (Rank::One, File::G) => u16::from(Square::from_rank_file(Rank::One, File::H).into_inner()),
                 (Rank::One, File::C) => u16::from(Square::from_rank_file(Rank::One, File::A).into_inner()),
@@ -110,7 +110,7 @@ impl From<Move> for ViriMove {
             };
             (from, dest)
         } else {
-            (u16::from(m.from.into_inner()), u16::from(m.dest.into_inner()))
+            (u16::from(m.from().into_inner()), u16::from(m.dest.into_inner()))
         };
         let prom = match m.promotion_piece() {
             None => 0,
@@ -198,7 +198,7 @@ impl<'a, T: Write> DataGen<'a, T> {
     fn find_move(&self, board: &Board, from: Square, dest: Square, prom: Option<Piece>) -> Option<Move> {
         let mut moves = ArrayVec::new();
         board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from == from && m.dest == dest && m.promotion_piece() == prom)
+        moves.into_iter().find(|&m| m.from() == from && m.dest == dest && m.promotion_piece() == prom)
     }
 
     pub fn test1(&mut self) {
