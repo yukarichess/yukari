@@ -7,7 +7,7 @@ use std::{
 
 use rand::seq::IteratorRandom;
 use tinyvec::ArrayVec;
-use yukari_movegen::{Board, Colour, File, Move, Piece, Rank, Square};
+use yukari_movegen::{Board, Colour, File, Move, MoveType, Piece, Rank, Square};
 
 use crate::search;
 
@@ -96,7 +96,7 @@ struct ViriMove(u16);
 
 impl From<Move> for ViriMove {
     fn from(m: Move) -> Self {
-        let (from, dest) = if let yukari_movegen::MoveType::Castle = m.kind {
+        let (from, dest) = if matches!(m.kind, MoveType::KingsideCastle | MoveType::QueensideCastle) {
             // convert from yukari's "king two squares" castling to viridithas' "king takes rook" castling.
             let rank = Rank::from(m.dest);
             let file = File::from(m.dest);
@@ -112,7 +112,7 @@ impl From<Move> for ViriMove {
         } else {
             (u16::from(m.from.into_inner()), u16::from(m.dest.into_inner()))
         };
-        let prom = match m.prom {
+        let prom = match m.promotion_piece() {
             None => 0,
             Some(Piece::Knight) => 0,
             Some(Piece::Bishop) => 1,
@@ -123,11 +123,20 @@ impl From<Move> for ViriMove {
         let flags = match m.kind {
             yukari_movegen::MoveType::Normal => 0,
             yukari_movegen::MoveType::Capture => 0,
-            yukari_movegen::MoveType::Castle => 2,
+            yukari_movegen::MoveType::KingsideCastle => 2,
+            yukari_movegen::MoveType::QueensideCastle => 2,
             yukari_movegen::MoveType::DoublePush => 0,
             yukari_movegen::MoveType::EnPassant => 1,
-            yukari_movegen::MoveType::Promotion => 3,
-            yukari_movegen::MoveType::CapturePromotion => 3,
+            yukari_movegen::MoveType::PromotionKnight => 3,
+            yukari_movegen::MoveType::PromotionBishop => 3,
+            yukari_movegen::MoveType::PromotionRook => 3,
+            yukari_movegen::MoveType::PromotionQueen => 3,
+            yukari_movegen::MoveType::CapturePromotionKnight => 3,
+            yukari_movegen::MoveType::CapturePromotionBishop => 3,
+            yukari_movegen::MoveType::CapturePromotionRook => 3,
+            yukari_movegen::MoveType::CapturePromotionQueen => 3,
+            yukari_movegen::MoveType::_Unused1 => 0,
+            yukari_movegen::MoveType::_Unused2 => 0,
         };
 
         Self(from | (dest << 6) | (prom << 12) | (flags << 14))
@@ -189,7 +198,7 @@ impl<'a, T: Write> DataGen<'a, T> {
     fn find_move(&self, board: &Board, from: Square, dest: Square, prom: Option<Piece>) -> Option<Move> {
         let mut moves = ArrayVec::new();
         board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from == from && m.dest == dest && m.prom == prom)
+        moves.into_iter().find(|&m| m.from == from && m.dest == dest && m.promotion_piece() == prom)
     }
 
     pub fn test1(&mut self) {

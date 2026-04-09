@@ -289,18 +289,18 @@ impl Board {
     pub fn make(&self, m: Move) -> Self {
         let mut b = self.clone();
         match m.kind {
-            MoveType::Promotion | MoveType::Normal | MoveType::DoublePush => {}
-            MoveType::Capture | MoveType::CapturePromotion => {
+            MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
+            MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
                 let piece_index =
                     b.data.piece_index(m.dest).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
                 b.data.remove_piece(piece_index, true);
             }
-            MoveType::Castle => {
-                let (rook_from, rook_to) = if m.dest > m.from {
-                    (m.dest.east().unwrap(), m.dest.west().unwrap())
-                } else {
-                    (m.dest.west().unwrap().west().unwrap(), m.dest.east().unwrap())
-                };
+            MoveType::KingsideCastle => {
+                let (rook_from, rook_to) = (m.dest.east().unwrap(), m.dest.west().unwrap());
+                b.data.move_piece(rook_from, rook_to);
+            }
+            MoveType::QueensideCastle => {
+                let (rook_from, rook_to) = (m.dest.west().unwrap().west().unwrap(), m.dest.east().unwrap());
                 b.data.move_piece(rook_from, rook_to);
             }
             MoveType::EnPassant => {
@@ -312,10 +312,10 @@ impl Board {
 
         b.data.move_piece(m.from, m.dest);
 
-        if matches!(m.kind, MoveType::Promotion | MoveType::CapturePromotion) {
+        if m.is_promotion() {
             let piece_index = b.data.piece_index(m.dest).unwrap();
             b.data.remove_piece(piece_index, true);
-            b.data.add_piece(m.prom.unwrap(), b.side, m.dest, true);
+            b.data.add_piece(m.promotion_piece().unwrap(), b.side, m.dest, true);
         }
 
         let candidate_ep = (|| {
@@ -384,7 +384,7 @@ impl Board {
     }
 
     fn try_push_move(
-        &self, v: &mut ArrayVec<[Move; 256]>, from: Square, dest: Square, kind: MoveType, promotion_piece: Option<Piece>,
+        &self, v: &mut ArrayVec<[Move; 256]>, from: Square, dest: Square, kind: MoveType,
         pininfo: &pins::PinInfo,
     ) {
         if let Some(dir) = pininfo.pins[self.data.piece_index(from).unwrap().into_inner() as usize] {
@@ -397,7 +397,7 @@ impl Board {
                 return;
             }
         }
-        v.push(Move::new(from, dest, kind, promotion_piece));
+        v.push(Move::new(from, dest, kind));
     }
 
     /// Generate en-passant pawn moves.
@@ -407,13 +407,12 @@ impl Board {
         };
         for capturer in self.data.attacks_to(ep, self.side).and(self.data.piecemask().pawns()).and(!pininfo.enpassant_pinned) {
             let from = self.data.square_of_piece(capturer);
-            self.try_push_move(v, from, ep, MoveType::EnPassant, None, pininfo);
+            self.try_push_move(v, from, ep, MoveType::EnPassant, pininfo);
         }
     }
 
     /// Generate pawn-specific quiet moves.
     fn generate_pawn_quiet(&self, v: &mut ArrayVec<[Move; 256]>, from: Square, pininfo: &pins::PinInfo) {
-        let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
         let north = from.relative_north(self.side);
         let Some(dest) = north else {
             return;
@@ -423,11 +422,12 @@ impl Board {
             return;
         }
         if Rank::from(dest).is_relative_eighth(self.side) {
-            for piece in &promotion_pieces {
-                self.try_push_move(v, from, dest, MoveType::Promotion, Some(*piece), pininfo);
-            }
+            self.try_push_move(v, from, dest, MoveType::PromotionQueen, pininfo);
+            self.try_push_move(v, from, dest, MoveType::PromotionKnight, pininfo);
+            self.try_push_move(v, from, dest, MoveType::PromotionRook, pininfo);
+            self.try_push_move(v, from, dest, MoveType::PromotionBishop, pininfo);
         } else {
-            self.try_push_move(v, from, dest, MoveType::Normal, None, pininfo);
+            self.try_push_move(v, from, dest, MoveType::Normal, pininfo);
         }
 
         // Pawn double pushes.
@@ -435,7 +435,7 @@ impl Board {
             return;
         };
         if Rank::from(dest).is_relative_fourth(self.side) && !self.data.has_piece(dest) {
-            self.try_push_move(v, from, dest, MoveType::DoublePush, None, pininfo);
+            self.try_push_move(v, from, dest, MoveType::DoublePush, pininfo);
         }
     }
 
@@ -453,18 +453,18 @@ impl Board {
         let pininfo = pins::PinInfo::discover(self);
 
         let add_pawn_block = |v: &mut ArrayVec<[Move; 256]>, from, dest, kind| {
-            let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
             let Some(colour) = self.data.colour_from_square(from) else { return };
             if colour != self.side {
                 return;
             }
             if !Rank::from(dest).is_relative_eighth(self.side) {
-                self.try_push_move(v, from, dest, kind, None, &pininfo);
+                self.try_push_move(v, from, dest, kind, &pininfo);
                 return;
             }
-            for piece in &promotion_pieces {
-                self.try_push_move(v, from, dest, MoveType::Promotion, Some(*piece), &pininfo);
-            }
+            self.try_push_move(v, from, dest, MoveType::PromotionQueen, &pininfo);
+            self.try_push_move(v, from, dest, MoveType::PromotionKnight, &pininfo);
+            self.try_push_move(v, from, dest, MoveType::PromotionRook, &pininfo);
+            self.try_push_move(v, from, dest, MoveType::PromotionBishop, &pininfo);
         };
 
         let add_pawn_blocks = |v: &mut ArrayVec<[Move; 256]>, dest: Square| {
@@ -485,18 +485,18 @@ impl Board {
 
         // Can we capture the attacker?
         for capturer in self.data.attacks_to(attacker_square, self.side) {
-            let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
             let from = self.data.square_of_piece(capturer);
             if self.data.piece_from_bit(capturer) == Piece::King && !self.data.attacks_to(attacker_square, !self.side).empty() {
                 continue;
             }
             if self.data.piece_from_bit(capturer) != Piece::Pawn || !Rank::from(attacker_square).is_relative_eighth(self.side) {
-                self.try_push_move(v, from, attacker_square, MoveType::Capture, None, &pininfo);
+                self.try_push_move(v, from, attacker_square, MoveType::Capture, &pininfo);
                 continue;
             }
-            for piece in &promotion_pieces {
-                self.try_push_move(v, from, attacker_square, MoveType::CapturePromotion, Some(*piece), &pininfo);
-            }
+            self.try_push_move(v, from, attacker_square, MoveType::CapturePromotionQueen, &pininfo);
+            self.try_push_move(v, from, attacker_square, MoveType::CapturePromotionKnight, &pininfo);
+            self.try_push_move(v, from, attacker_square, MoveType::CapturePromotionRook, &pininfo);
+            self.try_push_move(v, from, attacker_square, MoveType::CapturePromotionBishop, &pininfo);
         }
 
         // en-passant
@@ -507,7 +507,7 @@ impl Board {
                 return;
             }
             for capturer in self.data.attacks_to(ep, self.side) & self.data.piecemask().pawns() & !pininfo.enpassant_pinned {
-                self.try_push_move(v, self.data.square_of_piece(capturer), ep, MoveType::EnPassant, None, &pininfo);
+                self.try_push_move(v, self.data.square_of_piece(capturer), ep, MoveType::EnPassant, &pininfo);
             }
         })();
 
@@ -523,7 +523,7 @@ impl Board {
                 for attacker in
                     self.data.attacks_to(dest, self.side).and(!self.data.piecemask().pawns()).and(!self.data.piecemask().kings())
                 {
-                    self.try_push_move(v, self.data.square_of_piece(attacker), dest, MoveType::Normal, None, &pininfo);
+                    self.try_push_move(v, self.data.square_of_piece(attacker), dest, MoveType::Normal, &pininfo);
                 }
 
                 // Pawn moves.
@@ -557,7 +557,7 @@ impl Board {
                 }
             }
 
-            v.push(Move::new(king_square, square, kind, None));
+            v.push(Move::new(king_square, square, kind));
         }
     }
 
@@ -607,7 +607,7 @@ impl Board {
                 continue;
             }
 
-            v.push(Move::new(king_square, square, kind, None));
+            v.push(Move::new(king_square, square, kind));
         }
     }
 
@@ -615,16 +615,16 @@ impl Board {
         let pininfo = pins::PinInfo::discover(self);
 
         let mut find_attackers = |dest: Square| {
-            let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
             let attacks = self.data.attacks_to(dest, self.side);
             for capturer in attacks & self.data.piecemask().pawns() {
                 let from = self.data.square_of_piece(capturer);
                 if Rank::from(dest).is_relative_eighth(self.side) {
-                    for piece in &promotion_pieces {
-                        self.try_push_move(v, from, dest, MoveType::CapturePromotion, Some(*piece), &pininfo);
-                    }
+                    self.try_push_move(v, from, dest, MoveType::CapturePromotionQueen, &pininfo);
+                    self.try_push_move(v, from, dest, MoveType::CapturePromotionKnight, &pininfo);
+                    self.try_push_move(v, from, dest, MoveType::CapturePromotionRook, &pininfo);
+                    self.try_push_move(v, from, dest, MoveType::CapturePromotionBishop, &pininfo);
                 } else {
-                    self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
+                    self.try_push_move(v, from, dest, MoveType::Capture, &pininfo);
                 }
             }
             let capturers = (attacks & self.data.piecemask().knights())
@@ -635,7 +635,7 @@ impl Board {
 
             for capturer in capturers {
                 let from = self.data.square_of_piece(capturer);
-                self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
+                self.try_push_move(v, from, dest, MoveType::Capture, &pininfo);
             }
             for capturer in attacks & self.data.piecemask().kings() {
                 let from = self.data.square_of_piece(capturer);
@@ -643,7 +643,7 @@ impl Board {
                     // Moving into check is illegal.
                     continue;
                 }
-                self.try_push_move(v, from, dest, MoveType::Capture, None, &pininfo);
+                self.try_push_move(v, from, dest, MoveType::Capture, &pininfo);
             }
         };
 
@@ -684,134 +684,6 @@ impl Board {
         }
 
         self.generate_captures(v);
-    }
-
-    #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
-    pub fn generate_captures_incremental<F: FnMut(Move) -> bool>(&self, mut f: F) {
-        let king_square = self.data.king_square(self.side);
-        let checks = self.data.attacks_to(king_square, !self.side);
-
-        // special case: being in check.
-        if checks.count_ones() != 0 {
-            let mut v = ArrayVec::new();
-            v.set_len(0);
-            if checks.count_ones() == 1 {
-                self.generate_single_check(&mut v);
-            } else if checks.count_ones() == 2 {
-                self.generate_double_check(&mut v);
-            }
-
-            for m in v {
-                if m.is_capture() && !f(m) {
-                    break;
-                }
-            }
-            return;
-        }
-
-        let pininfo = pins::PinInfo::discover(self);
-
-        let mut try_move = |from: Square, dest: Square, kind: MoveType, promotion_piece: Option<Piece>, pininfo: &pins::PinInfo| {
-            if let Some(dir) = pininfo.pins[self.data.piece_index(from).unwrap().into_inner() as usize] {
-                if let Some(move_dir) = from.direction(dest) {
-                    // Pinned slider can only move along pin ray.
-                    if dir == move_dir || dir == move_dir.opposite() {
-                        return f(Move::new(from, dest, kind, promotion_piece));
-                    }
-                }
-                // Pinned knight can't move.
-                return true;
-            }
-            f(Move::new(from, dest, kind, promotion_piece))
-        };
-
-        let mut find_attackers = |dest: Square, victim_type: Piece| -> bool {
-            let promotion_pieces = [Piece::Queen, Piece::Knight, Piece::Rook, Piece::Bishop];
-            let attacks = self.data.attacks_to(dest, self.side);
-            for capturer in attacks & self.data.piecemask().pawns() {
-                let from = self.data.square_of_piece(capturer);
-                if Rank::from(dest).is_relative_eighth(self.side) {
-                    for piece in &promotion_pieces {
-                        if !try_move(from, dest, MoveType::CapturePromotion, Some(*piece), &pininfo) {
-                            return false;
-                        }
-                    }
-                } else if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
-                    return false;
-                }
-            }
-            for capturer in attacks & (self.data.piecemask().knights() | self.data.piecemask().bishops()) {
-                let from = self.data.square_of_piece(capturer);
-                if victim_type < Piece::Bishop
-                    && self.static_exchange_evaluation(Move::new(from, dest, MoveType::Capture, None)) < 0
-                {
-                    // This is a bad capture.
-                    continue;
-                }
-                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
-                    return false;
-                }
-            }
-            for capturer in attacks & self.data.piecemask().rooks() {
-                let from = self.data.square_of_piece(capturer);
-                if victim_type < Piece::Rook && self.static_exchange_evaluation(Move::new(from, dest, MoveType::Capture, None)) < 0
-                {
-                    // This is a bad capture.
-                    continue;
-                }
-                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
-                    return false;
-                }
-            }
-            for capturer in attacks & self.data.piecemask().queens() {
-                let from = self.data.square_of_piece(capturer);
-                if victim_type < Piece::Queen && self.static_exchange_evaluation(Move::new(from, dest, MoveType::Capture, None)) < 0
-                {
-                    // This is a bad capture.
-                    continue;
-                }
-                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
-                    return false;
-                }
-            }
-            for capturer in attacks & self.data.piecemask().kings() {
-                let from = self.data.square_of_piece(capturer);
-                if !self.data.attacks_to(dest, !self.side).empty() {
-                    // Moving into check is illegal.
-                    continue;
-                }
-                if !try_move(from, dest, MoveType::Capture, None, &pininfo) {
-                    return false;
-                }
-            }
-            true
-        };
-
-        for victim in self.data.piecemask().pieces_of_colour(!self.side) & self.data.piecemask().queens() {
-            if !find_attackers(self.square_of_piece(victim), Piece::Queen) {
-                return;
-            }
-        }
-
-        for victim in self.data.piecemask().pieces_of_colour(!self.side) & self.data.piecemask().rooks() {
-            if !find_attackers(self.square_of_piece(victim), Piece::Rook) {
-                return;
-            }
-        }
-
-        for victim in
-            self.data.piecemask().pieces_of_colour(!self.side) & (self.data.piecemask().knights() | self.data.piecemask().bishops())
-        {
-            if !find_attackers(self.square_of_piece(victim), Piece::Bishop) {
-                return;
-            }
-        }
-
-        for victim in self.data.piecemask().pieces_of_colour(!self.side) & self.data.piecemask().pawns() {
-            if !find_attackers(self.square_of_piece(victim), Piece::Pawn) {
-                return;
-            }
-        }
     }
 
     /// Generate a vector of moves on the board.
@@ -858,7 +730,7 @@ impl Board {
                 }
 
                 let from = self.data.square_of_piece(attacker);
-                self.try_push_move(v, from, dest, MoveType::Normal, None, &pininfo);
+                self.try_push_move(v, from, dest, MoveType::Normal, &pininfo);
             }
         }
 
@@ -872,7 +744,7 @@ impl Board {
                 && !self.data.has_piece(east2)
                 && self.data.attacks_to(east2, !self.side).empty()
             {
-                self.try_push_move(v, king_square, east2, MoveType::Castle, None, &pininfo);
+                self.try_push_move(v, king_square, east2, MoveType::KingsideCastle, &pininfo);
             }
         }
 
@@ -888,7 +760,7 @@ impl Board {
                 && self.data.attacks_to(west2, !self.side).empty()
                 && !self.data.has_piece(west3)
             {
-                self.try_push_move(v, king_square, west2, MoveType::Castle, None, &pininfo);
+                self.try_push_move(v, king_square, west2, MoveType::QueensideCastle, &pininfo);
             }
         }
     }
@@ -1007,9 +879,9 @@ impl Board {
         let mut attacker = self.piece_from_square(m.from);
         let mut score = if m.kind == MoveType::EnPassant { 1 } else { piece_value(victim) };
 
-        if m.prom.is_some() {
-            score += piece_value(m.prom) - piece_value(Some(Piece::Pawn));
-            attacker = m.prom;
+        if let Some(prom) = m.promotion_piece() {
+            score += piece_value(Some(prom)) - piece_value(Some(Piece::Pawn));
+            attacker = Some(prom);
         }
 
         let mut alpha = -1000;
@@ -1086,18 +958,19 @@ impl Board {
         let mut hash = self.hash();
 
         match m.kind {
-            MoveType::Promotion | MoveType::Normal | MoveType::DoublePush => {}
-            MoveType::Capture | MoveType::CapturePromotion => {
+            MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
+            MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
                 let piece_index =
                     self.data.piece_index(m.dest).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
                 Zobrist::remove_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), self.data.square_of_piece(piece_index), &mut hash);
             }
-            MoveType::Castle => {
-                let (rook_from, rook_to) = if m.dest > m.from {
-                    (m.dest.east().unwrap(), m.dest.west().unwrap())
-                } else {
-                    (m.dest.west().unwrap().west().unwrap(), m.dest.east().unwrap())
-                };
+            MoveType::KingsideCastle => {
+                let (rook_from, rook_to) = (m.dest.east().unwrap(), m.dest.west().unwrap());
+                let piece_index = self.data.piece_index(rook_from).unwrap();
+                Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
+            }
+            MoveType::QueensideCastle => {
+                let (rook_from, rook_to) = (m.dest.west().unwrap().west().unwrap(), m.dest.east().unwrap());
                 let piece_index = self.data.piece_index(rook_from).unwrap();
                 Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
             }
@@ -1111,9 +984,9 @@ impl Board {
         let piece_index = self.data.piece_index(m.from).unwrap();
         Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from, m.dest, &mut hash);
 
-        if matches!(m.kind, MoveType::Promotion | MoveType::CapturePromotion) {
+        if m.is_promotion() {
             Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), m.dest, &mut hash);
-            Zobrist::add_piece(self.side, m.prom.unwrap(), m.dest, &mut hash);
+            Zobrist::add_piece(self.side, m.promotion_piece().unwrap(), m.dest, &mut hash);
         }
 
         let candidate_ep = (|| {
@@ -1203,12 +1076,12 @@ impl Board {
         let mut san = String::new();
 
         // Special case: castling
-        if m.kind == MoveType::Castle {
-            if m.dest > m.from {
-                write!(san, "O-O").unwrap();
-            } else {
-                write!(san, "O-O-O").unwrap();
-            }
+        if m.kind == MoveType::KingsideCastle {
+            write!(san, "O-O").unwrap();
+            return san;
+        }
+        if m.kind == MoveType::QueensideCastle {
+            write!(san, "O-O-O").unwrap();
             return san;
         }
 
@@ -1271,8 +1144,8 @@ impl Board {
         write!(san, "{file}{rank}").unwrap();
 
         // Promotion?
-        if matches!(m.kind, MoveType::Promotion | MoveType::CapturePromotion) {
-            let piece_char = match m.prom.unwrap() {
+        if m.is_promotion() {
+            let piece_char = match m.promotion_piece().unwrap() {
                 Piece::Pawn => 'P',
                 Piece::Knight => 'N',
                 Piece::Bishop => 'B',
@@ -1370,7 +1243,7 @@ mod tests {
         };
         let mut moves = tinyvec::ArrayVec::new();
         board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from == from && m.dest == dest && m.prom == prom).unwrap()
+        moves.into_iter().find(|&m| m.from == from && m.dest == dest && m.promotion_piece() == prom).unwrap()
     }
 
     #[test]
