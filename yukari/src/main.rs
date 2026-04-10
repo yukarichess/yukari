@@ -601,6 +601,7 @@ fn run() -> io::Result<()> {
                 let cores = args.parse::<usize>().unwrap();
                 engine.search = Search::new(cores);
                 engine.search.allocate_tt(engine.hash_megabytes);
+                engine.threads = cores;
             }
             "option" => {
                 let (name, value) = args.split_once('=').unwrap();
@@ -617,6 +618,7 @@ fn run() -> io::Result<()> {
                     let value = value.parse::<usize>().unwrap();
                     engine.search = Search::new(value);
                     engine.search.allocate_tt(engine.hash_megabytes);
+                    engine.threads = value;
                 }
             }
             "setoption" => {
@@ -637,6 +639,7 @@ fn run() -> io::Result<()> {
                         // UCIism, grumble grumble.
                         engine.search = Search::new(value as usize);
                         engine.search.allocate_tt(engine.hash_megabytes);
+                        engine.threads = value as usize;
                     }
                     _ => (),
                 }
