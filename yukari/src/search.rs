@@ -400,56 +400,58 @@ impl Thread {
         }
 
         let eval = self.eval(ply);
-        let rfp_margin = 45 * depth;
-        if excluded_move.is_none() && !self.board[ply].in_check() && depth <= 8 && eval - rfp_margin >= beta {
-            return eval - rfp_margin;
-        }
-
-        let razor_margin = 250 * depth;
-        if excluded_move.is_none() && !self.board[ply].in_check() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
-            let score = self.quiesce(alpha, alpha + 1, ply, tt);
-            if score <= alpha {
-                return score;
+        if !self.board[ply].in_check() {
+            let rfp_margin = 45 * depth;
+            if excluded_move.is_none() && depth <= 8 && eval - rfp_margin >= beta {
+                return eval - rfp_margin;
             }
-        }
 
-        let piece_count = (self.board[ply].data().piecemask().occupied().count_ones() as usize - 2) / 8;
-        let (try_probcut_beta, try_probcut_alpha, a, sigma, s) = match (depth, piece_count) {
-            (1, 0) => (true, true, 1.025, 36, 0), // R² = 0.970577
-            (1, 1) => (true, true, 1.051, 66, 0), // R² = 0.966735
-            (1, 2) => (true, true, 1.024, 48, 0), // R² = 0.976098
-            (1, 3) => (true, true, 1.019, 31, 0), // R² = 0.974907
-            (2, 0) => (true, false, 1.049, 54, 0), // R² = 0.956634
-            (2, 1) => (true, false, 1.046, 60, 0), // R² = 0.962184
-            (2, 2) => (true, false, 1.027, 58, 0), // R² = 0.966356
-            (2, 3) => (true, false, 1.030, 45, 0), // R² = 0.963947
-            (3, 0) => (true, false, 1.075, 60, 0), // R² = 0.948300
-            (3, 1) => (true, false, 1.086, 85, 0), // R² = 0.947862
-            (3, 2) => (true, false, 1.048, 73, 0), // R² = 0.956360
-            (3, 3) => (true, false, 1.043, 50, 0), // R² = 0.955359
-            (4, 0) => (true, false, 1.061, 64, 1), // R² = 0.965931
-            (4, 1) => (true, false, 1.032, 60, 1), // R² = 0.963248
-            (4, 2) => (true, false, 1.026, 64, 1), // R² = 0.968831
-            (4, 3) => (true, false, 1.027, 54, 1), // R² = 0.969644
-            (5, 0) => (true, false, 1.087, 71, 1), // R² = 0.960879
-            (5, 1) => (true, false, 1.066, 71, 1), // R² = 0.961294
-            (5, 2) => (true, false, 1.044, 72, 1), // R² = 0.965553
-            (5, 3) => (true, false, 1.038, 57, 1), // R² = 0.966565
-            _ => (false, false, 0.0, 0, 0),
-        };
-        if excluded_move.is_none() && !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_beta {
-            let bound = ((beta + sigma) as f32 / a).round() as i32;
-            let score = self.search(s, bound - 1, bound, ply, tt, None);
-            if score >= bound {
-                return beta;
+            let razor_margin = 250 * depth;
+            if excluded_move.is_none() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
+                let score = self.quiesce(alpha, alpha + 1, ply, tt);
+                if score <= alpha {
+                    return score;
+                }
             }
-        }
 
-        if excluded_move.is_none() && !self.board[ply].in_check() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && try_probcut_alpha {
-            let bound = ((alpha - sigma) as f32 / a).round() as i32;
-            let score = self.search(s, bound, bound + 1, ply, tt, None);
-            if score <= bound {
-                return alpha;
+            let piece_count = (self.board[ply].data().piecemask().occupied().count_ones() as usize - 2) / 8;
+            let (a, sigma, s) = match (depth, piece_count) {
+                (1, 0) => (1.025, 36, 0), // R² = 0.970577
+                (1, 1) => (1.051, 66, 0), // R² = 0.966735
+                (1, 2) => (1.024, 48, 0), // R² = 0.976098
+                (1, 3) => (1.019, 31, 0), // R² = 0.974907
+                (2, 0) => (1.049, 54, 0), // R² = 0.956634
+                (2, 1) => (1.046, 60, 0), // R² = 0.962184
+                (2, 2) => (1.027, 58, 0), // R² = 0.966356
+                (2, 3) => (1.030, 45, 0), // R² = 0.963947
+                (3, 0) => (1.075, 60, 0), // R² = 0.948300
+                (3, 1) => (1.086, 85, 0), // R² = 0.947862
+                (3, 2) => (1.048, 73, 0), // R² = 0.956360
+                (3, 3) => (1.043, 50, 0), // R² = 0.955359
+                (4, 0) => (1.061, 64, 1), // R² = 0.965931
+                (4, 1) => (1.032, 60, 1), // R² = 0.963248
+                (4, 2) => (1.026, 64, 1), // R² = 0.968831
+                (4, 3) => (1.027, 54, 1), // R² = 0.969644
+                (5, 0) => (1.087, 71, 1), // R² = 0.960879
+                (5, 1) => (1.066, 71, 1), // R² = 0.961294
+                (5, 2) => (1.044, 72, 1), // R² = 0.965553
+                (5, 3) => (1.038, 57, 1), // R² = 0.966565
+                _ => (0.0, 0, 0),
+            };
+            if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth <= 5 {
+                let bound = ((beta + sigma) as f32 / a).round() as i32;
+                let score = self.search(s, bound - 1, bound, ply, tt, None);
+                if score >= bound {
+                    return beta;
+                }
+            }
+
+            if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth == 1 {
+                let bound = ((alpha - sigma) as f32 / a).round() as i32;
+                let score = self.search(s, bound, bound + 1, ply, tt, None);
+                if score <= bound {
+                    return alpha;
+                }
             }
         }
 
