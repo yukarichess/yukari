@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, sync::{Arc, atomic::{self, AtomicBool, AtomicU64}}, time::Instant};
+use std::{cmp::Ordering, sync::{Arc, atomic::{self, AtomicBool, AtomicU64}}, time::Instant, fmt::Write};
 
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use tinyvec::ArrayVec;
@@ -125,8 +125,114 @@ impl MoveOrder {
 }
 
 #[derive(Clone)]
+pub struct MpcModel {
+    pub a: f32,
+    pub sigma: i32,
+    pub s: i32,
+}
+
+impl MpcModel {
+    pub fn display_xboard(&self, depth: usize, bucket: usize) {
+        println!("feature option=\"MpcS{}D{depth}B{bucket}A -string {:.3}\"", self.s, self.a);
+        println!("feature option=\"MpcS{}D{depth}B{bucket}Sigma -spin {} 0 200\"", self.s, self.sigma);
+    }
+
+    pub fn display_openbench(&self, depth: usize, bucket: usize) {
+        println!("MpcS{}D{depth}B{bucket}A, float, {}, 1.0, 1.1, 0.005, 0.002", self.s, self.a);
+        println!("MpcS{}D{depth}B{bucket}Sigma, int, {}, 0, 100, 5, 0.002", self.s, self.sigma);
+    }
+
+    pub fn parse(&mut self, depth: usize, bucket: usize, name: &str, value: &str) {
+        let mut prefix = String::new();
+        write!(prefix, "MpcS{}D{depth}B{bucket}", self.s).unwrap();
+        if !name.starts_with(&prefix) {
+            return;
+        }
+        let name = &name[prefix.len() ..];
+        if name == "A" {
+            self.a = value.parse::<f32>().unwrap();
+            println!("# {prefix}A = {}", self.a);
+        } else if name == "Sigma" {
+            self.sigma = value.parse::<i32>().unwrap();
+            println!("# {prefix}Sigma = {}", self.sigma);
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SearchParams {
+    pub mpc_model: [[MpcModel; 4]; 5]
+}
+
+impl Default for SearchParams {
+    fn default() -> Self {
+        Self {
+            mpc_model: [
+                [ // depth: 1
+                    MpcModel { a: 1.025, sigma: 36, s: 0 }, // R² = 0.970577
+                    MpcModel { a: 1.051, sigma: 66, s: 0 }, // R² = 0.966735
+                    MpcModel { a: 1.024, sigma: 48, s: 0 }, // R² = 0.976098
+                    MpcModel { a: 1.019, sigma: 31, s: 0 }, // R² = 0.974907
+                ],
+                [ // depth: 2
+                    MpcModel { a: 1.049, sigma: 54, s: 0 }, // R² = 0.956634
+                    MpcModel { a: 1.046, sigma: 60, s: 0 }, // R² = 0.962184
+                    MpcModel { a: 1.027, sigma: 58, s: 0 }, // R² = 0.966356
+                    MpcModel { a: 1.030, sigma: 45, s: 0 }, // R² = 0.963947
+                ],
+                [ // depth: 3
+                    MpcModel { a: 1.075, sigma: 60, s: 0 }, // R² = 0.948300
+                    MpcModel { a: 1.086, sigma: 85, s: 0 }, // R² = 0.947862
+                    MpcModel { a: 1.048, sigma: 73, s: 0 }, // R² = 0.956360
+                    MpcModel { a: 1.043, sigma: 50, s: 0 }, // R² = 0.955359
+                ],
+                [ // depth: 4
+                    MpcModel { a: 1.061, sigma: 64, s: 1 }, // R² = 0.965931
+                    MpcModel { a: 1.032, sigma: 60, s: 1 }, // R² = 0.963248
+                    MpcModel { a: 1.026, sigma: 64, s: 1 }, // R² = 0.968831
+                    MpcModel { a: 1.027, sigma: 54, s: 1 }, // R² = 0.969644
+                ],
+                [ // depth: 5
+                    MpcModel { a: 1.087, sigma: 71, s: 1 }, // R² = 0.960879
+                    MpcModel { a: 1.066, sigma: 71, s: 1 }, // R² = 0.961294
+                    MpcModel { a: 1.044, sigma: 72, s: 1 }, // R² = 0.965553
+                    MpcModel { a: 1.038, sigma: 57, s: 1 }, // R² = 0.966565
+                ],
+            ]
+        }
+    }
+}
+
+impl SearchParams {
+    pub fn display_xboard(&self) {
+        for depth in 0..=4 {
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].display_xboard(depth + 1, bucket);
+            }
+        }
+    }
+
+    pub fn display_openbench(&self) {
+        for depth in 0..=4 {
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].display_openbench(depth + 1, bucket);
+            }
+        }
+    }
+
+    pub fn parse(&mut self, name: &str, value: &str) {
+        for depth in 0..=4 {
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].parse(depth + 1, bucket, name, value);
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 #[repr(align(64))]
 struct Thread {
+    params: SearchParams,
     nodes: u64,
     qnodes: u64,
     seldepth: usize,
@@ -414,41 +520,24 @@ impl Thread {
                 }
             }
 
-            let piece_count = (self.board[ply].data().piecemask().occupied().count_ones() as usize - 2) / 8;
-            let (a, sigma, s) = match (depth, piece_count) {
-                (1, 0) => (1.025, 36, 0), // R² = 0.970577
-                (1, 1) => (1.051, 66, 0), // R² = 0.966735
-                (1, 2) => (1.024, 48, 0), // R² = 0.976098
-                (1, 3) => (1.019, 31, 0), // R² = 0.974907
-                (2, 0) => (1.049, 54, 0), // R² = 0.956634
-                (2, 1) => (1.046, 60, 0), // R² = 0.962184
-                (2, 2) => (1.027, 58, 0), // R² = 0.966356
-                (2, 3) => (1.030, 45, 0), // R² = 0.963947
-                (3, 0) => (1.075, 60, 0), // R² = 0.948300
-                (3, 1) => (1.086, 85, 0), // R² = 0.947862
-                (3, 2) => (1.048, 73, 0), // R² = 0.956360
-                (3, 3) => (1.043, 50, 0), // R² = 0.955359
-                (4, 0) => (1.061, 64, 1), // R² = 0.965931
-                (4, 1) => (1.032, 60, 1), // R² = 0.963248
-                (4, 2) => (1.026, 64, 1), // R² = 0.968831
-                (4, 3) => (1.027, 54, 1), // R² = 0.969644
-                (5, 0) => (1.087, 71, 1), // R² = 0.960879
-                (5, 1) => (1.066, 71, 1), // R² = 0.961294
-                (5, 2) => (1.044, 72, 1), // R² = 0.965553
-                (5, 3) => (1.038, 57, 1), // R² = 0.966565
-                _ => (0.0, 0, 0),
+            let mpc_model = if depth <= 5 {
+                let piece_count = (self.board[ply].data().piecemask().occupied().count_ones() as usize - 2) / 8;
+                self.params.mpc_model[(depth - 1) as usize][piece_count].clone()
+            } else {
+                MpcModel { a: 0.0, sigma: 0, s: 0}
             };
+
             if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth <= 5 {
-                let bound = ((beta + sigma) as f32 / a).round() as i32;
-                let score = self.search(s, bound - 1, bound, ply, tt, None);
+                let bound = ((beta + mpc_model.sigma) as f32 / mpc_model.a).round() as i32;
+                let score = self.search(mpc_model.s, bound - 1, bound, ply, tt, None);
                 if score >= bound {
                     return beta;
                 }
             }
 
             if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth == 1 {
-                let bound = ((alpha - sigma) as f32 / a).round() as i32;
-                let score = self.search(s, bound, bound + 1, ply, tt, None);
+                let bound = ((alpha - mpc_model.sigma) as f32 / mpc_model.a).round() as i32;
+                let score = self.search(mpc_model.s, bound, bound + 1, ply, tt, None);
                 if score <= bound {
                     return alpha;
                 }
@@ -471,7 +560,7 @@ impl Thread {
             if score >= beta {
                 return score;
             }
-        } 
+        }
 
         let mut moves = ArrayVec::new();
         self.board[ply].generate(&mut moves);
@@ -681,6 +770,7 @@ pub struct Search {
     tt: Vec<TtEntry>,
     stop: Arc<AtomicBool>,
     stop_after: Option<Instant>,
+    pub params: SearchParams,
 }
 
 impl Search {
@@ -694,8 +784,10 @@ impl Search {
             tt: vec![],
             stop: Arc::new(AtomicBool::new(false)),
             stop_after: None,
+            params: SearchParams::default(),
         };
         this.threads = vec![Thread {
+                params: this.params.clone(),
                 nodes: 0,
                 qnodes: 0,
                 seldepth: 0,
@@ -719,6 +811,7 @@ impl Search {
         self.stop_after = stop_after;
         self.stop.store(false, atomic::Ordering::Release);
         for (index, thread) in self.threads.iter_mut().enumerate() {
+            thread.params = self.params.clone();
             thread.nodes = 0;
             thread.qnodes = 0;
             thread.seldepth = 0;

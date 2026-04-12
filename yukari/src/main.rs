@@ -13,7 +13,7 @@ use indicatif::{ParallelProgressIterator, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tinyvec::ArrayVec;
 use yukari::{
-    self, Search, datagen, engine::{TimeControl, TimeMode}, is_repetition_draw, output::{self, Output}
+    self, Search, SearchParams, datagen, engine::{TimeControl, TimeMode}, is_repetition_draw, output::{self, Output}
 };
 use yukari_movegen::{Board, Colour, Move, Piece, Square};
 
@@ -46,12 +46,13 @@ pub struct Yukari {
     search: Search,
     threads: usize,
     hash_megabytes: usize,
+    params: SearchParams,
 }
 
 impl Yukari {
     /// Create a new copy of the engine, starting with the typical position and unused time controls
     #[must_use]
-    pub fn new(threads: usize, hash_megabytes: usize) -> Self {
+    pub fn new(threads: usize, hash_megabytes: usize, params: SearchParams) -> Self {
         let mut this = Self {
             // Using startpos fixes knights
             board: Board::startpos(),
@@ -65,8 +66,10 @@ impl Yukari {
             search: Search::new(threads),
             threads,
             hash_megabytes,
+            params: params.clone(),
         };
         this.search.allocate_tt(hash_megabytes);
+        this.search.params = params;
         this
     }
 
@@ -419,7 +422,7 @@ const YUKARI: &str = "
 ";
 
 fn run() -> io::Result<()> {
-    let mut engine = Yukari::new(1, 16);
+    let mut engine = Yukari::new(1, 16,  SearchParams::default());
     let mut protocol = Protocol::Human;
 
     for arg in std::env::args() {
@@ -503,27 +506,14 @@ fn run() -> io::Result<()> {
                 // We support multi-threading.
                 println!("feature smp=1");
                 // Tunables!
-                println!("feature option=\"RfpMarginBase -spin 3 0 100\"");
-                println!("feature option=\"RfpMarginMul -spin 36 0 1000\"");
-                println!("feature option=\"RazorMarginMul -spin 246 0 500\"");
-                println!("feature option=\"LmrBase -string 1.0186429\"");
-                println!("feature option=\"LmrMul -string 0.52110153\"");
-                println!("feature option=\"HistBonusBase -spin 260 0 500\"");
-                println!("feature option=\"HistBonusMul -spin 303 0 600\"");
-                println!("feature option=\"HistPenaltyBase -spin 251 0 500\"");
-                println!("feature option=\"HistPenaltyMul -spin 298 0 600\"");
-                println!("feature option=\"SeePruningCapture -string 0.4891615\"");
-                println!("feature option=\"SeePruningQuiet -string 0.006385347\"");
-                println!("feature option=\"CorrhistP -spin 1024 0 2048\"");
-                println!("feature option=\"CorrhistKQR -spin 1024 0 2048\"");
-                println!("feature option=\"CorrhistKBN -spin 1024 0 2048\"");
-                println!("feature option=\"CorrhistStmKQRBN -spin 1024 0 2048\"");
-                println!("feature option=\"CorrhistNstmKQRBN -spin 1024 0 2048\"");
+                engine.search.params.display_xboard();
+
                 println!("feature option=\"Hash -spin 16 1 8192\"");
                 println!("feature option=\"Threads -spin 1 1 256\"");
                 // Communicate that feature reporting is done
                 println!("feature done=1");
             }
+            "spsa" => engine.search.params.display_openbench(),
             // Directly update the engine's board from a FEN
             "setboard" => engine.set_board(args),
             "position" => {
@@ -584,7 +574,7 @@ fn run() -> io::Result<()> {
                 }
             }
             // Reset the entire state of the engine
-            "new" | "ucinewgame" => engine = Yukari::new(engine.threads, engine.hash_megabytes),
+            "new" | "ucinewgame" => engine = Yukari::new(engine.threads, engine.hash_megabytes, engine.params.clone()),
             // Parse our two time controls from the whole commmand lines
             // TODO: This is rather xboard specific
             "level" => engine.parse_tc(trimmed),
@@ -601,6 +591,7 @@ fn run() -> io::Result<()> {
                 let cores = args.parse::<usize>().unwrap();
                 engine.search = Search::new(cores);
                 engine.search.allocate_tt(engine.hash_megabytes);
+                engine.search.params = engine.params.clone();
                 engine.threads = cores;
             }
             "option" => {
@@ -618,8 +609,11 @@ fn run() -> io::Result<()> {
                     let value = value.parse::<usize>().unwrap();
                     engine.search = Search::new(value);
                     engine.search.allocate_tt(engine.hash_megabytes);
+                    engine.search.params = engine.params.clone();
                     engine.threads = value;
                 }
+                engine.search.params.parse(name, value);
+                engine.params = engine.search.params.clone();
             }
             "setoption" => {
                 let (name, args) = args.split_once(' ').unwrap_or((args, ""));
@@ -639,6 +633,7 @@ fn run() -> io::Result<()> {
                         // UCIism, grumble grumble.
                         engine.search = Search::new(value as usize);
                         engine.search.allocate_tt(engine.hash_megabytes);
+                        engine.search.params = engine.params.clone();
                         engine.threads = value as usize;
                     }
                     _ => (),
