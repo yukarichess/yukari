@@ -142,6 +142,10 @@ impl MpcModel {
         println!("MpcS{}D{depth}B{bucket}Sigma, int, {}, 0, 100, 5, 0.002", self.s, self.sigma);
     }
 
+    pub fn display_rust(&self) {
+        println!("    MpcModel {{ a: {:.3}, sigma: {}, s: {} }},", self.a, self.sigma, self.s);
+    }
+
     pub fn parse(&mut self, depth: usize, bucket: usize, name: &str, value: &str) {
         let mut prefix = String::new();
         write!(prefix, "MpcS{}D{depth}B{bucket}", self.s).unwrap();
@@ -169,34 +173,34 @@ impl Default for SearchParams {
         Self {
             mpc_model: [
                 [ // depth: 1
-                    MpcModel { a: 1.025, sigma: 36, s: 0 }, // R² = 0.970577
-                    MpcModel { a: 1.051, sigma: 66, s: 0 }, // R² = 0.966735
-                    MpcModel { a: 1.024, sigma: 48, s: 0 }, // R² = 0.976098
-                    MpcModel { a: 1.019, sigma: 31, s: 0 }, // R² = 0.974907
+                    MpcModel { a: 1.035, sigma: 21, s: 0 },
+                    MpcModel { a: 1.050, sigma: 51, s: 0 },
+                    MpcModel { a: 1.021, sigma: 36, s: 0 },
+                    MpcModel { a: 1.014, sigma: 22, s: 0 },
                 ],
                 [ // depth: 2
-                    MpcModel { a: 1.049, sigma: 54, s: 0 }, // R² = 0.956634
-                    MpcModel { a: 1.046, sigma: 60, s: 0 }, // R² = 0.962184
-                    MpcModel { a: 1.027, sigma: 58, s: 0 }, // R² = 0.966356
-                    MpcModel { a: 1.030, sigma: 45, s: 0 }, // R² = 0.963947
+                    MpcModel { a: 1.048, sigma: 49, s: 0 },
+                    MpcModel { a: 1.044, sigma: 64, s: 0 },
+                    MpcModel { a: 1.026, sigma: 51, s: 0 },
+                    MpcModel { a: 1.032, sigma: 36, s: 0 },
                 ],
                 [ // depth: 3
-                    MpcModel { a: 1.075, sigma: 60, s: 0 }, // R² = 0.948300
-                    MpcModel { a: 1.086, sigma: 85, s: 0 }, // R² = 0.947862
-                    MpcModel { a: 1.048, sigma: 73, s: 0 }, // R² = 0.956360
-                    MpcModel { a: 1.043, sigma: 50, s: 0 }, // R² = 0.955359
+                    MpcModel { a: 1.076, sigma: 70, s: 0 },
+                    MpcModel { a: 1.088, sigma: 84, s: 0 },
+                    MpcModel { a: 1.050, sigma: 74, s: 0 },
+                    MpcModel { a: 1.050, sigma: 53, s: 0 },
                 ],
                 [ // depth: 4
-                    MpcModel { a: 1.061, sigma: 64, s: 1 }, // R² = 0.965931
-                    MpcModel { a: 1.032, sigma: 60, s: 1 }, // R² = 0.963248
-                    MpcModel { a: 1.026, sigma: 64, s: 1 }, // R² = 0.968831
-                    MpcModel { a: 1.027, sigma: 54, s: 1 }, // R² = 0.969644
+                    MpcModel { a: 1.062, sigma: 62, s: 1 },
+                    MpcModel { a: 1.036, sigma: 68, s: 1 },
+                    MpcModel { a: 1.023, sigma: 66, s: 1 },
+                    MpcModel { a: 1.029, sigma: 59, s: 1 },
                 ],
                 [ // depth: 5
-                    MpcModel { a: 1.087, sigma: 71, s: 1 }, // R² = 0.960879
-                    MpcModel { a: 1.066, sigma: 71, s: 1 }, // R² = 0.961294
-                    MpcModel { a: 1.044, sigma: 72, s: 1 }, // R² = 0.965553
-                    MpcModel { a: 1.038, sigma: 57, s: 1 }, // R² = 0.966565
+                    MpcModel { a: 1.086, sigma: 64, s: 1 },
+                    MpcModel { a: 1.060, sigma: 69, s: 1 },
+                    MpcModel { a: 1.051, sigma: 79, s: 1 },
+                    MpcModel { a: 1.040, sigma: 56, s: 1 },
                 ],
             ]
         }
@@ -217,6 +221,16 @@ impl SearchParams {
             for bucket in 0..=3 {
                 self.mpc_model[depth][bucket].display_openbench(depth + 1, bucket);
             }
+        }
+    }
+
+    pub fn display_rust(&self) {
+        for depth in 0..=4 {
+            println!("[ // depth: {}", depth + 1);
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].display_rust();
+            }
+            println!("],")
         }
     }
 

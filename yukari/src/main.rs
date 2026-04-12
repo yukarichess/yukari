@@ -514,6 +514,7 @@ fn run() -> io::Result<()> {
                 println!("feature done=1");
             }
             "spsa" => engine.search.params.display_openbench(),
+            "rust" => engine.search.params.display_rust(),
             // Directly update the engine's board from a FEN
             "setboard" => engine.set_board(args),
             "position" => {
