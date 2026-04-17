@@ -669,6 +669,11 @@ impl Thread {
                 self.board[ply+1] = self.board[ply].make(*m);
             }
 
+            // Check extension: does this move give check?
+            if extension == 0 && self.board[ply+1].in_check() {
+                extension += 1;
+            }
+
             let mut score;
             if movecount == 0 {
                 score = -self.search(depth - 1 + extension, -beta, -alpha, ply + 1, tt, None);
