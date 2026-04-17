@@ -674,16 +674,16 @@ impl Thread {
                 score = -self.search(depth - 1 + extension, -beta, -alpha, ply + 1, tt, None);
             } else {
                 // Late Move Reduction
-                let mut reduction = 0;
+                let mut reduction = 1;
                 if depth >= 3 && movecount >= 4 && !m.is_capture() {
-                    let depth = (depth as f32).ln();
+                    let depth_f32 = (depth as f32).ln();
                     let movecount = (movecount as f32).ln();
-                    reduction += (depth * movecount).mul_add(0.5, 1.0) as i32;
+                    reduction += (depth_f32 * movecount).mul_add(0.5, 1.0) as i32; // credit: adam
                     reduction -= i32::from(expected_pvnode);
-                    // credit: adam
+                    reduction = reduction.clamp(1, depth - 1);   
                 }
 
-                score = -self.search(depth - 1 - reduction + extension, -alpha - 1, -alpha, ply + 1, tt, None);
+                score = -self.search(depth - reduction + extension, -alpha - 1, -alpha, ply + 1, tt, None);
                 if score > alpha && score < beta {
                     score = -self.search(depth - 1 + extension, -beta, -alpha, ply + 1, tt, None);
                 }
