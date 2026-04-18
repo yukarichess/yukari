@@ -13,7 +13,10 @@ use indicatif::{ParallelProgressIterator, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use tinyvec::ArrayVec;
 use yukari::{
-    self, Search, SearchParams, datagen, engine::{TimeControl, TimeMode}, is_repetition_draw, output::{self, Output}
+    self, Search, SearchParams, datagen,
+    engine::{TimeControl, TimeMode},
+    is_repetition_draw,
+    output::{self, Output},
 };
 use yukari_movegen::{Board, Colour, Move, Piece, Square};
 
@@ -344,7 +347,7 @@ impl Yukari {
                         );
                         continue;
                     }
-                    
+
                     if score >= beta {
                         upper_margin *= 2;
                         output.complete(
@@ -422,7 +425,7 @@ const YUKARI: &str = "
 ";
 
 fn run() -> io::Result<()> {
-    let mut engine = Yukari::new(1, 16,  SearchParams::default());
+    let mut engine = Yukari::new(1, 16, SearchParams::default());
     let mut protocol = Protocol::Human;
 
     for arg in std::env::args() {
@@ -433,24 +436,38 @@ fn run() -> io::Result<()> {
         if arg == "datagen" {
             const GAMES: usize = 500_000;
 
-            // Try to avoid stack overflows.
-            rayon::ThreadPoolBuilder::new().stack_size(32 * 1024 * 1024).build_global().unwrap();
-
             let f = std::fs::File::options().create(true).append(true).open("games.viriformat").unwrap();
             let f = BufWriter::new(f);
             let f = Mutex::new(f);
 
             let positions = AtomicUsize::new(0);
+            let games_done = AtomicUsize::new(0);
             let style = ProgressStyle::with_template("[{bar:40.magenta/red}] {pos:>6}/{len:6} ({per_sec} games/s)")
                 .unwrap()
                 .progress_chars("━╸ ");
+            let progress = indicatif::ProgressBar::new(GAMES as u64).with_style(style);
 
-            (0..GAMES).into_par_iter().progress_with_style(style).for_each_init(
-                || datagen::DataGen::new(&f),
-                |dg, _| {
-                    positions.fetch_add(dg.play(1), Ordering::SeqCst);
-                },
-            );
+            let n_workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+
+            std::thread::scope(|s| {
+                for _ in 0..n_workers {
+                    std::thread::Builder::new()
+                        .stack_size(32 * 1024 * 1024)
+                        .spawn_scoped(s, || {
+                            let mut dg = datagen::DataGen::new(&f);
+                            loop {
+                                let g = games_done.fetch_add(1, Ordering::Relaxed);
+                                if g >= GAMES {
+                                    break;
+                                }
+                                positions.fetch_add(dg.play(1), Ordering::SeqCst);
+                                progress.inc(1);
+                            }
+                        })
+                        .unwrap();
+                }
+            });
+            progress.finish();
 
             println!("{GAMES} games, {} positions", positions.load(Ordering::SeqCst));
 
@@ -629,7 +646,7 @@ fn run() -> io::Result<()> {
                         // UCIism. grumble grumble.
                         engine.search.allocate_tt(value as usize);
                         engine.hash_megabytes = value as usize;
-                    } 
+                    }
                     "Threads" => {
                         // UCIism, grumble grumble.
                         engine.search = Search::new(value as usize);
@@ -810,10 +827,7 @@ fn run() -> io::Result<()> {
 
 fn main() -> io::Result<()> {
     // Hack to deal with Windows' small stack sizes:
-    let child = std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(run)
-        .unwrap();
+    let child = std::thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(run).unwrap();
 
     // Wait for thread to join
     child.join().unwrap()
