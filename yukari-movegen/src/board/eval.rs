@@ -1,4 +1,4 @@
-use std::simd::{cmp::SimdOrd, i16x64, i32x64, num::SimdInt, u16x64};
+use std::simd::{cmp::SimdOrd, i8x32, i16x32, i32x32, num::SimdInt};
 
 use super::feature;
 use crate::{Colour, File, Piece, Square};
@@ -16,7 +16,8 @@ const QB: i16 = 64;
 #[repr(C)]
 pub struct Network {
     /// Column-Major `HIDDEN_SIZE x INPUTS` matrix.
-    feature_weights: [Accumulator; INPUTS],
+    feature_threat_weights: [[i8; HIDDEN_SIZE]; 60144],
+    feature_pst_weights: [Accumulator; 768],
     /// Vector with dimension `HIDDEN_SIZE`.
     feature_bias:    Accumulator,
     /// Row-Major `OUTPUT_BUCKETS x (2 * HIDDEN_SIZE)` matrix.
@@ -33,31 +34,27 @@ impl Network {
     /// calculated hidden layer (done efficiently during makemoves).
     pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, output_bucket: usize) -> i32 {
         // Initialise output with bias.
-        let mut output = i32x64::splat(0);
-        let min = i16x64::splat(0);
-        let max = i16x64::splat(QA);
+        let mut output = i32x32::splat(0);
+        let min = i16x32::splat(0);
+        let max = i16x32::splat(QA);
 
         // Side-To-Move Accumulator -> Output.
-        let (us_vals, []) = us.vals.as_chunks::<64>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<64>() else {
-            unreachable!()
-        };
+        let (us_vals, []) = us.vals.as_chunks::<32>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<32>() else { unreachable!() };
         for (input, weight) in us_vals.iter().zip(output_weights.iter()) {
             // Squared Clipped `ReLU` - Activation Function.
             // Note that this takes the i16s in the accumulator to i32s.
-            let input = i16x64::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x64::from_array(*weight);
+            let input = i16x32::from_array(*input).simd_clamp(min, max);
+            let weight = input * i16x32::from_array(*weight);
             output += input.cast::<i32>() * weight.cast::<i32>();
         }
 
         // Not-Side-To-Move Accumulator -> Output.
-        let (them_vals, []) = them.vals.as_chunks::<64>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<64>() else {
-            unreachable!()
-        };
+        let (them_vals, []) = them.vals.as_chunks::<32>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<32>() else { unreachable!() };
         for (input, weight) in them_vals.iter().zip(output_weights.iter()) {
-            let input = i16x64::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x64::from_array(*weight);
+            let input = i16x32::from_array(*input).simd_clamp(min, max);
+            let weight = input * i16x32::from_array(*weight);
             output += input.cast::<i32>() * weight.cast::<i32>();
         }
 
@@ -89,20 +86,36 @@ impl Accumulator {
     /// Add a feature to an accumulator.
     #[inline(never)]
     pub fn add_feature(&mut self, feature_idx: usize, net: &Network) {
-        let (acc_chunks, []) = self.vals.as_chunks_mut::<64>() else { unreachable!() };
-        let (weight_chunks, []) = net.feature_weights[feature_idx].vals.as_chunks::<64>() else { unreachable!() };
-        for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
-            *i = (i16x64::from_array(*i) + i16x64::from_array(*d)).to_array();
+        let (acc_chunks, []) = self.vals.as_chunks_mut::<32>() else { unreachable!() };
+        if feature_idx < 768 {
+            let (weight_chunks, []) = net.feature_pst_weights[feature_idx].vals.as_chunks::<32>() else { unreachable!() };
+            for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
+                *i = (i16x32::from_array(*i) + i16x32::from_array(*d)).to_array();
+            }
+        } else {
+            let feature_idx = feature_idx - 768;
+            let (weight_chunks, []) = net.feature_threat_weights[feature_idx].as_chunks::<32>() else { unreachable!() };
+            for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
+                *i = (i16x32::from_array(*i) + i8x32::from_array(*d).cast::<i16>()).to_array();
+            }
         }
     }
 
     /// Remove a feature from an accumulator.
     #[inline(never)]
     pub fn remove_feature(&mut self, feature_idx: usize, net: &Network) {
-        let (acc_chunks, []) = self.vals.as_chunks_mut::<64>() else { unreachable!() };
-        let (weight_chunks, []) = net.feature_weights[feature_idx].vals.as_chunks::<64>() else { unreachable!() };
-        for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
-            *i = (i16x64::from_array(*i) - i16x64::from_array(*d)).to_array();
+        let (acc_chunks, []) = self.vals.as_chunks_mut::<32>() else { unreachable!() };
+        if feature_idx < 768 {
+            let (weight_chunks, []) = net.feature_pst_weights[feature_idx].vals.as_chunks::<32>() else { unreachable!() };
+            for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
+                *i = (i16x32::from_array(*i) - i16x32::from_array(*d)).to_array();
+            }
+        } else {
+            let feature_idx = feature_idx - 768;
+            let (weight_chunks, []) = net.feature_threat_weights[feature_idx].as_chunks::<32>() else { unreachable!() };
+            for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
+                *i = (i16x32::from_array(*i) - i8x32::from_array(*d).cast::<i16>()).to_array();
+            }
         }
     }
 }
@@ -153,32 +166,40 @@ impl Eval {
 
     #[allow(clippy::too_many_arguments)]
     pub fn add_threat_for_acc(
-        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        &mut self, from_piece: Piece, from_square: Square, to_piece: Piece, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
         white_king: Square, black_king: Square, white_acc: bool,
     ) {
         let Some(to_colour) = to_colour else { return };
         if white_acc {
+            //print!("+ ");
+            let Some(feature_idx) = feature::index_threat(
+                from_piece,
+                from_square,
+                to_piece,
+                to_square,
+                white_king,
+                from_colour == Colour::White,
+                to_colour == Colour::Black,
+                false
+            ) else { return };
             self.white.add_feature(
-                feature::index_threat(
-                    piece,
-                    from_square,
-                    to_square,
-                    white_king,
-                    from_colour == Colour::White,
-                    to_colour != from_colour,
-                ),
+                feature_idx,
                 &NNUE,
             );
         } else {
+            //print!("+ ");
+            let Some(feature_idx) = feature::index_threat(
+                from_piece,
+                from_square.flip(),
+                to_piece,
+                to_square.flip(),
+                black_king,
+                from_colour == Colour::Black,
+                to_colour == Colour::White,
+                true
+            ) else { return };
             self.black.add_feature(
-                feature::index_threat(
-                    piece,
-                    from_square.flip(),
-                    to_square.flip(),
-                    black_king,
-                    from_colour == Colour::Black,
-                    to_colour != from_colour,
-                ),
+                feature_idx,
                 &NNUE,
             );
         }
@@ -193,32 +214,46 @@ impl Eval {
 
     #[allow(clippy::too_many_arguments)]
     pub fn add_threat(
-        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        &mut self, from_piece: Piece, from_square: Square, to_piece: Option<Piece>, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
         white_king: Square, black_king: Square,
     ) {
+        let Some(to_piece) = to_piece else { return };
         let Some(to_colour) = to_colour else { return };
-        self.white.add_feature(
-            feature::index_threat(
-                piece,
-                from_square,
-                to_square,
-                white_king,
-                from_colour == Colour::White,
-                to_colour != from_colour,
-            ),
-            &NNUE,
+        //print!("+ ");
+        let white_feature_idx = feature::index_threat(
+            from_piece,
+            from_square,
+            to_piece,
+            to_square,
+            white_king,
+            from_colour == Colour::White,
+            to_colour == Colour::Black,
+            false,
         );
-        self.black.add_feature(
-            feature::index_threat(
-                piece,
-                from_square.flip(),
-                to_square.flip(),
-                black_king,
-                from_colour == Colour::Black,
-                to_colour != from_colour,
-            ),
-            &NNUE,
+        //print!("+ ");
+        let black_feature_idx = feature::index_threat(
+            from_piece,
+            from_square.flip(),
+            to_piece,
+            to_square.flip(),
+            black_king,
+            from_colour == Colour::Black,
+            to_colour == Colour::White,
+            true,
         );
+
+        if let Some(white_feature_idx) = white_feature_idx {
+            self.white.add_feature(
+                white_feature_idx,
+                &NNUE,
+            );
+        }
+        if let Some(black_feature_idx) = black_feature_idx {
+            self.black.add_feature(
+                black_feature_idx,
+                &NNUE,
+            );
+        }
     }
 
     pub fn remove_piece_for_acc(
@@ -235,32 +270,40 @@ impl Eval {
 
     #[allow(clippy::too_many_arguments)]
     pub fn remove_threat_for_acc(
-        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        &mut self, from_piece: Piece, from_square: Square, to_piece: Piece, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
         white_king: Square, black_king: Square, white_acc: bool,
     ) {
         let Some(to_colour) = to_colour else { return };
         if white_acc {
+            //print!("- ");
+            let Some(feature_idx) = feature::index_threat(
+                from_piece,
+                from_square,
+                to_piece,
+                to_square,
+                white_king,
+                from_colour == Colour::White,
+                to_colour == Colour::Black,
+                false,
+            ) else { return };
             self.white.remove_feature(
-                feature::index_threat(
-                    piece,
-                    from_square,
-                    to_square,
-                    white_king,
-                    from_colour == Colour::White,
-                    to_colour != from_colour,
-                ),
+                feature_idx,
                 &NNUE,
             );
         } else {
+            //print!("- ");
+            let Some(feature_idx) = feature::index_threat(
+                from_piece,
+                from_square.flip(),
+                to_piece,
+                to_square.flip(),
+                black_king,
+                from_colour == Colour::Black,
+                to_colour == Colour::White,
+                true,
+            ) else { return };
             self.black.remove_feature(
-                feature::index_threat(
-                    piece,
-                    from_square.flip(),
-                    to_square.flip(),
-                    black_king,
-                    from_colour == Colour::Black,
-                    to_colour != from_colour,
-                ),
+                feature_idx,
                 &NNUE,
             );
         }
@@ -275,32 +318,46 @@ impl Eval {
 
     #[allow(clippy::too_many_arguments)]
     pub fn remove_threat(
-        &mut self, piece: Piece, from_square: Square, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
+        &mut self, from_piece: Piece, from_square: Square, to_piece: Option<Piece>, to_square: Square, from_colour: Colour, to_colour: Option<Colour>,
         white_king: Square, black_king: Square,
     ) {
+        let Some(to_piece) = to_piece else { return };
         let Some(to_colour) = to_colour else { return };
-        self.white.remove_feature(
-            feature::index_threat(
-                piece,
-                from_square,
-                to_square,
-                white_king,
-                from_colour == Colour::White,
-                to_colour != from_colour,
-            ),
-            &NNUE,
+        //print!("- ");
+        let white_feature_idx = feature::index_threat(
+            from_piece,
+            from_square,
+            to_piece,
+            to_square,
+            white_king,
+            from_colour == Colour::White,
+            to_colour == Colour::Black,
+            false,
         );
-        self.black.remove_feature(
-            feature::index_threat(
-                piece,
-                from_square.flip(),
-                to_square.flip(),
-                black_king,
-                from_colour == Colour::Black,
-                to_colour != from_colour,
-            ),
-            &NNUE,
+        //print!("- ");
+        let black_feature_idx = feature::index_threat(
+            from_piece,
+            from_square.flip(),
+            to_piece,
+            to_square.flip(),
+            black_king,
+            from_colour == Colour::Black,
+            to_colour == Colour::White,
+            true,
         );
+
+        if let Some(white_feature_idx) = white_feature_idx {
+            self.white.remove_feature(
+                white_feature_idx,
+                &NNUE,
+            );
+        }
+        if let Some(black_feature_idx) = black_feature_idx {
+            self.black.remove_feature(
+                black_feature_idx,
+                &NNUE,
+            );
+        }
     }
 
     pub fn move_piece(

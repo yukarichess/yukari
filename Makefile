@@ -1,4 +1,5 @@
-EVALFILE ?= ../../../yukari_91fb3bbf.bin
+NNUE = fti17-amber
+EVALFILE ?= ../../../$(NNUE).bin
 
 # If on Windows, add the .exe extension to the executable and use PowerShell instead of `sed`
 ifeq ($(OS),Windows_NT)
@@ -22,7 +23,7 @@ endif
 
 
 # Compile an executable for use with OpenBench
-openbench:
+openbench: $(NNUE).bin
 	@echo $(NAME)
 	@echo Compiling $(EXE) for OpenBench
 	@echo "triple: $(TRIPLE)"
@@ -42,6 +43,9 @@ openbench:
 clean:
 	@echo Removing $(EXE)
 	rm $(EXE)
+
+$(NNUE).bin:
+	curl -L https://github.com/yukarichess/yukari-nets/releases/download/$(NNUE)/$(NNUE).bin -o $(NNUE).bin
 
 .PHONY: openbench clean
 
