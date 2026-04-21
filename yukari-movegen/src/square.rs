@@ -1,7 +1,6 @@
 use std::{
     convert::TryFrom,
     fmt::{Debug, Display},
-    num::NonZeroU8,
     str::FromStr,
 };
 

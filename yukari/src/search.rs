@@ -284,6 +284,14 @@ impl Thread {
     fn eval(&self, ply: usize) -> i32 {
         const CORRHIST_GRAIN: i32 = 256;
 
+        /*if !self.board[ply].data().verify_accumulators() {
+            for i in 0..ply {
+                eprintln!("{}", self.board[i].to_san(self.path[i].unwrap().1));
+                eprintln!("{}", self.board[i]);
+            }
+            panic!("accumulator mismatch");
+        }*/
+
         let eval = self.board[ply].eval(self.board[ply].side());
 
         // pawns
