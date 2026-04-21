@@ -278,7 +278,7 @@ impl Board {
         self.data.set_ep(self.ep, ep);
         self.ep = ep;
     }
-
+    
     /// Make a move on the board.
     ///
     /// # Panics
@@ -317,6 +317,8 @@ impl Board {
             b.data.remove_piece(piece_index, true);
             b.data.add_piece(m.prom.unwrap(), b.side, m.dest, true);
         }
+
+        //b.data.rebuild_accumulators();
 
         let candidate_ep = (|| {
             let MoveType::DoublePush = m.kind else { return None };
@@ -1317,7 +1319,7 @@ impl Board {
 /* impl Drop for Board {
     fn drop(&mut self) {
         if ::std::thread::panicking() {
-            eprintln!("{}", self);
+            eprintln!("{self}");
         }
     }
 } */

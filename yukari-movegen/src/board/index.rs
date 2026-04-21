@@ -7,7 +7,7 @@ use std::{
 use crate::{
     Piece,
     board::{
-        bitlist::{Bitlist, BitlistArray},
+        bitlist::BitlistArray,
         piecemask::Piecemask,
     },
     colour::Colour,
