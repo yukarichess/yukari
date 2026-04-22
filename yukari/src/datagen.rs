@@ -119,23 +119,13 @@ impl From<Move> for ViriMove {
             Some(Piece::Queen) => 3,
             Some(_) => unreachable!("invalid promotion piece"),
         };
+        // viriformat flag bits: 0=normal, 1=en passant, 2=castle, 3=promotion.
         let flags = match m.kind() {
-            yukari_movegen::MoveType::Normal => 0,
-            yukari_movegen::MoveType::Capture => 0,
-            yukari_movegen::MoveType::KingsideCastle => 2,
-            yukari_movegen::MoveType::QueensideCastle => 2,
-            yukari_movegen::MoveType::DoublePush => 0,
-            yukari_movegen::MoveType::EnPassant => 1,
-            yukari_movegen::MoveType::PromotionKnight => 3,
-            yukari_movegen::MoveType::PromotionBishop => 3,
-            yukari_movegen::MoveType::PromotionRook => 3,
-            yukari_movegen::MoveType::PromotionQueen => 3,
-            yukari_movegen::MoveType::CapturePromotionKnight => 3,
-            yukari_movegen::MoveType::CapturePromotionBishop => 3,
-            yukari_movegen::MoveType::CapturePromotionRook => 3,
-            yukari_movegen::MoveType::CapturePromotionQueen => 3,
-            yukari_movegen::MoveType::_Unused1 => 0,
-            yukari_movegen::MoveType::_Unused2 => 0,
+            MoveType::EnPassant => 1,
+            MoveType::KingsideCastle | MoveType::QueensideCastle => 2,
+            MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen
+            | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => 3,
+            _ => 0,
         };
 
         Self(from | (dest << 6) | (prom << 12) | (flags << 14))
