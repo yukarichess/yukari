@@ -1,6 +1,5 @@
 use std::{
     io::Write,
-    str::FromStr,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -192,50 +191,6 @@ impl<'a, T: Write> DataGen<'a, T> {
         };
         this.search.allocate_tt(16);
         this
-    }
-
-    #[must_use]
-    fn find_move(&self, board: &Board, from: Square, dest: Square, prom: Option<Piece>) -> Option<Move> {
-        let mut moves = ArrayVec::new();
-        board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom)
-    }
-
-    pub fn test1(&mut self) {
-        let mut board = Board::from_fen("rnbqk1nr/pppp3p/3bp3/5pp1/4P3/P1P5/1P1PKPPP/RNBQ1BNR w kq - 0 5").unwrap();
-        let moves = [
-            "e2e1", "d8e7", "d2d4", "f5e4", "g2g3", "b7b6", "f1g2", "c8b7", "d1h5", "e7f7", "h5f7", "e8f7", "c1g5", "h7h6", "g5e3",
-            "g8f6", "b1d2", "d6e7", "g1e2", "d7d6", "a1d1", "b8d7", "c3c4", "a8e8", "f2f3", "e4f3", "g2f3", "d6d5", "e3f4", "c7c5",
-            "c4d5", "e6d5", "e1f2", "h6h5", "h1e1", "h5h4", "f2g2", "f6e4", "e2c3", "h4h3", "g2g1", "e4c3", "b2c3", "d7f6", "f3e2",
-            "b7c8", "d2f3", "f6e4", "e2b5", "e4c3", "b5e8", "h8e8", "d1d3", "c3e4", "d4c5", "e7c5", "f4e3", "c8e6", "e1f1", "f7e7",
-            "f3d4", "e8c8", "d4e6", "e7e6", "g1h1", "a7a5", "a3a4", "c5e3", "d3e3", "c8c2", "g3g4", "e6d6", "e3h3", "e4f2", "f1f2",
-            "c2f2", "h3g3", "f2f4", "h2h4", "f4a4", "h4h5", "d6e7", "h1g2", "b6b5", "g4g5", "a4h4", "g5g6",
-        ];
-
-        let mut game = ViriFormat::new(board.clone());
-        for m_str in moves {
-            let chars = m_str.as_bytes();
-            let from = Square::from_str(&m_str[..2]).unwrap();
-            let dest = Square::from_str(&m_str[2..4]).unwrap();
-            let prom = if chars.len() == 5 {
-                match chars[4] {
-                    b'n' => Some(Piece::Knight),
-                    b'b' => Some(Piece::Bishop),
-                    b'r' => Some(Piece::Rook),
-                    b'q' => Some(Piece::Queen),
-                    _ => None,
-                }
-            } else {
-                None
-            };
-
-            let m = self.find_move(&board, from, dest, prom).unwrap_or_else(|| panic!("Attempted move {m_str} not found!?"));
-            game.push(m, 0);
-            board = board.make(m);
-        }
-
-        let mut f = self.f.lock().unwrap();
-        game.finish(MarlinWdl::Draw, &mut *f);
     }
 
     pub fn play(&mut self, mut games: usize) -> usize {
