@@ -18,6 +18,7 @@ enum_discrim_align_threshold = 0
 
 fn_call_width = 110
 fn_params_layout = "Compressed"
+force_explicit_abi = true
 format_macro_bodies = true
 float_literal_trailing_zero = "Preserve"
 
@@ -25,6 +26,7 @@ group_imports = "StdExternalCrate"
 
 hex_literal_case = "Upper"
 
+indent_style = "Block"
 imports_granularity = "Crate"
 inline_attribute_width = 60
 
@@ -52,5 +54,3 @@ use_try_shorthand = true
 use_small_heuristics = "Off"
 
 where_single_line = true
-
-indent_style = "Block"
