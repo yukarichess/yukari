@@ -216,9 +216,9 @@ impl<'a, T: Write> DataGen<'a, T> {
         self.f.lock().unwrap().write_all(&buf).unwrap();
     }
 
-    fn search(&mut self, board: Board, keystack: &[u64], node_limit: bool) -> Option<(Move, i16)> {
-        let start = Instant::now();
-        let stop_after = start + Duration::from_secs_f32(if node_limit { 0.25 } else { 2.0 });
+    /// Iterate until ~5k nodes, 250ms cap.
+    fn search_rollout(&mut self, board: Board, keystack: &[u64]) -> Option<(Move, i16)> {
+        let stop_after = Instant::now() + Duration::from_millis(250);
         let mut pv = Vec::new();
         let mut score = 0;
 
@@ -227,12 +227,27 @@ impl<'a, T: Write> DataGen<'a, T> {
         for depth in 0..=63 {
             pv.clear();
             score = self.search.search(depth, -i32::MAX, i32::MAX, &mut pv);
-            if node_limit && (self.search.nodes() + self.search.qnodes()) > 5_000 {
+            if self.search.nodes() + self.search.qnodes() > 5_000 {
                 break;
             }
-            if !node_limit && depth == 10 {
-                break;
-            }
+        }
+        if pv.is_empty() {
+            return None;
+        }
+        Some((pv[0], score.clamp(-10_000, 10_000) as i16))
+    }
+
+    /// Fixed depth 10, 2s cap. Used once to vet the random opening.
+    fn search_verdict(&mut self, board: Board, keystack: &[u64]) -> Option<(Move, i16)> {
+        let stop_after = Instant::now() + Duration::from_secs(2);
+        let mut pv = Vec::new();
+        let mut score = 0;
+
+        self.search.prepare(&board, Some(stop_after), None, keystack);
+
+        for depth in 0..=10 {
+            pv.clear();
+            score = self.search.search(depth, -i32::MAX, i32::MAX, &mut pv);
         }
         if pv.is_empty() {
             return None;
@@ -268,7 +283,7 @@ impl<'a, T: Write> DataGen<'a, T> {
 
         // Check: the "opening" must not be excessively lopsided.
         let mut game = {
-            let Some((_, score)) = self.search(yukari_board.clone(), &keystack, false) else {
+            let Some((_, score)) = self.search_verdict(yukari_board.clone(), &keystack) else {
                 // checkmate???
                 return false;
             };
@@ -322,7 +337,7 @@ impl<'a, T: Write> DataGen<'a, T> {
                 return true;
             }
 
-            let Some((m, score)) = self.search(yukari_board.clone(), &keystack, true) else {
+            let Some((m, score)) = self.search_rollout(yukari_board.clone(), &keystack) else {
                 eprintln!("search did not find a move on board {yukari_board}");
                 return false;
             };
