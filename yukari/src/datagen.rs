@@ -156,21 +156,26 @@ impl ViriFormat {
         self.moves.push((ViriMove::from(m), score));
     }
 
-    pub fn finish(mut self, result: MarlinWdl, f: &mut impl Write) {
+    /// Serialize the game into a single viriformat record: marlinformat
+    /// header, then `(move, score)` pairs, terminated by a four-byte zero
+    /// sentinel. Returned buffer is ready to be written verbatim.
+    pub fn finish(mut self, result: MarlinWdl) -> Vec<u8> {
         self.position.wdl = result;
 
-        // marlinformat header
-        self.position.write(f);
+        let mut buf = Vec::with_capacity(32 + self.moves.len() * 4 + 4);
 
-        // viriformat moves
+        // marlinformat header
+        self.position.write(&mut buf);
+
+        // move/score stream
         for (m, score) in self.moves {
-            f.write_all(&m.0.to_le_bytes()).unwrap();
-            f.write_all(&score.to_le_bytes()).unwrap();
+            buf.extend_from_slice(&m.0.to_le_bytes());
+            buf.extend_from_slice(&score.to_le_bytes());
         }
 
-        // viriformat footer
-        f.write_all(&[0, 0, 0, 0]).unwrap();
-        f.flush().unwrap();
+        // end-of-game sentinel
+        buf.extend_from_slice(&[0, 0, 0, 0]);
+        buf
     }
 }
 
@@ -203,6 +208,14 @@ impl<'a, T: Write> DataGen<'a, T> {
         self.positions
     }
 
+    /// Serialize `game` locally, then hand the bytes to the shared writer
+    /// in a single `write_all`. Keeps the mutex critical section down to
+    /// one syscall's worth of work rather than O(moves).
+    fn emit(&self, game: ViriFormat, wdl: MarlinWdl) {
+        let buf = game.finish(wdl);
+        self.f.lock().unwrap().write_all(&buf).unwrap();
+    }
+
     fn search(&mut self, board: Board, keystack: &[u64], node_limit: bool) -> Option<(Move, i16)> {
         let start = Instant::now();
         let stop_after = start + Duration::from_secs_f32(if node_limit { 0.25 } else { 2.0 });
@@ -228,29 +241,22 @@ impl<'a, T: Write> DataGen<'a, T> {
     }
 
     fn play_game(&mut self) -> bool {
-        let mut yukari_board_stack = Vec::new();
-        let mut cc_board_stack = Vec::new();
-        let mut keystack = Vec::new();
-        cc_board_stack.push(cozy_chess::Board::startpos());
-        yukari_board_stack.push(Board::startpos());
-        keystack.push(yukari_board_stack.last().unwrap().hash());
+        let mut yukari_board = Board::startpos();
+        let mut cc_board = cozy_chess::Board::startpos();
+        let mut keystack = vec![yukari_board.hash()];
 
         // Opening: eight random moves.
         for _ in 0..8 {
-            yukari_board_stack.push(yukari_board_stack.last().unwrap().clone());
-            let yukari_board = yukari_board_stack.last_mut().unwrap();
             let mut moves = ArrayVec::new();
             yukari_board.generate(&mut moves);
             let Some(&m) = moves.iter().choose(&mut self.rng) else {
                 // checkmate in the opening, maybe?
                 return false;
             };
-            *yukari_board = yukari_board.make(m);
+            yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
             let m_str = format!("{m}");
-            cc_board_stack.push(cc_board_stack.last().unwrap().clone());
-            let cc_board = cc_board_stack.last_mut().unwrap();
-            let Ok(cc_m) = cozy_chess::util::parse_uci_move(cc_board, &m_str) else {
+            let Ok(cc_m) = cozy_chess::util::parse_uci_move(&cc_board, &m_str) else {
                 eprintln!("cozy-chess considers move {m} on board {cc_board} to be invalid!");
                 return false;
             };
@@ -262,7 +268,6 @@ impl<'a, T: Write> DataGen<'a, T> {
 
         // Check: the "opening" must not be excessively lopsided.
         let mut game = {
-            let yukari_board = yukari_board_stack.last_mut().unwrap();
             let Some((_, score)) = self.search(yukari_board.clone(), &keystack, false) else {
                 // checkmate???
                 return false;
@@ -279,75 +284,50 @@ impl<'a, T: Write> DataGen<'a, T> {
 
         // Rollout: "soft 5k nodes" until game end.
         loop {
-            assert_eq!(cc_board_stack.len(), yukari_board_stack.len());
-            assert_eq!(keystack.len(), yukari_board_stack.len());
-
-            let cc_board = cc_board_stack.last().unwrap();
-            let yukari_board = yukari_board_stack.last().unwrap();
-
             // Game ended?
             match cc_board.status() {
                 cozy_chess::GameStatus::Ongoing => {
-                    // insufficient material check.
+                    // cozy-chess doesn't track insufficient material, so check ourselves.
                     if yukari_board.insufficient_material() {
-                        let mut f = self.f.lock().unwrap();
-                        game.finish(MarlinWdl::Draw, &mut *f);
+                        self.emit(game, MarlinWdl::Draw);
                         return true;
                     }
-
-                    // rep-draw check.
+                    // Threefold repetition.
                     let yukari_reps = keystack.iter().filter(|key| **key == yukari_board.hash()).count();
                     if yukari_reps == 3 {
-                        let mut f = self.f.lock().unwrap();
-                        game.finish(MarlinWdl::Draw, &mut *f);
+                        self.emit(game, MarlinWdl::Draw);
                         return true;
                     }
                 }
                 cozy_chess::GameStatus::Drawn => {
-                    let mut f = self.f.lock().unwrap();
-                    game.finish(MarlinWdl::Draw, &mut *f);
+                    self.emit(game, MarlinWdl::Draw);
                     return true;
                 }
                 cozy_chess::GameStatus::Won => {
-                    let mut f = self.f.lock().unwrap();
-                    if yukari_board.side() == Colour::White {
-                        game.finish(MarlinWdl::BlackWin, &mut *f);
-                    } else {
-                        game.finish(MarlinWdl::WhiteWin, &mut *f);
-                    }
+                    let wdl = if yukari_board.side() == Colour::White { MarlinWdl::BlackWin } else { MarlinWdl::WhiteWin };
+                    self.emit(game, wdl);
                     return true;
                 }
             }
 
             // Can we adjudicate?
             if win_adj_counter >= 6 {
-                let mut f = self.f.lock().unwrap();
-                if win_adj_white {
-                    game.finish(MarlinWdl::WhiteWin, &mut *f);
-                } else {
-                    game.finish(MarlinWdl::BlackWin, &mut *f);
-                }
+                let wdl = if win_adj_white { MarlinWdl::WhiteWin } else { MarlinWdl::BlackWin };
+                self.emit(game, wdl);
                 return true;
             }
 
             if draw_adj_counter >= 16 && self.positions >= 40 {
-                let mut f = self.f.lock().unwrap();
-                game.finish(MarlinWdl::Draw, &mut *f);
+                self.emit(game, MarlinWdl::Draw);
                 return true;
             }
-
-            cc_board_stack.push(cc_board_stack.last().unwrap().clone());
-            let cc_board = cc_board_stack.last_mut().unwrap();
-
-            yukari_board_stack.push(yukari_board_stack.last().unwrap().clone());
-            let yukari_board = yukari_board_stack.last_mut().unwrap();
 
             let Some((m, score)) = self.search(yukari_board.clone(), &keystack, true) else {
                 eprintln!("search did not find a move on board {yukari_board}");
                 return false;
             };
             let m_str = format!("{m}");
-            let Ok(cc_m) = cozy_chess::util::parse_uci_move(cc_board, &m_str) else {
+            let Ok(cc_m) = cozy_chess::util::parse_uci_move(&cc_board, &m_str) else {
                 eprintln!("cozy-chess considers move {m} on board {cc_board} to be invalid!");
                 return false;
             };
@@ -358,7 +338,7 @@ impl<'a, T: Write> DataGen<'a, T> {
 
             let score = if yukari_board.side() == Colour::Black { -score } else { score };
             game.push(m, score);
-            *yukari_board = yukari_board.make(m);
+            yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
             self.positions += 1;
 
