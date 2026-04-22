@@ -508,6 +508,7 @@ impl Square16x8 {
 }
 
 /// A square on a chessboard.
+#[rustfmt::skip]
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum Square {
@@ -963,13 +964,7 @@ impl Iterator for KnightIter {
             WestSouthWest,
         };
         const KNIGHT_DIR: [Direction; 8] = [
-            NorthNorthEast,
-            EastNorthEast,
-            EastSouthEast,
-            SouthSouthEast,
-            SouthSouthWest,
-            WestSouthWest,
-            WestNorthWest,
+            NorthNorthEast, EastNorthEast, EastSouthEast, SouthSouthEast, SouthSouthWest, WestSouthWest, WestNorthWest,
             NorthNorthWest,
         ];
 

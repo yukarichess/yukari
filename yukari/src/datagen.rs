@@ -20,14 +20,14 @@ enum MarlinWdl {
 
 #[repr(C)]
 struct MarlinFormat {
-    occupancy: u64,
-    pieces: [u8; 16], // [u4; 32]
-    stm_ep_square: u8,
-    halfmove_clock: u8,
+    occupancy:       u64,
+    pieces:          [u8; 16], // [u4; 32]
+    stm_ep_square:   u8,
+    halfmove_clock:  u8,
     fullmove_number: u16,
-    eval: i16,
-    wdl: MarlinWdl,
-    _extra: u8,
+    eval:            i16,
+    wdl:             MarlinWdl,
+    _extra:          u8,
 }
 
 impl From<Board> for MarlinFormat {
@@ -38,14 +38,14 @@ impl From<Board> for MarlinFormat {
         let h8 = Square::from_rank_file(Rank::Eight, File::H);
 
         let mut this = Self {
-            occupancy: 0,
-            pieces: [0; 16],
-            stm_ep_square: 0,
-            halfmove_clock: 0,
+            occupancy:       0,
+            pieces:          [0; 16],
+            stm_ep_square:   0,
+            halfmove_clock:  0,
             fullmove_number: 0,
-            eval: 0,
-            wdl: MarlinWdl::Draw,
-            _extra: 0,
+            eval:            0,
+            wdl:             MarlinWdl::Draw,
+            _extra:          0,
         };
         for sq in 0..64 {
             let square = unsafe { Square::from_u8_unchecked(sq) };
@@ -123,8 +123,14 @@ impl From<Move> for ViriMove {
         let flags = match m.kind() {
             MoveType::EnPassant => 1,
             MoveType::KingsideCastle | MoveType::QueensideCastle => 2,
-            MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen
-            | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => 3,
+            MoveType::PromotionKnight
+            | MoveType::PromotionBishop
+            | MoveType::PromotionRook
+            | MoveType::PromotionQueen
+            | MoveType::CapturePromotionKnight
+            | MoveType::CapturePromotionBishop
+            | MoveType::CapturePromotionRook
+            | MoveType::CapturePromotionQueen => 3,
             _ => 0,
         };
 
@@ -134,7 +140,7 @@ impl From<Move> for ViriMove {
 
 struct ViriFormat {
     position: MarlinFormat,
-    moves: Vec<(ViriMove, i16)>,
+    moves:    Vec<(ViriMove, i16)>,
 }
 
 impl ViriFormat {
@@ -170,20 +176,15 @@ impl ViriFormat {
 }
 
 pub struct DataGen<'a, T: Write> {
-    f: &'a Mutex<T>,
-    search: search::Search,
-    rng: rand::rngs::ThreadRng,
+    f:         &'a Mutex<T>,
+    search:    search::Search,
+    rng:       rand::rngs::ThreadRng,
     positions: usize,
 }
 
 impl<'a, T: Write> DataGen<'a, T> {
     pub fn new(f: &'a Mutex<T>) -> DataGen<'a, T> {
-        let mut this = Self {
-            f,
-            search: search::Search::new(1),
-            rng: rand::rng(),
-            positions: 0,
-        };
+        let mut this = Self { f, search: search::Search::new(1), rng: rand::rng(), positions: 0 };
         this.search.allocate_tt(16);
         this
     }
@@ -303,16 +304,16 @@ impl<'a, T: Write> DataGen<'a, T> {
                         self.emit(game, MarlinWdl::Draw);
                         return true;
                     }
-                }
+                },
                 cozy_chess::GameStatus::Drawn => {
                     self.emit(game, MarlinWdl::Draw);
                     return true;
-                }
+                },
                 cozy_chess::GameStatus::Won => {
                     let wdl = if yukari_board.side() == Colour::White { MarlinWdl::BlackWin } else { MarlinWdl::WhiteWin };
                     self.emit(game, wdl);
                     return true;
-                }
+                },
             }
 
             // Can we adjudicate?

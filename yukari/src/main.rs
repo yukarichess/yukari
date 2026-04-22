@@ -115,7 +115,9 @@ impl Yukari {
         let mut moves = ArrayVec::from(moves);
         moves.set_len(0);
         self.board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom)
+        moves
+            .into_iter()
+            .find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom)
     }
 
     /// Real search, falls back to dumb search in extreme time constraints
@@ -493,7 +495,7 @@ fn run() -> io::Result<()> {
             // Identification for engines that auto switch between protocols
             "xboard" => {
                 protocol = Protocol::Xboard;
-            }
+            },
             "uci" => {
                 protocol = Protocol::Uci;
                 println!("id name Yukari 2025.11.1");
@@ -501,7 +503,7 @@ fn run() -> io::Result<()> {
                 println!("option name Hash type spin default 16 min 1 max 8192");
                 println!("option name Threads type spin default 1 min 1 max 256"); // do we even have a limit?
                 println!("uciok");
-            }
+            },
             // This is where we send our features
             "protover" => {
                 // v1 won't send this anyway and we need v2
@@ -529,7 +531,7 @@ fn run() -> io::Result<()> {
                 println!("feature option=\"Threads -spin 1 1 256\"");
                 // Communicate that feature reporting is done
                 println!("feature done=1");
-            }
+            },
             "spsa" => engine.search.params.display_openbench(),
             "rust" => engine.search.params.display_rust(),
             // Directly update the engine's board from a FEN
@@ -559,7 +561,7 @@ fn run() -> io::Result<()> {
                         fen.push(' ');
                         fen.push_str(cmd);
                         engine.board = Board::from_fen(&fen).unwrap();
-                    }
+                    },
                     _ => unreachable!("unrecognised position subcommand"),
                 }
                 if !args.is_empty() {
@@ -584,26 +586,28 @@ fn run() -> io::Result<()> {
                             None
                         };
 
-                        let m = engine.find_move(from, dest, prom).unwrap_or_else(|| panic!("Attempted move {cmd} not found!?"));
+                        let m = engine
+                            .find_move(from, dest, prom)
+                            .unwrap_or_else(|| panic!("Attempted move {cmd} not found!?"));
                         engine.board = engine.board.make(m);
                         engine.keystack.push(engine.board.hash());
                         engine.tc.increment_moves();
                     }
                 }
-            }
+            },
             // Reset the entire state of the engine
             "new" | "ucinewgame" => engine = Yukari::new(engine.threads, engine.hash_megabytes, engine.params.clone()),
             // Parse our two time controls from the whole commmand lines
             // TODO: This is rather xboard specific
             "level" => engine.parse_tc(trimmed),
             "st" => engine.tc.mode.fixed_time_per_move(args.parse::<f32>().unwrap()),
-            "name" | "rating" | "post" => {}
+            "name" | "rating" | "post" => {},
             // Allocate a hash table.
             "memory" => {
                 let megabytes = args.parse::<usize>().unwrap();
                 engine.search.allocate_tt(megabytes);
                 engine.hash_megabytes = megabytes;
-            }
+            },
             // Set number of threads.
             "cores" => {
                 let cores = args.parse::<usize>().unwrap();
@@ -611,7 +615,7 @@ fn run() -> io::Result<()> {
                 engine.search.allocate_tt(engine.hash_megabytes);
                 engine.search.params = engine.params.clone();
                 engine.threads = cores;
-            }
+            },
             "option" => {
                 let (name, value) = args.split_once('=').unwrap();
                 if name == "Hash" {
@@ -632,7 +636,7 @@ fn run() -> io::Result<()> {
                 }
                 engine.search.params.parse(name, value);
                 engine.params = engine.search.params.clone();
-            }
+            },
             "setoption" => {
                 let (name, args) = args.split_once(' ').unwrap_or((args, ""));
                 assert_eq!(name, "name");
@@ -646,27 +650,27 @@ fn run() -> io::Result<()> {
                         // UCIism. grumble grumble.
                         engine.search.allocate_tt(value as usize);
                         engine.hash_megabytes = value as usize;
-                    }
+                    },
                     "Threads" => {
                         // UCIism, grumble grumble.
                         engine.search = Search::new(value as usize);
                         engine.search.allocate_tt(engine.hash_megabytes);
                         engine.search.params = engine.params.clone();
                         engine.threads = value as usize;
-                    }
+                    },
                     _ => (),
                 }
-            }
+            },
             "eval" => println!("{}", engine.board.eval(engine.board.side())),
             // Hard would turn on thinking during opponent's time, easy would turn it off
             // we don't do it, so it's unimportant
-            "hard" | "easy" => {}
+            "hard" | "easy" => {},
             "quit" => {
                 break;
-            }
+            },
             // Feature replies are just ignored since we don't turn anything off yet
             // TODO: Handle rejects we can't tolerate and abort early
-            "accepted" | "rejected" => {}
+            "accepted" | "rejected" => {},
             // Ping expects a response with the correct tag once the commands prior to the ping are done
             // That ends up being some GPU fence level synchronization nonsense if it were to send more than one
             // so for now we just "handle it" by replying with pong immediately. For now this "works" because
@@ -675,13 +679,13 @@ fn run() -> io::Result<()> {
             "isready" => println!("readyok"),
             // TODO: Should support randomization so we don't always play the same game
             // we can't todo!() because we cannot turn off getting this message
-            "random" => {}
+            "random" => {},
             // We don't implement games against computer players games differently
-            "computer" => {}
+            "computer" => {},
             // This report gives us info about what time we have left right now directly
             // the value is in centiseconds
             "time" => engine.set_remaining(f32::from_str(args).unwrap()),
-            "otim" => {}
+            "otim" => {},
             "sd" => engine.set_depth(i32::from_str(args).unwrap()),
             "nps" => engine.set_nodes_per_second(i32::from_str(args).unwrap()),
             "go" => {
@@ -696,43 +700,43 @@ fn run() -> io::Result<()> {
                             if engine.board.side() == Colour::White {
                                 engine.set_remaining((u32::from_str(cmd).unwrap() / 10) as f32);
                             }
-                        }
+                        },
                         "btime" => {
                             (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             if engine.board.side() == Colour::Black {
                                 engine.set_remaining((u32::from_str(cmd).unwrap() / 10) as f32);
                             }
-                        }
+                        },
                         "winc" => {
                             (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             if engine.board.side() == Colour::White {
                                 engine.tc.mode.increment(u32::from_str(cmd).unwrap());
                             }
-                        }
+                        },
                         "binc" => {
                             (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             if engine.board.side() == Colour::Black {
                                 engine.tc.mode.increment(u32::from_str(cmd).unwrap());
                             }
-                        }
+                        },
                         "movetime" => {
                             (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             engine.tc.mode.fixed_time_per_move((u32::from_str(cmd).unwrap() as f32) / 1000.0);
-                        }
+                        },
                         "depth" => {
                             (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             engine.max_depth = Some(i32::from_str(cmd).unwrap());
-                        }
+                        },
                         "nodes" => {
                             (cmd, args) = args.split_once(' ').unwrap_or((args, ""));
                             engine.nodes_per_second = Some(u32::from_str(cmd).unwrap());
                             engine.tc.mode.fixed_time_per_move(1.0);
-                        }
+                        },
                         "mate" => {
                             (_, args) = args.split_once(' ').unwrap_or((args, ""));
-                        }
-                        "infinite" | "ponder" => {}
-                        _ => {} // ignore anything we don't understand.
+                        },
+                        "infinite" | "ponder" => {},
+                        _ => {}, // ignore anything we don't understand.
                     }
                 }
                 engine.mode = Mode::Normal;
@@ -754,14 +758,14 @@ fn run() -> io::Result<()> {
                     engine.keystack.push(engine.board.hash());
                     engine.tc.increment_moves();
                 }
-            }
+            },
             "force" => engine.mode = Mode::Force,
             "d" => {
                 println!("{}", engine.board);
                 if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                     println!("(threefold repetition)");
                 }
-            }
+            },
             _ => {
                 // Always ascii
                 let chars = trimmed.as_bytes();
@@ -804,7 +808,7 @@ fn run() -> io::Result<()> {
                             }
                             engine.keystack.push(engine.board.hash());
                             engine.tc.increment_moves();
-                        }
+                        },
                         Mode::Force => {
                             let m = engine.find_move(from, dest, prom).expect("Attempted move not found!?");
                             engine.board = engine.board.make(m);
@@ -813,13 +817,13 @@ fn run() -> io::Result<()> {
                             }
                             engine.keystack.push(engine.board.hash());
                             engine.tc.increment_moves();
-                        }
+                        },
                     }
                 } else {
                     // This may look like I chose the format, but it is a standard response
                     println!("Error (unknown command): {trimmed}");
                 }
-            }
+            },
         }
     }
     Ok(())

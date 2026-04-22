@@ -9,7 +9,7 @@ use yukari_movegen::{Board, Move};
 #[derive(Default)]
 #[repr(align(16))]
 pub struct PerftEntry {
-    key: AtomicU64,
+    key:  AtomicU64,
     data: AtomicU64,
 }
 
@@ -107,19 +107,23 @@ pub fn divide(board: &Board, depth: u32, tt: &[PerftEntry]) -> u64 {
 }
 
 fn main() {
-    let fen = std::env::args().nth(1).expect("Please provide a FEN string wrapped in quotes or the string 'bench' as argument");
+    let fen = std::env::args()
+        .nth(1)
+        .expect("Please provide a FEN string wrapped in quotes or the string 'bench' as argument");
     let depth = std::env::args()
         .nth(2)
         .expect("Please provide a FEN string wrapped in quotes or the string 'bench' as argument")
         .parse::<u32>()
         .expect("Please provide a FEN string wrapped in quotes or the string 'bench' as argument");
-    let board = Board::from_fen(if fen == "startpos" {
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    } else if fen == "kiwipete" {
-        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
-    } else {
-        &fen
-    })
+    let board = Board::from_fen(
+        if fen == "startpos" {
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        } else if fen == "kiwipete" {
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"
+        } else {
+            &fen
+        },
+    )
     .unwrap();
     //let nodes = divide(&startpos, &zobrist, depth);
     let tt = allocate_perft_tt(256);

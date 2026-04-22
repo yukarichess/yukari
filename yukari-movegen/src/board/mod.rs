@@ -33,13 +33,13 @@ pub use index::PieceIndex;
 #[derive(Clone)]
 pub struct Board {
     /// The chess board representation.
-    data: data::BoardData,
+    data:   data::BoardData,
     /// The side to move.
-    side: Colour,
+    side:   Colour,
     /// Castling rights, if any.
     castle: (bool, bool, bool, bool),
     /// En-passant square, if any.
-    ep: Option<Square>,
+    ep:     Option<Square>,
 }
 
 impl Default for Board {
@@ -289,25 +289,38 @@ impl Board {
     pub fn make(&self, m: Move) -> Self {
         let mut b = self.clone();
         match m.kind() {
-            MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
-            MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
-                let piece_index =
-                    b.data.piece_index(m.dest()).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
+            MoveType::PromotionKnight
+            | MoveType::PromotionBishop
+            | MoveType::PromotionRook
+            | MoveType::PromotionQueen
+            | MoveType::Normal
+            | MoveType::DoublePush
+            | MoveType::_Unused1
+            | MoveType::_Unused2 => {},
+            MoveType::Capture
+            | MoveType::CapturePromotionKnight
+            | MoveType::CapturePromotionBishop
+            | MoveType::CapturePromotionRook
+            | MoveType::CapturePromotionQueen => {
+                let piece_index = b
+                    .data
+                    .piece_index(m.dest())
+                    .unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
                 b.data.remove_piece(piece_index, true);
-            }
+            },
             MoveType::KingsideCastle => {
                 let (rook_from, rook_to) = (m.dest().east().unwrap(), m.dest().west().unwrap());
                 b.data.move_piece(rook_from, rook_to);
-            }
+            },
             MoveType::QueensideCastle => {
                 let (rook_from, rook_to) = (m.dest().west().unwrap().west().unwrap(), m.dest().east().unwrap());
                 b.data.move_piece(rook_from, rook_to);
-            }
+            },
             MoveType::EnPassant => {
                 let target_square = b.ep.unwrap().relative_south(b.side).unwrap();
                 let target_piece = b.data.piece_index(target_square).unwrap();
                 b.data.remove_piece(target_piece, true);
-            }
+            },
         }
 
         b.data.move_piece(m.from(), m.dest());
@@ -383,10 +396,7 @@ impl Board {
         b
     }
 
-    fn try_push_move(
-        &self, v: &mut ArrayVec<[Move; 256]>, from: Square, dest: Square, kind: MoveType,
-        pininfo: &pins::PinInfo,
-    ) {
+    fn try_push_move(&self, v: &mut ArrayVec<[Move; 256]>, from: Square, dest: Square, kind: MoveType, pininfo: &pins::PinInfo) {
         if let Some(dir) = pininfo.pins[self.data.piece_index(from).unwrap().into_inner() as usize] {
             let Some(move_dir) = from.direction(dest) else {
                 // Pinned knight can't move.
@@ -405,7 +415,12 @@ impl Board {
         let Some(ep) = self.ep else {
             return;
         };
-        for capturer in self.data.attacks_to(ep, self.side).and(self.data.piecemask().pawns()).and(!pininfo.enpassant_pinned) {
+        for capturer in self
+            .data
+            .attacks_to(ep, self.side)
+            .and(self.data.piecemask().pawns())
+            .and(!pininfo.enpassant_pinned)
+        {
             let from = self.data.square_of_piece(capturer);
             self.try_push_move(v, from, ep, MoveType::EnPassant, pininfo);
         }
@@ -471,7 +486,7 @@ impl Board {
             let Some(from) = dest.relative_south(self.side) else { return };
             match self.data.piece_from_square(from) {
                 Some(Piece::Pawn) => add_pawn_block(v, from, dest, MoveType::Normal),
-                Some(_) => {}
+                Some(_) => {},
                 None => {
                     if Rank::from(dest).is_relative_fourth(self.side) {
                         let Some(from) = from.relative_south(self.side) else { return };
@@ -479,7 +494,7 @@ impl Board {
                             add_pawn_block(v, from, dest, MoveType::DoublePush);
                         }
                     }
-                }
+                },
             }
         };
 
@@ -520,8 +535,11 @@ impl Board {
                 }
 
                 // Piece moves.
-                for attacker in
-                    self.data.attacks_to(dest, self.side).and(!self.data.piecemask().pawns()).and(!self.data.piecemask().kings())
+                for attacker in self
+                    .data
+                    .attacks_to(dest, self.side)
+                    .and(!self.data.piecemask().pawns())
+                    .and(!self.data.piecemask().kings())
                 {
                     self.try_push_move(v, self.data.square_of_piece(attacker), dest, MoveType::Normal, &pininfo);
                 }
@@ -958,27 +976,50 @@ impl Board {
         let mut hash = self.hash();
 
         match m.kind() {
-            MoveType::PromotionKnight | MoveType::PromotionBishop | MoveType::PromotionRook | MoveType::PromotionQueen | MoveType::Normal | MoveType::DoublePush | MoveType::_Unused1 | MoveType::_Unused2 => {}
-            MoveType::Capture | MoveType::CapturePromotionKnight | MoveType::CapturePromotionBishop | MoveType::CapturePromotionRook | MoveType::CapturePromotionQueen => {
-                let piece_index =
-                    self.data.piece_index(m.dest()).unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
-                Zobrist::remove_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), self.data.square_of_piece(piece_index), &mut hash);
-            }
+            MoveType::PromotionKnight
+            | MoveType::PromotionBishop
+            | MoveType::PromotionRook
+            | MoveType::PromotionQueen
+            | MoveType::Normal
+            | MoveType::DoublePush
+            | MoveType::_Unused1
+            | MoveType::_Unused2 => {},
+            MoveType::Capture
+            | MoveType::CapturePromotionKnight
+            | MoveType::CapturePromotionBishop
+            | MoveType::CapturePromotionRook
+            | MoveType::CapturePromotionQueen => {
+                let piece_index = self
+                    .data
+                    .piece_index(m.dest())
+                    .unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
+                Zobrist::remove_piece(
+                    piece_index.colour(),
+                    self.data.piece_from_bit(piece_index),
+                    self.data.square_of_piece(piece_index),
+                    &mut hash,
+                );
+            },
             MoveType::KingsideCastle => {
                 let (rook_from, rook_to) = (m.dest().east().unwrap(), m.dest().west().unwrap());
                 let piece_index = self.data.piece_index(rook_from).unwrap();
                 Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
-            }
+            },
             MoveType::QueensideCastle => {
                 let (rook_from, rook_to) = (m.dest().west().unwrap().west().unwrap(), m.dest().east().unwrap());
                 let piece_index = self.data.piece_index(rook_from).unwrap();
                 Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
-            }
+            },
             MoveType::EnPassant => {
                 let target_square = self.ep.unwrap().relative_south(self.side).unwrap();
                 let target_piece = self.data.piece_index(target_square).unwrap();
-                Zobrist::remove_piece(target_piece.colour(), self.data.piece_from_bit(target_piece), self.data.square_of_piece(target_piece), &mut hash);
-            }
+                Zobrist::remove_piece(
+                    target_piece.colour(),
+                    self.data.piece_from_bit(target_piece),
+                    self.data.square_of_piece(target_piece),
+                    &mut hash,
+                );
+            },
         }
 
         let piece_index = self.data.piece_index(m.from()).unwrap();
@@ -1086,7 +1127,9 @@ impl Board {
         }
 
         // Moving piece
-        let piece = self.piece_from_square(m.from()).unwrap_or_else(|| panic!("{m} has no origin piece on board\n{self}"));
+        let piece = self
+            .piece_from_square(m.from())
+            .unwrap_or_else(|| panic!("{m} has no origin piece on board\n{self}"));
         let piece_char = match piece {
             Piece::Pawn => "",
             Piece::Knight => "N",
@@ -1103,7 +1146,10 @@ impl Board {
 
         let mut ambiguities = Vec::new();
         for mv in moves {
-            if mv.dest() == m.dest() && self.piece_from_square(mv.from()) == self.piece_from_square(m.from()) && mv.from() != m.from() {
+            if mv.dest() == m.dest()
+                && self.piece_from_square(mv.from()) == self.piece_from_square(m.from())
+                && mv.from() != m.from()
+            {
                 ambiguities.push(mv);
             }
         }
@@ -1221,8 +1267,7 @@ impl Board {
 } */
 
 mod tests {
-    #[cfg(test)]
-    use crate::Board;
+    #[cfg(test)] use crate::Board;
 
     #[cfg(test)]
     fn find_move(board: &Board, cmd: &str) -> crate::Move {
@@ -1243,7 +1288,10 @@ mod tests {
         };
         let mut moves = tinyvec::ArrayVec::new();
         board.generate(&mut moves);
-        moves.into_iter().find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom).unwrap()
+        moves
+            .into_iter()
+            .find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom)
+            .unwrap()
     }
 
     #[test]

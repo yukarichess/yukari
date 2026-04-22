@@ -20,7 +20,10 @@ fn normalise_centipawn(board: &Board, score: i32) -> i32 {
         + 9 * piecemask.queens().count_ones();
     let material = f64::from(material.clamp(17, 78)) / 58.0;
 
-    let a = NORMALISE_A[0].mul_add(material, NORMALISE_A[1]).mul_add(material, NORMALISE_A[2]).mul_add(material, NORMALISE_A[3]);
+    let a = NORMALISE_A[0]
+        .mul_add(material, NORMALISE_A[1])
+        .mul_add(material, NORMALISE_A[2])
+        .mul_add(material, NORMALISE_A[3]);
 
     ((100.0 * f64::from(score)) / a).round() as i32
 }
@@ -42,8 +45,14 @@ fn normalise_winrate(board: &Board, score: i32) -> i32 {
         + 9 * piecemask.queens().count_ones();
     let material = f64::from(material.clamp(17, 78)) / 58.0;
 
-    let a = NORMALISE_A[0].mul_add(material, NORMALISE_A[1]).mul_add(material, NORMALISE_A[2]).mul_add(material, NORMALISE_A[3]);
-    let b = NORMALISE_B[0].mul_add(material, NORMALISE_B[1]).mul_add(material, NORMALISE_B[2]).mul_add(material, NORMALISE_B[3]);
+    let a = NORMALISE_A[0]
+        .mul_add(material, NORMALISE_A[1])
+        .mul_add(material, NORMALISE_A[2])
+        .mul_add(material, NORMALISE_A[3]);
+    let b = NORMALISE_B[0]
+        .mul_add(material, NORMALISE_B[1])
+        .mul_add(material, NORMALISE_B[2])
+        .mul_add(material, NORMALISE_B[3]);
 
     (0.5 + 1000.0 / (1.0 + ((a - f64::from(score)) / b).exp())) as i32
 }

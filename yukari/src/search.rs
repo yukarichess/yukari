@@ -1,4 +1,12 @@
-use std::{cmp::Ordering, sync::{Arc, atomic::{self, AtomicBool, AtomicU64}}, time::Instant, fmt::Write};
+use std::{
+    cmp::Ordering,
+    fmt::Write,
+    sync::{
+        Arc,
+        atomic::{self, AtomicBool, AtomicU64},
+    },
+    time::Instant,
+};
 
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use tinyvec::ArrayVec;
@@ -24,7 +32,7 @@ enum TtFlags {
 #[derive(Default)]
 #[repr(align(16))]
 pub struct TtEntry {
-    key: AtomicU64,
+    key:  AtomicU64,
     data: AtomicU64,
 }
 
@@ -33,8 +41,8 @@ struct TtData {
     flags: TtFlags,
     depth: u8,
     score: i16,
-    m: Option<Move>,
-    eval: i16,
+    m:     Option<Move>,
+    eval:  i16,
 }
 
 const _TT_ENTRY_IS_16_BYTE: () = assert!(std::mem::size_of::<TtEntry>() == 16);
@@ -66,9 +74,9 @@ impl Ord for MoveOrder {
             // Good captures sort above quiets and bad captures; ties broken by highest MVV/LVA score.
             (MoveOrder::GoodCapture(a_mvv, a_lva), MoveOrder::GoodCapture(b_mvv, b_lva)) => {
                 b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva))
-            }
-            (MoveOrder::GoodCapture(_, _), _) => Ordering::Less,
-            (_, MoveOrder::GoodCapture(_, _)) => Ordering::Greater,
+            },
+            (MoveOrder::GoodCapture(..), _) => Ordering::Less,
+            (_, MoveOrder::GoodCapture(..)) => Ordering::Greater,
 
             // Quiets sort above bad captures; ties broken by highest history score.
             (MoveOrder::Quiet(a), MoveOrder::Quiet(b)) => b.cmp(a),
@@ -78,16 +86,19 @@ impl Ord for MoveOrder {
             // Bad captures; ties broken by highest MVV/LVA score.
             (MoveOrder::BadCapture(a_mvv, a_lva), MoveOrder::BadCapture(b_mvv, b_lva)) => {
                 b_mvv.cmp(a_mvv).then_with(|| a_lva.cmp(b_lva))
-            }
+            },
         }
     }
 }
 
 impl MoveOrder {
     pub fn classify(
-        board: &Board, tt_move: Option<Move>, history: &[[[i16; 64]; 64]; 12], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64], last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move,
+        board: &Board, tt_move: Option<Move>, history: &[[[i16; 64]; 64]; 12], conthist: &[[i16; 2 * 6 * 64]; 2 * 6 * 64],
+        last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move,
     ) -> Self {
-        if let Some(tt_move) = tt_move && tt_move == m {
+        if let Some(tt_move) = tt_move
+            && tt_move == m
+        {
             return Self::TtMove;
         }
 
@@ -126,9 +137,9 @@ impl MoveOrder {
 
 #[derive(Clone)]
 pub struct MpcModel {
-    pub a: f32,
+    pub a:     f32,
     pub sigma: i32,
-    pub s: i32,
+    pub s:     i32,
 }
 
 impl MpcModel {
@@ -152,7 +163,7 @@ impl MpcModel {
         if !name.starts_with(&prefix) {
             return;
         }
-        let name = &name[prefix.len() ..];
+        let name = &name[prefix.len()..];
         if name == "A" {
             self.a = value.parse::<f32>().unwrap();
             println!("# {prefix}A = {}", self.a);
@@ -165,44 +176,49 @@ impl MpcModel {
 
 #[derive(Clone)]
 pub struct SearchParams {
-    pub mpc_model: [[MpcModel; 4]; 5]
+    pub mpc_model: [[MpcModel; 4]; 5],
 }
 
 impl Default for SearchParams {
     fn default() -> Self {
         Self {
             mpc_model: [
-                [ // depth: 1
+                [
+                    // depth: 1
                     MpcModel { a: 1.039, sigma: 22, s: 0 },
                     MpcModel { a: 1.056, sigma: 47, s: 0 },
                     MpcModel { a: 1.019, sigma: 42, s: 0 },
                     MpcModel { a: 1.018, sigma: 24, s: 0 },
                 ],
-                [ // depth: 2
+                [
+                    // depth: 2
                     MpcModel { a: 1.043, sigma: 48, s: 0 },
                     MpcModel { a: 1.049, sigma: 68, s: 0 },
                     MpcModel { a: 1.026, sigma: 47, s: 0 },
                     MpcModel { a: 1.035, sigma: 36, s: 0 },
                 ],
-                [ // depth: 3
+                [
+                    // depth: 3
                     MpcModel { a: 1.067, sigma: 74, s: 0 },
                     MpcModel { a: 1.092, sigma: 81, s: 0 },
                     MpcModel { a: 1.048, sigma: 69, s: 0 },
                     MpcModel { a: 1.054, sigma: 55, s: 0 },
                 ],
-                [ // depth: 4
+                [
+                    // depth: 4
                     MpcModel { a: 1.065, sigma: 65, s: 1 },
                     MpcModel { a: 1.028, sigma: 76, s: 1 },
                     MpcModel { a: 1.023, sigma: 71, s: 1 },
                     MpcModel { a: 1.033, sigma: 56, s: 1 },
                 ],
-                [ // depth: 5
+                [
+                    // depth: 5
                     MpcModel { a: 1.088, sigma: 62, s: 1 },
                     MpcModel { a: 1.055, sigma: 71, s: 1 },
                     MpcModel { a: 1.050, sigma: 86, s: 1 },
                     MpcModel { a: 1.035, sigma: 61, s: 1 },
-                ]
-            ]
+                ],
+            ],
         }
     }
 }
@@ -246,22 +262,22 @@ impl SearchParams {
 #[derive(Clone)]
 #[repr(align(64))]
 struct Thread {
-    params: SearchParams,
-    nodes: u64,
-    qnodes: u64,
-    seldepth: usize,
-    stop: Arc<AtomicBool>,
-    stop_after: Option<Instant>,
-    node_limit: Option<u64>,
-    board: Vec<Board>,
-    pv: Vec<Vec<Move>>,
-    keystack: Vec<u64>,
-    index: usize,
-    history: [[[i16; 64]; 64]; 12],
-    conthist: [[i16; 2 * 6 * 64]; 2 * 6 * 64],
-    corrhist_p: [[i32; 16384]; 2],
+    params:       SearchParams,
+    nodes:        u64,
+    qnodes:       u64,
+    seldepth:     usize,
+    stop:         Arc<AtomicBool>,
+    stop_after:   Option<Instant>,
+    node_limit:   Option<u64>,
+    board:        Vec<Board>,
+    pv:           Vec<Vec<Move>>,
+    keystack:     Vec<u64>,
+    index:        usize,
+    history:      [[[i16; 64]; 64]; 12],
+    conthist:     [[i16; 2 * 6 * 64]; 2 * 6 * 64],
+    corrhist_p:   [[i32; 16384]; 2],
     corrhist_kbn: [[i32; 16384]; 2],
-    path: Vec<Option<(Piece, Move)>>,
+    path:         Vec<Option<(Piece, Move)>>,
 }
 
 impl Thread {
@@ -296,22 +312,24 @@ impl Thread {
         alpha = alpha.max(best);
 
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
-        if let Some(entry) = tt_entry && !expected_pvnode {
+        if let Some(entry) = tt_entry
+            && !expected_pvnode
+        {
             let score = i32::from(entry.score);
             match entry.flags {
                 TtFlags::Exact => {
                     return score;
-                }
+                },
                 TtFlags::Upper => {
                     if score <= alpha {
                         return score;
                     }
-                }
+                },
                 TtFlags::Lower => {
                     if score >= beta {
                         return score;
                     }
-                }
+                },
             }
         }
 
@@ -328,7 +346,7 @@ impl Thread {
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make(*m));
             } else {
-                self.board[ply+1] = self.board[ply].make(*m);
+                self.board[ply + 1] = self.board[ply].make(*m);
             }
 
             let score = -self.quiesce(-beta, -alpha, ply + 1, tt);
@@ -338,7 +356,7 @@ impl Thread {
 
                 self.pv[ply].clear();
                 self.pv[ply].push(*m);
-                let (this_pv, next_pv) = self.pv.split_at_mut(ply+1);
+                let (this_pv, next_pv) = self.pv.split_at_mut(ply + 1);
                 let (this_pv, next_pv) = (this_pv.last_mut().unwrap(), next_pv.first().unwrap());
                 this_pv.extend_from_slice(next_pv);
             }
@@ -377,7 +395,7 @@ impl Thread {
     #[cfg(target_arch = "aarch64")]
     #[inline(always)]
     fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {
-        use core::arch::aarch64::{_prefetch, _PREFETCH_READ, _PREFETCH_LOCALITY3};
+        use core::arch::aarch64::{_PREFETCH_LOCALITY3, _PREFETCH_READ, _prefetch};
 
         let entry = (board.hash_after(m) & ((tt.len() - 1) as u64)) as usize;
         let entry = &tt[entry];
@@ -387,7 +405,7 @@ impl Thread {
     #[cfg(target_arch = "x86_64")]
     #[inline(always)]
     fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {
-        use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+        use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
 
         let entry = (board.hash_after(m) & ((tt.len() - 1) as u64)) as usize;
         let entry = &tt[entry];
@@ -420,7 +438,8 @@ impl Thread {
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
         // History Heuristic
         {
-            let coloured_piece = 6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from()).unwrap() as usize;
+            let coloured_piece =
+                6 * usize::from(board.side() == Colour::Black) + board.piece_from_square(m.from()).unwrap() as usize;
             let history = &mut self.history[coloured_piece][m.from().into_inner() as usize][m.dest().into_inner() as usize];
             let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
@@ -474,7 +493,9 @@ impl Thread {
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 
-    pub fn search(&mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry], excluded_move: Option<Move>) -> i32 {
+    pub fn search(
+        &mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry], excluded_move: Option<Move>,
+    ) -> i32 {
         let expected_pvnode = alpha != beta - 1;
 
         if self.pv.len() <= ply {
@@ -500,22 +521,26 @@ impl Thread {
         }
 
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
-        if let Some(entry) = tt_entry && excluded_move.is_none() && !expected_pvnode && i32::from(entry.depth) >= depth {
+        if let Some(entry) = tt_entry
+            && excluded_move.is_none()
+            && !expected_pvnode
+            && i32::from(entry.depth) >= depth
+        {
             let score = i32::from(entry.score);
             match entry.flags {
                 TtFlags::Exact => {
                     return score;
-                }
+                },
                 TtFlags::Upper => {
                     if score <= alpha {
                         return score;
                     }
-                }
+                },
                 TtFlags::Lower => {
                     if score >= beta {
                         return score;
                     }
-                }
+                },
             }
         }
 
@@ -538,7 +563,7 @@ impl Thread {
                 let piece_count = (self.board[ply].data().piecemask().occupied().count_ones() as usize - 2) / 8;
                 self.params.mpc_model[(depth - 1) as usize][piece_count].clone()
             } else {
-                MpcModel { a: 0.0, sigma: 0, s: 0}
+                MpcModel { a: 0.0, sigma: 0, s: 0 }
             };
 
             if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth <= 5 {
@@ -563,7 +588,7 @@ impl Thread {
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make_null());
             } else {
-                self.board[ply+1] = self.board[ply].make_null();
+                self.board[ply + 1] = self.board[ply].make_null();
             }
             self.path.push(None);
             let reduction = 3;
@@ -666,11 +691,11 @@ impl Thread {
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make(*m));
             } else {
-                self.board[ply+1] = self.board[ply].make(*m);
+                self.board[ply + 1] = self.board[ply].make(*m);
             }
 
             // Check extension: does this move give check?
-            if extension == 0 && self.board[ply+1].in_check() {
+            if extension == 0 && self.board[ply + 1].in_check() {
                 extension += 1;
             }
 
@@ -685,7 +710,7 @@ impl Thread {
                     let movecount = (movecount as f32).ln();
                     reduction += (depth_f32 * movecount).mul_add(0.5, 1.0) as i32; // credit: adam
                     reduction -= i32::from(expected_pvnode);
-                    reduction = reduction.clamp(1, depth - 1);   
+                    reduction = reduction.clamp(1, depth - 1);
                 }
 
                 score = -self.search(depth - reduction + extension, -alpha - 1, -alpha, ply + 1, tt, None);
@@ -702,17 +727,22 @@ impl Thread {
 
                 self.pv[ply].clear();
                 self.pv[ply].push(*m);
-                let (this_pv, next_pv) = self.pv.split_at_mut(ply+1);
+                let (this_pv, next_pv) = self.pv.split_at_mut(ply + 1);
                 let (this_pv, next_pv) = (this_pv.last_mut().unwrap(), next_pv.first().unwrap());
                 this_pv.extend_from_slice(next_pv);
             }
 
             if self.index == 0 {
-                if let Some(node_limit) = self.node_limit && self.nodes + self.qnodes >= node_limit {
+                if let Some(node_limit) = self.node_limit
+                    && self.nodes + self.qnodes >= node_limit
+                {
                     self.stop.store(true, atomic::Ordering::Release);
                 }
 
-                if self.nodes.trailing_zeros() >= 10 && let Some(time) = self.stop_after && Instant::now() >= time {
+                if self.nodes.trailing_zeros() >= 10
+                    && let Some(time) = self.stop_after
+                    && Instant::now() >= time
+                {
                     self.stop.store(true, atomic::Ordering::Release);
                 }
             }
@@ -750,30 +780,23 @@ impl Thread {
         if excluded_move.is_none() {
             self.keystack.pop();
 
-            self.write_tt(
-                tt,
-                &self.board[ply],
-                ply,
-                TtData {
-                    m: best_move,
-                    score: best as i16,
-                    flags: if best >= beta {
-                        TtFlags::Lower
-                    } else if raised_alpha {
-                        TtFlags::Exact
-                    } else {
-                        TtFlags::Upper
-                    },
-                    depth: depth as u8,
-                    eval: eval as i16,
+            self.write_tt(tt, &self.board[ply], ply, TtData {
+                m:     best_move,
+                score: best as i16,
+                flags: if best >= beta {
+                    TtFlags::Lower
+                } else if raised_alpha {
+                    TtFlags::Exact
+                } else {
+                    TtFlags::Upper
                 },
-            );
+                depth: depth as u8,
+                eval:  eval as i16,
+            });
 
             if !self.board[ply].in_check()
                 && !best_move.unwrap().is_capture()
-                && (raised_alpha
-                    || (best >= beta && best >= eval)
-                    || (best <= alpha && best <= eval))
+                && (raised_alpha || (best >= beta && best >= eval) || (best <= alpha && best <= eval))
             {
                 self.update_corrhist(ply, depth, best - eval);
             }
@@ -784,45 +807,46 @@ impl Thread {
 }
 
 pub struct Search {
-    pool: rayon::ThreadPool,
-    threads: Vec<Thread>,
-    tt: Vec<TtEntry>,
-    stop: Arc<AtomicBool>,
+    pool:       rayon::ThreadPool,
+    threads:    Vec<Thread>,
+    tt:         Vec<TtEntry>,
+    stop:       Arc<AtomicBool>,
     stop_after: Option<Instant>,
     pub params: SearchParams,
 }
 
 impl Search {
     #[must_use]
-    pub fn new(
-        threads: usize,
-    ) -> Self {
+    pub fn new(threads: usize) -> Self {
         let mut this = Self {
-            pool: rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap(),
-            threads: vec![],
-            tt: vec![],
-            stop: Arc::new(AtomicBool::new(false)),
+            pool:       rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap(),
+            threads:    vec![],
+            tt:         vec![],
+            stop:       Arc::new(AtomicBool::new(false)),
             stop_after: None,
-            params: SearchParams::default(),
+            params:     SearchParams::default(),
         };
-        this.threads = vec![Thread {
-                params: this.params.clone(),
-                nodes: 0,
-                qnodes: 0,
-                seldepth: 0,
-                board: vec![],
-                pv: vec![],
-                keystack: vec![],
-                stop: Arc::clone(&this.stop),
-                stop_after: None,
-                node_limit: None,
-                index: 0,
-                history: [[[0; _]; _]; _],
-                conthist: [[0; _]; _],
-                corrhist_p: [[0; _]; _],
+        this.threads = vec![
+            Thread {
+                params:       this.params.clone(),
+                nodes:        0,
+                qnodes:       0,
+                seldepth:     0,
+                board:        vec![],
+                pv:           vec![],
+                keystack:     vec![],
+                stop:         Arc::clone(&this.stop),
+                stop_after:   None,
+                node_limit:   None,
+                index:        0,
+                history:      [[[0; _]; _]; _],
+                conthist:     [[0; _]; _],
+                corrhist_p:   [[0; _]; _],
                 corrhist_kbn: [[0; _]; _],
-                path: vec![],
-            }; threads];
+                path:         vec![],
+            };
+            threads
+        ];
         this
     }
 
@@ -844,13 +868,12 @@ impl Search {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn search(
-        &mut self, depth: i32, alpha: i32, beta: i32, pv: &mut Vec<Move>,
-    ) -> i32 {
+    pub fn search(&mut self, depth: i32, alpha: i32, beta: i32, pv: &mut Vec<Move>) -> i32 {
         let scores = self.pool.install(|| {
-            self.threads.par_iter_mut().map(|thread| {
-                thread.search(depth, alpha, beta, 0, &self.tt, None)
-            }).collect::<Vec<_>>()
+            self.threads
+                .par_iter_mut()
+                .map(|thread| thread.search(depth, alpha, beta, 0, &self.tt, None))
+                .collect::<Vec<_>>()
         });
 
         *pv = self.threads[0].pv[0].clone();

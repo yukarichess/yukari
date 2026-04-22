@@ -4,9 +4,9 @@ use std::str::FromStr;
 #[derive(Clone, Copy, Debug)]
 pub struct TimeControl {
     /// Current time remaining on our clock in seconds
-    remaining: f32,
+    remaining:   f32,
     /// Mode in which the clock is operating
-    pub mode: TimeMode,
+    pub mode:    TimeMode,
     /// Number of moves made so far.
     move_number: u32,
 }
@@ -47,7 +47,7 @@ impl TimeControl {
             TimeMode::MoveTime(millisecs) => {
                 let secs = (millisecs as f32 / 1000.0) - 0.02;
                 (secs, secs)
-            }
+            },
             TimeMode::Incremental { base: _, increment } => {
                 let move_number = self.move_number as f32;
                 let expected_length =
@@ -57,7 +57,7 @@ impl TimeControl {
                 let soft = remaining.min((remaining - increment) / expected_length + increment);
                 let hard = remaining / 3.0;
                 (soft, hard)
-            }
+            },
             TimeMode::Classical { base: _, mps } => {
                 let remaining = self.remaining - 0.02;
                 let mps = mps as i32;
@@ -71,7 +71,7 @@ impl TimeControl {
 
                 let remaining = remaining / (movesleft as f32);
                 (remaining, remaining)
-            }
+            },
         }
     }
 }
@@ -84,7 +84,7 @@ pub enum TimeMode {
     /// Incremental mode gives us the whole game's clock, plus time to be added after each move
     Incremental {
         /// Base time for the game in seconds
-        base: f32,
+        base:      f32,
         /// Increment in seconds after each move
         increment: f32,
     },
@@ -93,7 +93,7 @@ pub enum TimeMode {
         /// Base time for the game in seconds
         base: f32,
         /// Moves per session (number of moves before time is bumped again)
-        mps: u32,
+        mps:  u32,
     },
 }
 
@@ -122,7 +122,7 @@ impl FromStr for TimeMode {
                     // In classical we already know the increment is zero
                     Ok(Self::Classical { base, mps })
                 }
-            }
+            },
             _ => Err(()),
         }
     }

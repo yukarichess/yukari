@@ -1,4 +1,7 @@
-use std::{fmt::{Debug, Display}, num::NonZeroU16};
+use std::{
+    fmt::{Debug, Display},
+    num::NonZeroU16,
+};
 
 use crate::{
     piece::Piece,
@@ -111,7 +114,7 @@ pub enum MoveType {
     CapturePromotionKnight,
     CapturePromotionBishop,
     CapturePromotionRook,
-    CapturePromotionQueen
+    CapturePromotionQueen,
 }
 
 impl MoveType {

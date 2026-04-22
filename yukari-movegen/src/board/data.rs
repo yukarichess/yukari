@@ -18,20 +18,20 @@ use crate::{
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone)]
 pub struct BoardData {
-    bitlist: BitlistArray,
-    piecelist: Piecelist,
-    index: PieceIndexArray,
-    piecemask: Piecemask,
+    bitlist:      BitlistArray,
+    piecelist:    Piecelist,
+    index:        PieceIndexArray,
+    piecemask:    Piecemask,
     /// Zobrist hash.
-    hash_pawns: u64,
+    hash_pawns:   u64,
     hash_knights: u64,
     hash_bishops: u64,
-    hash_rooks: u64,
-    hash_queens: u64,
-    hash_kings: u64,
-    hash_other: u64,
+    hash_rooks:   u64,
+    hash_queens:  u64,
+    hash_kings:   u64,
+    hash_other:   u64,
     /// Evaluation state.
-    eval: Eval,
+    eval:         Eval,
 }
 
 impl Default for BoardData {
@@ -44,18 +44,18 @@ impl BoardData {
     /// Create a new board.
     pub fn new() -> Self {
         Self {
-            bitlist: BitlistArray::new(),
-            piecelist: Piecelist::new(),
-            index: PieceIndexArray::new(),
-            piecemask: Piecemask::new(),
-            hash_pawns: 0,
+            bitlist:      BitlistArray::new(),
+            piecelist:    Piecelist::new(),
+            index:        PieceIndexArray::new(),
+            piecemask:    Piecemask::new(),
+            hash_pawns:   0,
             hash_knights: 0,
             hash_bishops: 0,
-            hash_rooks: 0,
-            hash_queens: 0,
-            hash_kings: 0,
-            hash_other: 0,
-            eval: Eval::new(),
+            hash_rooks:   0,
+            hash_queens:  0,
+            hash_kings:   0,
+            hash_other:   0,
+            eval:         Eval::new(),
         }
     }
 
@@ -324,8 +324,10 @@ impl BoardData {
             );
         }
 
-        self.eval.remove_piece_for_acc(piece, from_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
-        self.eval.add_piece_for_acc(piece, to_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
+        self.eval
+            .remove_piece_for_acc(piece, from_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
+        self.eval
+            .add_piece_for_acc(piece, to_square, piece_index.colour(), white_king, black_king, !piece_index.is_white());
         // fixup: clear threats to old square
         for attack in self.bitlist[from_square] & !Bitlist::from_piece(piece_index) {
             self.eval.remove_threat_for_acc(
@@ -391,7 +393,8 @@ impl BoardData {
             return;
         }
 
-        self.eval.move_piece(piece, from_square, to_square, piece_index.colour(), white_king, black_king);
+        self.eval
+            .move_piece(piece, from_square, to_square, piece_index.colour(), white_king, black_king);
 
         // fixup: clear threats to old square
         for attack in self.bitlist[from_square] & !Bitlist::from_piece(piece_index) {

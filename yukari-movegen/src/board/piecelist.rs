@@ -40,7 +40,7 @@ impl Piecelist {
             Some(square_index) => {
                 debug_assert!(square_index == square, "attempted to remove wrong piece from square");
                 self.0[piece_index] = None;
-            }
+            },
         }
     }
 

@@ -7,7 +7,7 @@ use crate::{
 /// Pin information in a board.
 #[derive(Default)]
 pub struct PinInfo {
-    pub pins: [Option<Direction>; 32],
+    pub pins:             [Option<Direction>; 32],
     pub enpassant_pinned: Bitlist,
 }
 
@@ -50,10 +50,10 @@ impl PinInfo {
                                 friendly_blocker = None;
                                 enemy_blocker = None;
                                 break;
-                            }
+                            },
                             None => {
                                 enemy_blocker = Some(piece_index);
-                            }
+                            },
                         }
                     } else {
                         match friendly_blocker {
@@ -61,10 +61,10 @@ impl PinInfo {
                                 friendly_blocker = None;
                                 enemy_blocker = None;
                                 break;
-                            }
+                            },
                             None => {
                                 friendly_blocker = Some(piece_index);
-                            }
+                            },
                         }
                     }
                 }
@@ -76,7 +76,7 @@ impl PinInfo {
                 // There is one friendly blocker: it is pinned.
                 (Some(blocker), None) => {
                     info.pins[blocker.into_inner() as usize] = Some(pinner_king_dir);
-                }
+                },
                 // There is one friendly blocker and one enemy blocker: it *may* be pinned for en-passant purposes
                 (Some(friendly_blocker), Some(enemy_blocker)) => {
                     // If at least one of the blockers is a piece, we don't need to worry about en-passant.
@@ -89,7 +89,7 @@ impl PinInfo {
 
                     // Alas, we do have to care.
                     info.enpassant_pinned |= Bitlist::from(friendly_blocker);
-                }
+                },
             }
         }
 

@@ -1,6 +1,56 @@
-group_imports = "StdExternalCrate"
-imports_granularity = "Crate"
-reorder_impl_items = true
 max_width = 132
-use_small_heuristics = "Max"
+tab_spaces = 4
+newline_style = "Unix"
+style_edition = "2024"
+unstable_features = true
+
+array_width = 110
+
+brace_style = "SameLineWhere"
+blank_lines_upper_bound = 1
+
+chain_width = 90
+combine_control_expr = false
+condense_wildcard_suffixes = true
+control_brace_style = "AlwaysSameLine"
+
+enum_discrim_align_threshold = 0
+
+fn_call_width = 110
 fn_params_layout = "Compressed"
+format_macro_bodies = true
+float_literal_trailing_zero = "Preserve"
+
+group_imports = "StdExternalCrate"
+
+hex_literal_case = "Upper"
+
+imports_granularity = "Crate"
+inline_attribute_width = 60
+
+match_arm_indent = true
+match_arm_leading_pipes = "Never"
+match_block_trailing_comma = true
+
+overflow_delimited_expr = true
+
+reorder_impl_items = false
+reorder_imports = true
+
+struct_lit_width = 100
+struct_lit_single_line = true
+spaces_around_ranges = false
+struct_field_align_threshold = 12
+single_line_if_else_max_width = 110
+single_line_let_else_max_width = 110
+short_array_element_width_threshold = 30
+
+trailing_comma = "Vertical"
+trailing_semicolon = true
+
+use_try_shorthand = true
+use_small_heuristics = "Off"
+
+where_single_line = true
+
+indent_style = "Block"

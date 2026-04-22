@@ -18,11 +18,11 @@ pub struct Network {
     /// Column-Major `HIDDEN_SIZE x INPUTS` matrix.
     feature_weights: [Accumulator; INPUTS],
     /// Vector with dimension `HIDDEN_SIZE`.
-    feature_bias: Accumulator,
+    feature_bias:    Accumulator,
     /// Row-Major `OUTPUT_BUCKETS x (2 * HIDDEN_SIZE)` matrix.
-    output_weights: [[Accumulator; 2]; OUTPUT_BUCKETS],
+    output_weights:  [[Accumulator; 2]; OUTPUT_BUCKETS],
     /// Scalar output biases.
-    output_bias: [i16; OUTPUT_BUCKETS],
+    output_bias:     [i16; OUTPUT_BUCKETS],
 }
 
 static NNUE: Network =
@@ -39,7 +39,9 @@ impl Network {
 
         // Side-To-Move Accumulator -> Output.
         let (us_vals, []) = us.vals.as_chunks::<64>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<64>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<64>() else {
+            unreachable!()
+        };
         for (input, weight) in us_vals.iter().zip(output_weights.iter()) {
             // Squared Clipped `ReLU` - Activation Function.
             // Note that this takes the i16s in the accumulator to i32s.
@@ -50,7 +52,9 @@ impl Network {
 
         // Not-Side-To-Move Accumulator -> Output.
         let (them_vals, []) = them.vals.as_chunks::<64>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<64>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<64>() else {
+            unreachable!()
+        };
         for (input, weight) in them_vals.iter().zip(output_weights.iter()) {
             let input = i16x64::from_array(*input).simd_clamp(min, max);
             let weight = input * i16x64::from_array(*weight);
@@ -139,9 +143,11 @@ impl Eval {
         &mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool,
     ) {
         if white_acc {
-            self.white.add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+            self.white
+                .add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
         } else {
-            self.black.add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+            self.black
+                .add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
         }
     }
 
@@ -179,8 +185,10 @@ impl Eval {
     }
 
     pub fn add_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        self.white.add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
-        self.black.add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+        self.white
+            .add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+        self.black
+            .add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -217,9 +225,11 @@ impl Eval {
         &mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool,
     ) {
         if white_acc {
-            self.white.remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+            self.white
+                .remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
         } else {
-            self.black.remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+            self.black
+                .remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
         }
     }
 
@@ -257,8 +267,10 @@ impl Eval {
     }
 
     pub fn remove_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        self.white.remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
-        self.black.remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+        self.white
+            .remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+        self.black
+            .remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
     }
 
     #[allow(clippy::too_many_arguments)]
