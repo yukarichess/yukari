@@ -49,27 +49,24 @@ impl From<&Board> for MarlinFormat {
         };
         for sq in 0..64 {
             let square = unsafe { Square::from_u8_unchecked(sq) };
-            let Some(piece) = board.data().piece_index(square) else { continue };
+            let Some(piece_idx) = board.data().piece_index(square) else { continue };
 
-            let mut piece = if board.piece_from_bit(piece) == Piece::Rook {
-                if (board.castle().0 && square == h1)
+            let piece = board.piece_from_bit(piece_idx);
+            let unmoved_rook = piece == Piece::Rook
+                && ((board.castle().0 && square == h1)
                     || (board.castle().1 && square == a1)
                     || (board.castle().2 && square == h8)
-                    || (board.castle().3 && square == a8)
-                {
-                    // "unmoved rook" to represent castling rights.
-                    (6_u8) | ((piece.colour() as u8) << 3)
-                } else {
-                    (board.piece_from_bit(piece) as u8) | ((piece.colour() as u8) << 3)
-                }
-            } else {
-                (board.piece_from_bit(piece) as u8) | ((piece.colour() as u8) << 3)
-            };
+                    || (board.castle().3 && square == a8));
+
+            // marlinformat uses piece code 6 ("unmoved rook") to mark castling rights.
+            let code = if unmoved_rook { 6 } else { piece as u8 };
+            let mut nibble = code | ((piece_idx.colour() as u8) << 3);
+
             let piece_count = this.occupancy.count_ones() as usize;
             if piece_count % 2 == 1 {
-                piece <<= 4;
+                nibble <<= 4;
             }
-            this.pieces[piece_count / 2] |= piece;
+            this.pieces[piece_count / 2] |= nibble;
             this.occupancy |= 1_u64 << sq;
         }
 
