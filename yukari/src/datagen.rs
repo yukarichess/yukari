@@ -245,7 +245,6 @@ impl<'a, T: Write> DataGen<'a, T> {
 
     fn play_game(&mut self) -> bool {
         let mut yukari_board = Board::startpos();
-        let mut cc_board = cozy_chess::Board::startpos();
         let mut keystack = vec![yukari_board.hash()];
 
         // Opening: eight random moves.
@@ -258,15 +257,6 @@ impl<'a, T: Write> DataGen<'a, T> {
             };
             yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
-            let m_str = format!("{m}");
-            let Ok(cc_m) = cozy_chess::util::parse_uci_move(&cc_board, &m_str) else {
-                eprintln!("cozy-chess considers move {m} on board {cc_board} to be invalid!");
-                return false;
-            };
-            let Ok(()) = cc_board.try_play(cc_m) else {
-                eprintln!("cozy-chess considers move {m} on board {cc_board} to be illegal!");
-                return false;
-            };
         }
 
         // Check: the "opening" must not be excessively lopsided.
@@ -287,31 +277,31 @@ impl<'a, T: Write> DataGen<'a, T> {
 
         // Rollout: "soft 5k nodes" until game end.
         loop {
-            // Game ended?
-            match cc_board.status() {
-                cozy_chess::GameStatus::Ongoing => {
-                    // cozy-chess doesn't track insufficient material, so check ourselves.
-                    if yukari_board.insufficient_material() {
-                        self.emit(game, MarlinWdl::Draw);
-                        return true;
-                    }
-                    // Threefold repetition.
-                    let hash = yukari_board.hash();
-                    let reps = keystack.iter().filter(|k| **k == hash).take(3).count();
-                    if reps == 3 {
-                        self.emit(game, MarlinWdl::Draw);
-                        return true;
-                    }
-                },
-                cozy_chess::GameStatus::Drawn => {
-                    self.emit(game, MarlinWdl::Draw);
-                    return true;
-                },
-                cozy_chess::GameStatus::Won => {
-                    let wdl = if yukari_board.side() == Colour::White { MarlinWdl::BlackWin } else { MarlinWdl::WhiteWin };
-                    self.emit(game, wdl);
-                    return true;
-                },
+            // Mate or stalemate: no legal moves.
+            let mut moves = ArrayVec::new();
+            yukari_board.generate(&mut moves);
+            if moves.is_empty() {
+                let wdl = if yukari_board.in_check() {
+                    // Side to move is mated.
+                    if yukari_board.side() == Colour::White { MarlinWdl::BlackWin } else { MarlinWdl::WhiteWin }
+                } else {
+                    MarlinWdl::Draw
+                };
+                self.emit(game, wdl);
+                return true;
+            }
+
+            if yukari_board.insufficient_material() {
+                self.emit(game, MarlinWdl::Draw);
+                return true;
+            }
+
+            // Threefold repetition.
+            let hash = yukari_board.hash();
+            let reps = keystack.iter().filter(|k| **k == hash).take(3).count();
+            if reps == 3 {
+                self.emit(game, MarlinWdl::Draw);
+                return true;
             }
 
             // Can we adjudicate?
@@ -328,15 +318,6 @@ impl<'a, T: Write> DataGen<'a, T> {
 
             let Some((m, score)) = self.search_rollout(&yukari_board, &keystack) else {
                 eprintln!("search did not find a move on board {yukari_board}");
-                return false;
-            };
-            let m_str = format!("{m}");
-            let Ok(cc_m) = cozy_chess::util::parse_uci_move(&cc_board, &m_str) else {
-                eprintln!("cozy-chess considers move {m} on board {cc_board} to be invalid!");
-                return false;
-            };
-            let Ok(()) = cc_board.try_play(cc_m) else {
-                eprintln!("cozy-chess considers move {m} on board {cc_board} to be illegal!");
                 return false;
             };
 
