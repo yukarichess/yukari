@@ -173,27 +173,26 @@ impl ViriFormat {
 }
 
 pub struct DataGen<'a, T: Write> {
-    f:         &'a Mutex<T>,
-    search:    search::Search,
-    rng:       rand::rngs::ThreadRng,
-    positions: usize,
+    f:      &'a Mutex<T>,
+    search: search::Search,
+    rng:    rand::rngs::ThreadRng,
 }
 
 impl<'a, T: Write> DataGen<'a, T> {
     pub fn new(f: &'a Mutex<T>) -> DataGen<'a, T> {
-        let mut this = Self { f, search: search::Search::new(1), rng: rand::rng(), positions: 0 };
+        let mut this = Self { f, search: search::Search::new(1), rng: rand::rng() };
         this.search.allocate_tt(16);
         this
     }
 
-    pub fn play(&mut self, mut games: usize) -> usize {
-        while games > 0 {
-            self.positions = 0;
-            if self.play_game() {
-                games -= 1;
+    /// Play one accepted game and return its position count.
+    /// Retries internally on rejected openings (early mate, lopsided verdict).
+    pub fn play_one(&mut self) -> usize {
+        loop {
+            if let Some(positions) = self.play_game() {
+                return positions;
             }
         }
-        self.positions
     }
 
     /// Serialize `game` locally, then hand the bytes to the shared writer
@@ -243,7 +242,7 @@ impl<'a, T: Write> DataGen<'a, T> {
         Some((pv[0], score.clamp(-10_000, 10_000) as i16))
     }
 
-    fn play_game(&mut self) -> bool {
+    fn play_game(&mut self) -> Option<usize> {
         let mut yukari_board = Board::startpos();
         let mut keystack = vec![yukari_board.hash()];
 
@@ -253,7 +252,7 @@ impl<'a, T: Write> DataGen<'a, T> {
             yukari_board.generate(&mut moves);
             let Some(&m) = moves.iter().choose(&mut self.rng) else {
                 // checkmate in the opening, maybe?
-                return false;
+                return None;
             };
             yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
@@ -263,14 +262,15 @@ impl<'a, T: Write> DataGen<'a, T> {
         let mut game = {
             let Some((_, score)) = self.search_verdict(&yukari_board, &keystack) else {
                 // checkmate???
-                return false;
+                return None;
             };
             if score.abs() >= 1000 {
-                return false;
+                return None;
             }
             ViriFormat::new(&yukari_board)
         };
 
+        let mut positions = 0_usize;
         let mut draw_adj_counter = 0;
         let mut win_adj_counter = 0;
         let mut win_adj_white = true;
@@ -288,12 +288,12 @@ impl<'a, T: Write> DataGen<'a, T> {
                     MarlinWdl::Draw
                 };
                 self.emit(game, wdl);
-                return true;
+                return Some(positions);
             }
 
             if yukari_board.insufficient_material() {
                 self.emit(game, MarlinWdl::Draw);
-                return true;
+                return Some(positions);
             }
 
             // Threefold repetition.
@@ -301,31 +301,31 @@ impl<'a, T: Write> DataGen<'a, T> {
             let reps = keystack.iter().filter(|k| **k == hash).take(3).count();
             if reps == 3 {
                 self.emit(game, MarlinWdl::Draw);
-                return true;
+                return Some(positions);
             }
 
             // Can we adjudicate?
             if win_adj_counter >= 6 {
                 let wdl = if win_adj_white { MarlinWdl::WhiteWin } else { MarlinWdl::BlackWin };
                 self.emit(game, wdl);
-                return true;
+                return Some(positions);
             }
 
-            if draw_adj_counter >= 16 && self.positions >= 40 {
+            if draw_adj_counter >= 16 && positions >= 40 {
                 self.emit(game, MarlinWdl::Draw);
-                return true;
+                return Some(positions);
             }
 
             let Some((m, score)) = self.search_rollout(&yukari_board, &keystack) else {
                 eprintln!("search did not find a move on board {yukari_board}");
-                return false;
+                return None;
             };
 
             let score = if yukari_board.side() == Colour::Black { -score } else { score };
             game.push(m, score);
             yukari_board = yukari_board.make(m);
             keystack.push(yukari_board.hash());
-            self.positions += 1;
+            positions += 1;
 
             if score.abs() <= 10 {
                 draw_adj_counter += 1;

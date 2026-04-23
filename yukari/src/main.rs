@@ -462,7 +462,7 @@ fn run() -> io::Result<()> {
                                 if g >= GAMES {
                                     break;
                                 }
-                                positions.fetch_add(dg.play(1), Ordering::SeqCst);
+                                positions.fetch_add(dg.play_one(), Ordering::SeqCst);
                                 progress.inc(1);
                             }
                         })
