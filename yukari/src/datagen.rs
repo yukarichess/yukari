@@ -191,11 +191,12 @@ pub struct DataGen<'a, T: Write> {
     f:      &'a Mutex<T>,
     search: search::Search,
     rng:    rand::rngs::ThreadRng,
+    pv:     Vec<Move>,
 }
 
 impl<'a, T: Write> DataGen<'a, T> {
     pub fn new(f: &'a Mutex<T>) -> DataGen<'a, T> {
-        let mut this = Self { f, search: search::Search::new(1), rng: rand::rng() };
+        let mut this = Self { f, search: search::Search::new(1), rng: rand::rng(), pv: Vec::new() };
         this.search.allocate_tt(16);
         this
     }
@@ -233,25 +234,42 @@ impl<'a, T: Write> DataGen<'a, T> {
     fn iterate(
         &mut self, board: &Board, keystack: &[u64], time_cap: Duration, max_depth: i32, node_cap: Option<u64>,
     ) -> Option<(Move, i16)> {
+        const ASPIRATION_MIN_DEPTH: i32 = 5;
+        const ASPIRATION_WINDOW: i32 = 30;
+
         let stop_after = Instant::now() + time_cap;
-        let mut pv = Vec::new();
         let mut score = 0;
+        self.pv.clear();
 
         self.search.prepare(board, Some(stop_after), None, keystack);
 
         for depth in 0..=max_depth {
-            pv.clear();
-            score = self.search.search(depth, -i32::MAX, i32::MAX, &mut pv);
+            // Aspirate around the previous score once deep enough;
+            // if it falls outside the window, fall back to a full re-search.
+            let (alpha, beta) = if depth >= ASPIRATION_MIN_DEPTH {
+                (score - ASPIRATION_WINDOW, score + ASPIRATION_WINDOW)
+            } else {
+                (-i32::MAX, i32::MAX)
+            };
+
+            self.pv.clear();
+            let mut s = self.search.search(depth, alpha, beta, &mut self.pv);
+            if s <= alpha || s >= beta {
+                self.pv.clear();
+                s = self.search.search(depth, -i32::MAX, i32::MAX, &mut self.pv);
+            }
+            score = s;
+
             if let Some(cap) = node_cap
                 && self.search.nodes() + self.search.qnodes() > cap
             {
                 break;
             }
         }
-        if pv.is_empty() {
+        if self.pv.is_empty() {
             return None;
         }
-        Some((pv[0], score.clamp(-10_000, 10_000) as i16))
+        Some((self.pv[0], score.clamp(-10_000, 10_000) as i16))
     }
 
     fn play_game(&mut self) -> Option<usize> {
@@ -345,9 +363,22 @@ impl<'a, T: Write> DataGen<'a, T> {
                 draw_adj_counter = 0;
             }
 
-            if score.abs() >= WIN_ADJ_CP {
-                win_adj_counter += 1;
-                win_adj_white = score >= WIN_ADJ_CP;
+            // Require a consistent winner across WIN_ADJ_PLIES;
+            // a sign flip restarts the count on the new side.
+            if score >= WIN_ADJ_CP {
+                if win_adj_white {
+                    win_adj_counter += 1;
+                } else {
+                    win_adj_counter = 1;
+                    win_adj_white = true;
+                }
+            } else if score <= -WIN_ADJ_CP {
+                if !win_adj_white {
+                    win_adj_counter += 1;
+                } else {
+                    win_adj_counter = 1;
+                    win_adj_white = false;
+                }
             } else {
                 win_adj_counter = 0;
             }
