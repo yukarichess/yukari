@@ -10,6 +10,21 @@ use yukari_movegen::{Board, Colour, File, Move, MoveType, Piece, Rank, Square};
 
 use crate::search;
 
+const VERDICT_REJECT_CP: i16 = 1000;
+
+const WIN_ADJ_CP: i16 = 400;
+const WIN_ADJ_PLIES: i32 = 6;
+
+const DRAW_ADJ_CP: i16 = 10;
+const DRAW_ADJ_PLIES: i32 = 16;
+const DRAW_ADJ_MIN_POSITIONS: usize = 40;
+
+const ROLLOUT_NODE_CAP: u64 = 5_000;
+const ROLLOUT_TIME: Duration = Duration::from_millis(250);
+
+const VERDICT_DEPTH: i32 = 10;
+const VERDICT_TIME: Duration = Duration::from_secs(2);
+
 #[derive(Clone, Copy)]
 #[repr(u8)]
 enum MarlinWdl {
@@ -203,14 +218,13 @@ impl<'a, T: Write> DataGen<'a, T> {
         self.f.lock().unwrap().write_all(&buf).unwrap();
     }
 
-    /// Iterate until ~5k nodes, 250ms cap.
     fn search_rollout(&mut self, board: &Board, keystack: &[u64]) -> Option<(Move, i16)> {
-        self.iterate(board, keystack, Duration::from_millis(250), 63, Some(5_000))
+        self.iterate(board, keystack, ROLLOUT_TIME, 63, Some(ROLLOUT_NODE_CAP))
     }
 
-    /// Fixed depth 10, 2s cap. Used once to vet the random opening.
+    /// Used once to vet the random opening.
     fn search_verdict(&mut self, board: &Board, keystack: &[u64]) -> Option<(Move, i16)> {
-        self.iterate(board, keystack, Duration::from_secs(2), 10, None)
+        self.iterate(board, keystack, VERDICT_TIME, VERDICT_DEPTH, None)
     }
 
     /// Iterative-deepening driver shared by rollout and verdict searches.
@@ -262,7 +276,7 @@ impl<'a, T: Write> DataGen<'a, T> {
                 // checkmate???
                 return None;
             };
-            if score.abs() >= 1000 {
+            if score.abs() >= VERDICT_REJECT_CP {
                 return None;
             }
             ViriFormat::new(&yukari_board)
@@ -303,13 +317,13 @@ impl<'a, T: Write> DataGen<'a, T> {
             }
 
             // Can we adjudicate?
-            if win_adj_counter >= 6 {
+            if win_adj_counter >= WIN_ADJ_PLIES {
                 let wdl = if win_adj_white { MarlinWdl::WhiteWin } else { MarlinWdl::BlackWin };
                 self.emit(game, wdl);
                 return Some(positions);
             }
 
-            if draw_adj_counter >= 16 && positions >= 40 {
+            if draw_adj_counter >= DRAW_ADJ_PLIES && positions >= DRAW_ADJ_MIN_POSITIONS {
                 self.emit(game, MarlinWdl::Draw);
                 return Some(positions);
             }
@@ -325,15 +339,15 @@ impl<'a, T: Write> DataGen<'a, T> {
             keystack.push(yukari_board.hash());
             positions += 1;
 
-            if score.abs() <= 10 {
+            if score.abs() <= DRAW_ADJ_CP {
                 draw_adj_counter += 1;
             } else {
                 draw_adj_counter = 0;
             }
 
-            if score.abs() >= 400 {
+            if score.abs() >= WIN_ADJ_CP {
                 win_adj_counter += 1;
-                win_adj_white = score >= 400;
+                win_adj_white = score >= WIN_ADJ_CP;
             } else {
                 win_adj_counter = 0;
             }
