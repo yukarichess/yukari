@@ -30,8 +30,8 @@ struct MarlinFormat {
     _extra:          u8,
 }
 
-impl From<Board> for MarlinFormat {
-    fn from(board: Board) -> Self {
+impl From<&Board> for MarlinFormat {
+    fn from(board: &Board) -> Self {
         let a1 = Square::from_rank_file(Rank::One, File::A);
         let a8 = Square::from_rank_file(Rank::Eight, File::A);
         let h1 = Square::from_rank_file(Rank::One, File::H);
@@ -144,7 +144,7 @@ struct ViriFormat {
 }
 
 impl ViriFormat {
-    pub fn new(board: Board) -> Self {
+    pub fn new(board: &Board) -> Self {
         Self { position: MarlinFormat::from(board), moves: Vec::new() }
     }
 
@@ -208,12 +208,12 @@ impl<'a, T: Write> DataGen<'a, T> {
     }
 
     /// Iterate until ~5k nodes, 250ms cap.
-    fn search_rollout(&mut self, board: Board, keystack: &[u64]) -> Option<(Move, i16)> {
+    fn search_rollout(&mut self, board: &Board, keystack: &[u64]) -> Option<(Move, i16)> {
         let stop_after = Instant::now() + Duration::from_millis(250);
         let mut pv = Vec::new();
         let mut score = 0;
 
-        self.search.prepare(&board, Some(stop_after), None, keystack);
+        self.search.prepare(board, Some(stop_after), None, keystack);
 
         for depth in 0..=63 {
             pv.clear();
@@ -229,12 +229,12 @@ impl<'a, T: Write> DataGen<'a, T> {
     }
 
     /// Fixed depth 10, 2s cap. Used once to vet the random opening.
-    fn search_verdict(&mut self, board: Board, keystack: &[u64]) -> Option<(Move, i16)> {
+    fn search_verdict(&mut self, board: &Board, keystack: &[u64]) -> Option<(Move, i16)> {
         let stop_after = Instant::now() + Duration::from_secs(2);
         let mut pv = Vec::new();
         let mut score = 0;
 
-        self.search.prepare(&board, Some(stop_after), None, keystack);
+        self.search.prepare(board, Some(stop_after), None, keystack);
 
         for depth in 0..=10 {
             pv.clear();
@@ -274,14 +274,14 @@ impl<'a, T: Write> DataGen<'a, T> {
 
         // Check: the "opening" must not be excessively lopsided.
         let mut game = {
-            let Some((_, score)) = self.search_verdict(yukari_board.clone(), &keystack) else {
+            let Some((_, score)) = self.search_verdict(&yukari_board, &keystack) else {
                 // checkmate???
                 return false;
             };
             if score.abs() >= 1000 {
                 return false;
             }
-            ViriFormat::new(yukari_board.clone())
+            ViriFormat::new(&yukari_board)
         };
 
         let mut draw_adj_counter = 0;
@@ -328,7 +328,7 @@ impl<'a, T: Write> DataGen<'a, T> {
                 return true;
             }
 
-            let Some((m, score)) = self.search_rollout(yukari_board.clone(), &keystack) else {
+            let Some((m, score)) = self.search_rollout(&yukari_board, &keystack) else {
                 eprintln!("search did not find a move on board {yukari_board}");
                 return false;
             };
