@@ -357,7 +357,6 @@ impl<'a, T: Write> DataGen<'a, T> {
                 win_adj_white = score >= 400;
             } else {
                 win_adj_counter = 0;
-                win_adj_white = false;
             }
         }
     }
