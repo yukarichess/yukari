@@ -205,36 +205,34 @@ impl<'a, T: Write> DataGen<'a, T> {
 
     /// Iterate until ~5k nodes, 250ms cap.
     fn search_rollout(&mut self, board: &Board, keystack: &[u64]) -> Option<(Move, i16)> {
-        let stop_after = Instant::now() + Duration::from_millis(250);
-        let mut pv = Vec::new();
-        let mut score = 0;
-
-        self.search.prepare(board, Some(stop_after), None, keystack);
-
-        for depth in 0..=63 {
-            pv.clear();
-            score = self.search.search(depth, -i32::MAX, i32::MAX, &mut pv);
-            if self.search.nodes() + self.search.qnodes() > 5_000 {
-                break;
-            }
-        }
-        if pv.is_empty() {
-            return None;
-        }
-        Some((pv[0], score.clamp(-10_000, 10_000) as i16))
+        self.iterate(board, keystack, Duration::from_millis(250), 63, Some(5_000))
     }
 
     /// Fixed depth 10, 2s cap. Used once to vet the random opening.
     fn search_verdict(&mut self, board: &Board, keystack: &[u64]) -> Option<(Move, i16)> {
-        let stop_after = Instant::now() + Duration::from_secs(2);
+        self.iterate(board, keystack, Duration::from_secs(2), 10, None)
+    }
+
+    /// Iterative-deepening driver shared by rollout and verdict searches.
+    /// Breaks between iterations once `node_cap` is reached so the returned
+    /// PV is always from a completed depth.
+    fn iterate(
+        &mut self, board: &Board, keystack: &[u64], time_cap: Duration, max_depth: i32, node_cap: Option<u64>,
+    ) -> Option<(Move, i16)> {
+        let stop_after = Instant::now() + time_cap;
         let mut pv = Vec::new();
         let mut score = 0;
 
         self.search.prepare(board, Some(stop_after), None, keystack);
 
-        for depth in 0..=10 {
+        for depth in 0..=max_depth {
             pv.clear();
             score = self.search.search(depth, -i32::MAX, i32::MAX, &mut pv);
+            if let Some(cap) = node_cap
+                && self.search.nodes() + self.search.qnodes() > cap
+            {
+                break;
+            }
         }
         if pv.is_empty() {
             return None;
