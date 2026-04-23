@@ -296,8 +296,9 @@ impl<'a, T: Write> DataGen<'a, T> {
                         return true;
                     }
                     // Threefold repetition.
-                    let yukari_reps = keystack.iter().filter(|key| **key == yukari_board.hash()).count();
-                    if yukari_reps == 3 {
+                    let hash = yukari_board.hash();
+                    let reps = keystack.iter().filter(|k| **k == hash).take(3).count();
+                    if reps == 3 {
                         self.emit(game, MarlinWdl::Draw);
                         return true;
                     }
