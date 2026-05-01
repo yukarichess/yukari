@@ -574,7 +574,7 @@ impl Thread {
                 MpcModel { a: 0.0, sigma: 0, s: 0 }
             };
 
-            if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth <= 5 {
+            if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth != 2 && depth <= 5 {
                 let bound = ((beta + mpc_model.sigma) as f32 / mpc_model.a).round() as i32;
                 let score = self.search(mpc_model.s, bound - 1, bound, ply, tt, None);
                 if score >= bound {
