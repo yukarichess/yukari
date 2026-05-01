@@ -17,7 +17,7 @@ const MATE_VALUE: i32 = 10_000;
 // TODO: when 50-move rule is implemented, this can be limited to searching from the last irreversible move.
 #[must_use]
 pub fn is_repetition_draw(keystack: &[u64], hash: u64) -> bool {
-    keystack.iter().filter(|key| **key == hash).count() >= 3
+    keystack.iter().filter(|key| **key == hash).count() >= 2
 }
 
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
