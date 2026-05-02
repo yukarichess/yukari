@@ -203,7 +203,7 @@ impl BoardData {
             self.eval.add_piece(piece, square, colour, white_king, black_king);
 
             self.add_attacks(square, piece_index, piece);
-            self.update_sliders(square, false, None);
+            self.retract_sliders(square, None, None);
             // fixup: add threats to new square
             for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
                 self.eval.add_threat(
@@ -243,7 +243,7 @@ impl BoardData {
 
         if update {
             self.remove_attacks(square, piece_index, piece);
-            self.update_sliders(square, true, None);
+            self.extend_sliders(square, None, None);
             // fixup: clear threats to old square
             for attack in self.bitlist[square] & !Bitlist::from_piece(piece_index) {
                 self.eval.remove_threat(
@@ -373,9 +373,13 @@ impl BoardData {
     pub fn move_piece(&mut self, from_square: Square, to_square: Square) {
         let piece_index = self.index[from_square].expect("attempted to move piece from empty square");
         let piece = self.piece_from_bit(piece_index);
+        let direction = from_square.direction(to_square);
 
+        //println!("---");
+        //println!("remove_attacks({from_square}, {piece_index:?}, {piece:?})");
         self.remove_attacks(from_square, piece_index, piece);
-        self.update_sliders(from_square, true, None);
+        //println!("extend_sliders({from_square}, {direction:?}, Some({to_square})");
+        self.extend_sliders(from_square, direction, Some(to_square));
 
         self.piecelist.move_piece(piece_index, to_square);
         self.index.move_piece(piece_index, from_square, to_square);
@@ -389,8 +393,10 @@ impl BoardData {
         };
         Zobrist::move_piece(piece_index.colour(), piece, from_square, to_square, hash);
 
+        //println!("add_attacks({to_square}, {piece_index:?}, {piece:?})");
         self.add_attacks(to_square, piece_index, piece);
-        self.update_sliders(to_square, false, Some(from_square));
+        //println!("retract_sliders({to_square}, Some({from_square}), {direction:?})");
+        self.retract_sliders(to_square, Some(from_square), direction);
 
         let white_king = self.king_square(Colour::White);
         let black_king = self.king_square(Colour::Black);
@@ -614,7 +620,7 @@ impl BoardData {
     }
 
     /// Extend or remove slider attacks to a square.
-    fn update_sliders(&mut self, square: Square, add: bool, from_square: Option<Square>) {
+    fn extend_sliders(&mut self, square: Square, move_direction: Option<Direction>, move_dest_square: Option<Square>) {
         let white_king = self.king_square(Colour::White);
         let black_king = self.king_square(Colour::Black);
         let sliders = self.bitlist[square] & (self.piecemask.bishops() | self.piecemask.rooks() | self.piecemask.queens());
@@ -625,9 +631,14 @@ impl BoardData {
             let Some(direction) = attacker.direction(square16x8) else {
                 continue;
             };
+            let mut ignore_threat = false;
             for dest in square16x8.ray_attacks(direction) {
-                if add {
-                    self.bitlist.add_piece(dest, piece);
+                self.bitlist.add_piece(dest, piece);
+
+                if let Some(move_direction) = move_direction && direction == move_direction && let Some(move_dest_square) = move_dest_square && move_dest_square == dest {
+                    ignore_threat = true;
+                }
+                if !ignore_threat {
                     self.eval.add_threat(
                         self.piece_from_bit(piece),
                         self.square_of_piece(piece),
@@ -638,20 +649,43 @@ impl BoardData {
                         white_king,
                         black_king,
                     );
-                } else {
-                    let to_colour = from_square.map_or_else(
-                        || self.colour_from_square(dest),
-                        |from_square| {
-                            if from_square == dest { self.colour_from_square(square) } else { self.colour_from_square(dest) }
-                        },
-                    );
-                    let to_piece = from_square.map_or_else(
-                        || self.piece_from_square(dest),
-                        |from_square| {
-                            if from_square == dest { self.piece_from_square(square) } else { self.piece_from_square(dest) }
-                        },
-                    );
-                    self.bitlist.remove_piece(dest, piece);
+                }
+
+                if self.index[dest].is_some() {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Extend or remove slider attacks to a square.
+    fn retract_sliders(&mut self, square: Square, from_square: Option<Square>, move_direction: Option<Direction>) {
+        let white_king = self.king_square(Colour::White);
+        let black_king = self.king_square(Colour::Black);
+        let sliders = self.bitlist[square] & (self.piecemask.bishops() | self.piecemask.rooks() | self.piecemask.queens());
+
+        let square16x8 = Square16x8::from_square(square);
+        for piece in sliders {
+            let attacker = Square16x8::from_square(self.square_of_piece(piece));
+            let Some(direction) = attacker.direction(square16x8) else {
+                continue;
+            };
+            let mut ignore_threat = false;
+            for dest in square16x8.ray_attacks(direction) {
+                let (to_colour, to_piece) = from_square.map_or_else(
+                    || (self.colour_from_square(dest), self.piece_from_square(dest)),
+                    |from_square| {
+                        let square = if from_square == dest { square } else { dest };
+                        (self.colour_from_square(square), self.piece_from_square(square))
+                    },
+                );
+                self.bitlist.remove_piece(dest, piece);
+
+                //println!("    {direction:?} {dest}");
+                if let Some(move_direction) = move_direction && direction == move_direction {
+                    ignore_threat = true;
+                }
+                if !ignore_threat {
                     self.eval.remove_threat(
                         self.piece_from_bit(piece),
                         self.square_of_piece(piece),

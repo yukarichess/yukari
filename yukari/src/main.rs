@@ -589,7 +589,6 @@ fn run() -> io::Result<()> {
                             .find_move(from, dest, prom)
                             .unwrap_or_else(|| panic!("Attempted move {cmd} not found!?"));
                         engine.board = engine.board.make(m);
-                        engine.board.data().verify_accumulators();
                         engine.keystack.push(engine.board.hash());
                         engine.tc.increment_moves();
                     }
@@ -751,7 +750,6 @@ fn run() -> io::Result<()> {
                 } else {
                     // We must actually make the move locally too
                     engine.board = engine.board.make(m);
-                    engine.board.data().verify_accumulators();
                     println!("move {m}");
                     if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                         println!("1/2-1/2 {{Draw by repetition}}");
@@ -790,7 +788,6 @@ fn run() -> io::Result<()> {
                             // Find the move in the list
                             let m = engine.find_move(from, dest, prom).expect("Attempted move not found!?");
                             engine.board = engine.board.make(m);
-                            engine.board.data().verify_accumulators();
                             engine.tc.increment_moves();
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                                 println!("1/2-1/2 {{Draw by repetition}}");
@@ -814,7 +811,6 @@ fn run() -> io::Result<()> {
                         Mode::Force => {
                             let m = engine.find_move(from, dest, prom).expect("Attempted move not found!?");
                             engine.board = engine.board.make(m);
-                            engine.board.data().verify_accumulators();
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                                 println!("1/2-1/2 {{Draw by repetition}}");
                             }
