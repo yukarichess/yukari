@@ -1,4 +1,4 @@
-NNUE = fti19-derwent
+NNUE = fti20-ladybower
 EVALFILE ?= ../../../$(NNUE).bin
 
 # If on Windows, add the .exe extension to the executable and use PowerShell instead of `sed`
