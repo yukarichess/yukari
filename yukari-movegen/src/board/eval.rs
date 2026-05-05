@@ -1,4 +1,4 @@
-use std::simd::{cmp::SimdOrd, i8x32, i16x32, i32x32, num::SimdInt};
+use std::simd::{cmp::SimdOrd, i8x32, i16x32, i32x32, i64x32, num::SimdInt};
 
 use super::feature;
 use crate::{Colour, File, Piece, Square};
@@ -33,32 +33,42 @@ impl Network {
     /// Calculates the output of the network, starting from the already
     /// calculated hidden layer (done efficiently during makemoves).
     pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, output_bucket: usize) -> i32 {
-        // Initialise output with bias.
-        let mut output = i32x32::splat(0);
-        let min = i16x32::splat(0);
-        let max = i16x32::splat(QA);
+        const ZERO: i16x32 = i16x32::splat(0);
+        const ONE: i16x32 = i16x32::splat(QA);
+
+        const SIXTH: i32x32 = i32x32::splat((QA as i32) / 6);
+        const ZERO_QA2: i32x32 = i32x32::splat(0);
+        const ONE_QA2: i32x32 = i32x32::splat((QA as i32).pow(2));
+        const HALF_QA2: i32x32 = i32x32::splat((QA as i32).pow(2) / 2);
+
+        let mut output = i64x32::splat(0);
 
         // Side-To-Move Accumulator -> Output.
         let (us_vals, []) = us.vals.as_chunks::<32>() else { unreachable!() };
         let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<32>() else { unreachable!() };
         for (input, weight) in us_vals.iter().zip(output_weights.iter()) {
-            // Squared Clipped `ReLU` - Activation Function.
+            // Swish - Activation Function.
             // Note that this takes the i16s in the accumulator to i32s.
-            let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
-            output += input.cast::<i32>() * weight.cast::<i32>();
+            // TODO: division expensive ;~;
+            let input = i16x32::from_array(*input).cast::<i32>(); // units of QA⁻¹
+            let gate = (input * SIXTH + HALF_QA2).simd_clamp(ZERO_QA2, ONE_QA2); // units of QA⁻²
+            let input = input * gate; // units of QA⁻³
+            let weight = i16x32::from_array(*weight); // units of QA⁻¹
+            output += input.cast::<i64>() * weight.cast::<i64>();
         }
 
         // Not-Side-To-Move Accumulator -> Output.
         let (them_vals, []) = them.vals.as_chunks::<32>() else { unreachable!() };
         let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<32>() else { unreachable!() };
         for (input, weight) in them_vals.iter().zip(output_weights.iter()) {
-            let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
-            output += input.cast::<i32>() * weight.cast::<i32>();
+            let input = i16x32::from_array(*input).cast::<i32>(); // units of QA⁻¹
+            let gate = (input * SIXTH + HALF_QA2).simd_clamp(ZERO_QA2, ONE_QA2); // units of QA⁻²
+            let input = input * gate; // units of QA⁻³
+            let weight = i16x32::from_array(*weight); // units of QA⁻¹
+            output += input.cast::<i64>() * weight.cast::<i64>();
         }
 
-        let mut output = (output.reduce_sum() / i32::from(QA)) + i32::from(self.output_bias[output_bucket]);
+        let mut output = ((output.reduce_sum() / (QA as i64).pow(2)) as i32) + i32::from(self.output_bias[output_bucket]);
 
         // Apply eval scale.
         output *= SCALE;
