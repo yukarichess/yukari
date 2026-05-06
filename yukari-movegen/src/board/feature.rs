@@ -59,9 +59,12 @@ const BISHOP_ATTACKS: [u64; 64] = attacks_for_piece(Piece::Bishop);
 const ROOK_ATTACKS: [u64; 64] = attacks_for_piece(Piece::Rook);
 const QUEEN_ATTACKS: [u64; 64] = attacks_for_piece(Piece::Queen);
 
-const PAWN_MAP: [[Option<usize>; 6]; 2] = [[Some(0), Some(1), None, Some(2), None, None], [Some(3), Some(4), None, Some(5), None, None]];
-const KNIGHT_QUEEN_MAP: [[Option<usize>; 6]; 2] = [[Some(0), Some(1), Some(2), Some(3), Some(4), None], [Some(5), Some(6), Some(7), Some(8), Some(9), None]];
-const BISHOP_ROOK_MAP: [[Option<usize>; 6]; 2] = [[Some(0), Some(1), Some(2), Some(3), None, None], [Some(4), Some(5), Some(6), Some(7), None, None]];
+const PAWN_MAP: [[Option<usize>; 6]; 2] =
+    [[Some(0), Some(1), None, Some(2), None, None], [Some(3), Some(4), None, Some(5), None, None]];
+const KNIGHT_QUEEN_MAP: [[Option<usize>; 6]; 2] =
+    [[Some(0), Some(1), Some(2), Some(3), Some(4), None], [Some(5), Some(6), Some(7), Some(8), Some(9), None]];
+const BISHOP_ROOK_MAP: [[Option<usize>; 6]; 2] =
+    [[Some(0), Some(1), Some(2), Some(3), None, None], [Some(4), Some(5), Some(6), Some(7), None, None]];
 
 const fn index_array_for_piece(piece: Piece) -> [usize; 65] {
     assert!(!matches!(piece, Piece::Pawn));
@@ -133,7 +136,8 @@ pub fn index_pst(piece: Piece, square: Square, king: Square, friendly: bool) -> 
 }
 
 pub fn index_threat(
-    from_piece: Piece, from_square: Square, to_piece: Piece, to_square: Square, king: Square, friendly: bool, attacking_enemy: bool, flipped: bool,
+    from_piece: Piece, from_square: Square, to_piece: Piece, to_square: Square, king: Square, friendly: bool,
+    attacking_enemy: bool, flipped: bool,
 ) -> Option<usize> {
     if from_piece == Piece::King || to_piece == Piece::King {
         return None;
@@ -214,7 +218,7 @@ pub fn index_threat(
         Piece::Bishop => piece_threat(&BISHOP_INDEX, &BISHOP_ATTACKS, &BISHOP_ROOK_MAP, BISHOP_OFFSET),
         Piece::Rook => piece_threat(&ROOK_INDEX, &ROOK_ATTACKS, &BISHOP_ROOK_MAP, ROOK_OFFSET),
         Piece::Queen => piece_threat(&QUEEN_INDEX, &QUEEN_ATTACKS, &KNIGHT_QUEEN_MAP, QUEEN_OFFSET),
-        Piece::King => None
+        Piece::King => None,
     }?;
 
     let feature_idx = (usize::from(!friendly) * MAX_OFFSET) + idx;

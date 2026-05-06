@@ -524,16 +524,26 @@ impl BoardData {
         let update = |bitlist: &mut BitlistArray, index: &PieceIndexArray, piecemask: &Piecemask, eval: &mut Eval, dest: Square| {
             debug_assert!(dest != square);
             bitlist.add_piece(dest, bit);
-            eval.add_threat(piece, square, index[dest].and_then(|index| piecemask.piece(index)), dest, bit.colour(), index[dest].map(PieceIndex::colour), white_king, black_king);
+            eval.add_threat(
+                piece,
+                square,
+                index[dest].and_then(|index| piecemask.piece(index)),
+                dest,
+                bit.colour(),
+                index[dest].map(PieceIndex::colour),
+                white_king,
+                black_king,
+            );
         };
 
-        let slide = |bitlist: &mut BitlistArray, piecemask: &Piecemask, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
-            let mut sq = square.travel(dir);
-            while let Some(square) = sq {
-                update(bitlist, index, piecemask, eval, square);
-                sq = square.travel(dir).filter(|_| index[square].is_none());
-            }
-        };
+        let slide =
+            |bitlist: &mut BitlistArray, piecemask: &Piecemask, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
+                let mut sq = square.travel(dir);
+                while let Some(square) = sq {
+                    update(bitlist, index, piecemask, eval, square);
+                    sq = square.travel(dir).filter(|_| index[square].is_none());
+                }
+            };
 
         let leap = |bitlist: &mut BitlistArray, piecemask: &Piecemask, eval: &mut Eval, index: &PieceIndexArray, dir: Direction| {
             if let Some(dest) = square.travel(dir) {
