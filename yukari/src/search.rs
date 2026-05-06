@@ -567,7 +567,7 @@ impl Thread {
                 }
             }
 
-            let mpc_model = if depth <= 5 {
+            /*let mpc_model = if depth <= 5 {
                 let piece_count = (self.board[ply].data().piecemask().occupied().count_ones() as usize - 2) / 8;
                 self.params.mpc_model[(depth - 1) as usize][piece_count].clone()
             } else {
@@ -588,7 +588,7 @@ impl Thread {
                 if score <= bound {
                     return alpha;
                 }
-            }
+            }*/
         }
 
         if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && eval >= beta {
