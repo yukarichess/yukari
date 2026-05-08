@@ -461,7 +461,7 @@ impl BoardData {
 
     /// Evaluation from the perspective of `colour`.
     pub fn eval(&self, colour: Colour) -> i32 {
-        self.eval.get(self.piecemask().occupied().count_ones() as usize, colour)
+        self.eval.get(self.piecemask().occupied().count_ones() as u8, colour)
     }
 
     /// Rebuild the attack set for the board.

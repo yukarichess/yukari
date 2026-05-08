@@ -1,74 +1,132 @@
-use std::simd::{cmp::SimdOrd, i8x32, i16x32, i32x32, num::SimdInt};
+use std::{
+    ops::Index,
+    simd::{
+        Simd,
+        cmp::SimdOrd,
+        i8x32, i16x32,
+        num::{SimdFloat, SimdInt},
+    },
+};
 
 use super::feature;
 use crate::{Colour, File, Piece, Square};
 
 pub const HORIZONTAL_MIRROR: bool = true;
-const INPUTS: usize = (2 * 6 * 64) + 2 * feature::MAX_OFFSET;
-const HIDDEN_SIZE: usize = 512;
+const L1_SIZE: usize = 256;
+const L2_SIZE: usize = 64;
 const OUTPUT_BUCKETS: usize = 8;
-const DIVISOR: usize = 32_usize.div_ceil(OUTPUT_BUCKETS);
+const DIVISOR: u8 = 32_u8.div_ceil(OUTPUT_BUCKETS as u8);
 const SCALE: i32 = 400;
 const QA: i16 = 255;
 const QB: i16 = 64;
 
+type I16xL2 = Simd<i16, L2_SIZE>;
+type I32xL2 = Simd<i32, L2_SIZE>;
+type F32xL2 = Simd<f32, L2_SIZE>;
+
+#[derive(Clone, Copy)]
+pub struct OutputBucket(u8);
+
+impl<T> Index<OutputBucket> for [T] {
+    type Output = T;
+
+    fn index(&self, index: OutputBucket) -> &Self::Output {
+        &self[usize::from(index.0)] // TODO: compiler doesn't know if this is in bounds
+    }
+}
+
+impl OutputBucket {
+    pub const fn new(output_bucket: u8) -> Option<Self> {
+        if output_bucket >= OUTPUT_BUCKETS as u8 {
+            return None;
+        }
+        Some(Self(output_bucket))
+    }
+}
+
 /// This is the quantised format that yukari uses.
-#[repr(C)]
+#[repr(C, align(64))]
 pub struct Network {
-    /// Column-Major `HIDDEN_SIZE x INPUTS` matrix.
-    feature_threat_weights: [[i8; HIDDEN_SIZE]; 60144],
-    feature_pst_weights:    [Accumulator; 768],
-    /// Vector with dimension `HIDDEN_SIZE`.
-    feature_bias:           Accumulator,
-    /// Row-Major `OUTPUT_BUCKETS x (2 * HIDDEN_SIZE)` matrix.
-    output_weights:         [[Accumulator; 2]; OUTPUT_BUCKETS],
-    /// Scalar output biases.
-    output_bias:            [i16; OUTPUT_BUCKETS],
+    // (768+60144)*1 -> L1
+    feature_embeddings_threat_weights: [[i8; L1_SIZE]; 60144],
+    feature_embeddings_pst_weights: [[i16; L1_SIZE]; 768],
+    feature_embeddings_bias: [i16; L1_SIZE],
+    // 2*L1 -> OUTPUT_BUCKETS*L2
+    layer1_weights: [[[[i8; L1_SIZE]; 2]; L2_SIZE]; OUTPUT_BUCKETS],
+    layer1_bias: [[i16; L2_SIZE]; OUTPUT_BUCKETS],
+    // L2 -> OUTPUT_BUCKETS*1
+    layer2_weights: [[f32; L2_SIZE]; OUTPUT_BUCKETS],
+    layer2_bias: [f32; OUTPUT_BUCKETS],
 }
 
 static NNUE: Network =
     unsafe { std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!(env!("EVALFILE"))) };
 
 impl Network {
+    #[inline]
+    fn forward_l1_half(&self, us: &Accumulator, output_bucket: OutputBucket, index: usize) -> I32xL2 {
+        let mut layer1 = [0_i32; L2_SIZE];
+
+        // Dot product weights with screlu-activated input accumulator.
+        for lane in 0..L2_SIZE {
+            const N: usize = 64;
+            let (us, []) = us.vals.as_chunks::<N>() else { unreachable!() };
+            let (weights, []) = self.layer1_weights[output_bucket][lane][index].as_chunks::<N>() else { unreachable!() };
+            let mut acc = Simd::<i32, N>::splat(0);
+            for (us, weights) in us.iter().zip(weights) {
+                const ZERO_VEC: Simd<i16, N> = Simd::splat(0);
+                const QA_VEC: Simd<i16, N> = Simd::splat(QA);
+                let us = Simd::from_array(*us).simd_clamp(ZERO_VEC, QA_VEC);
+                let weights = Simd::from_array(*weights);
+                let weights = us * weights.cast::<i16>();
+                acc += us.cast::<i32>() * weights.cast::<i32>();
+            }
+            layer1[lane] = acc.reduce_sum();
+        }
+
+        I32xL2::from_array(layer1)
+    }
+
+    #[inline]
+    fn forward_l1(&self, us: &Accumulator, them: &Accumulator, output_bucket: OutputBucket) -> F32xL2 {
+        let mut layer1 = I32xL2::splat(0);
+
+        // L1: Matrix multiply weights with screlu-activated input accumulator.
+        layer1 += self.forward_l1_half(us, output_bucket, 0);
+        layer1 += self.forward_l1_half(them, output_bucket, 1);
+
+        // L1: Remove extra QA introduced by screlu.
+        layer1 /= I32xL2::splat(QA.into());
+
+        // L1: Add bias
+        // TODO: compiler doesn't know if `output_bucket` is in bounds.
+        layer1 += I16xL2::from_array(self.layer1_bias[output_bucket]).cast::<i32>();
+
+        // L1: Cast to f32 and remove quantisation.
+        layer1.cast::<f32>() / F32xL2::splat((QA * QB).into())
+    }
+
+    #[inline]
+    fn forward_l2(&self, layer1: F32xL2, output_bucket: OutputBucket) -> f32 {
+        // L2: Matrix multiply weights with crelu-activated L1.
+        let layer1 = layer1.simd_clamp(F32xL2::splat(0.0), F32xL2::splat(1.0));
+        let weight = F32xL2::from_array(self.layer2_weights[output_bucket]);
+        let layer2 = (layer1 * weight).reduce_sum();
+
+        // L2: Add bias
+        layer2 + self.layer2_bias[output_bucket]
+    }
+
     /// Calculates the output of the network, starting from the already
     /// calculated hidden layer (done efficiently during makemoves).
-    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, output_bucket: usize) -> i32 {
-        // Initialise output with bias.
-        let mut output = i32x32::splat(0);
-        let min = i16x32::splat(0);
-        let max = i16x32::splat(QA);
-
-        // Side-To-Move Accumulator -> Output.
-        let (us_vals, []) = us.vals.as_chunks::<32>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<32>() else {
-            unreachable!()
-        };
-        for (input, weight) in us_vals.iter().zip(output_weights.iter()) {
-            // Squared Clipped `ReLU` - Activation Function.
-            // Note that this takes the i16s in the accumulator to i32s.
-            let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
-            output += input.cast::<i32>() * weight.cast::<i32>();
-        }
-
-        // Not-Side-To-Move Accumulator -> Output.
-        let (them_vals, []) = them.vals.as_chunks::<32>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<32>() else {
-            unreachable!()
-        };
-        for (input, weight) in them_vals.iter().zip(output_weights.iter()) {
-            let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
-            output += input.cast::<i32>() * weight.cast::<i32>();
-        }
-
-        let mut output = (output.reduce_sum() / i32::from(QA)) + i32::from(self.output_bias[output_bucket]);
+    #[inline]
+    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, output_bucket: OutputBucket) -> i32 {
+        let layer1 = self.forward_l1(us, them, output_bucket);
+        let mut layer2 = self.forward_l2(layer1, output_bucket);
 
         // Apply eval scale.
-        output *= SCALE;
-
-        // Remove quantisation.
-        output / (i32::from(QA) * i32::from(QB))
+        layer2 *= SCALE as f32;
+        layer2 as i32
     }
 }
 
@@ -77,14 +135,14 @@ impl Network {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C, align(64))]
 pub struct Accumulator {
-    vals: [i16; HIDDEN_SIZE],
+    vals: [i16; L1_SIZE],
 }
 
 impl Accumulator {
     /// Initialised with bias so we can just efficiently
     /// operate on it afterwards.
     pub const fn new(net: &Network) -> Self {
-        net.feature_bias
+        Self { vals: net.feature_embeddings_bias }
     }
 
     /// Add a feature to an accumulator.
@@ -92,13 +150,17 @@ impl Accumulator {
     pub fn add_feature(&mut self, feature_idx: usize, net: &Network) {
         let (acc_chunks, []) = self.vals.as_chunks_mut::<32>() else { unreachable!() };
         if feature_idx < 768 {
-            let (weight_chunks, []) = net.feature_pst_weights[feature_idx].vals.as_chunks::<32>() else { unreachable!() };
+            let (weight_chunks, []) = net.feature_embeddings_pst_weights[feature_idx].as_chunks::<32>() else {
+                unreachable!()
+            };
             for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
                 *i = (i16x32::from_array(*i) + i16x32::from_array(*d)).to_array();
             }
         } else {
             let feature_idx = feature_idx - 768;
-            let (weight_chunks, []) = net.feature_threat_weights[feature_idx].as_chunks::<32>() else { unreachable!() };
+            let (weight_chunks, []) = net.feature_embeddings_threat_weights[feature_idx].as_chunks::<32>() else {
+                unreachable!()
+            };
             for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
                 *i = (i16x32::from_array(*i) + i8x32::from_array(*d).cast::<i16>()).to_array();
             }
@@ -110,13 +172,17 @@ impl Accumulator {
     pub fn remove_feature(&mut self, feature_idx: usize, net: &Network) {
         let (acc_chunks, []) = self.vals.as_chunks_mut::<32>() else { unreachable!() };
         if feature_idx < 768 {
-            let (weight_chunks, []) = net.feature_pst_weights[feature_idx].vals.as_chunks::<32>() else { unreachable!() };
+            let (weight_chunks, []) = net.feature_embeddings_pst_weights[feature_idx].as_chunks::<32>() else {
+                unreachable!()
+            };
             for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
                 *i = (i16x32::from_array(*i) - i16x32::from_array(*d)).to_array();
             }
         } else {
             let feature_idx = feature_idx - 768;
-            let (weight_chunks, []) = net.feature_threat_weights[feature_idx].as_chunks::<32>() else { unreachable!() };
+            let (weight_chunks, []) = net.feature_embeddings_threat_weights[feature_idx].as_chunks::<32>() else {
+                unreachable!()
+            };
             for (i, d) in acc_chunks.iter_mut().zip(weight_chunks.iter()) {
                 *i = (i16x32::from_array(*i) - i8x32::from_array(*d).cast::<i16>()).to_array();
             }
@@ -143,8 +209,8 @@ impl Eval {
         }
     }
 
-    pub fn get(&self, piece_count: usize, colour: Colour) -> i32 {
-        let output_bucket = (piece_count - 2) / DIVISOR;
+    pub fn get(&self, piece_count: u8, colour: Colour) -> i32 {
+        let output_bucket = OutputBucket::new((piece_count - 2) / DIVISOR).unwrap();
         if colour == Colour::White {
             NNUE.evaluate(&self.white, &self.black, output_bucket)
         } else {
