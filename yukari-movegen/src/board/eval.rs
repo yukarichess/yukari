@@ -21,7 +21,7 @@ pub struct Network {
     /// Vector with dimension `HIDDEN_SIZE`.
     feature_bias:           Accumulator,
     /// Row-Major `OUTPUT_BUCKETS x (2 * HIDDEN_SIZE)` matrix.
-    output_weights:         [[Accumulator; 2]; OUTPUT_BUCKETS],
+    output_weights:         [[[i16; HIDDEN_SIZE / 2]; 2]; OUTPUT_BUCKETS],
     /// Scalar output biases.
     output_bias:            [i16; OUTPUT_BUCKETS],
 }
@@ -39,27 +39,35 @@ impl Network {
         let max = i16x32::splat(QA);
 
         // Side-To-Move Accumulator -> Output.
-        let (us_vals, []) = us.vals.as_chunks::<32>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][0].vals.as_chunks::<32>() else {
+        let (lhs, rhs) = us.vals.split_at(HIDDEN_SIZE / 2);
+        let (lhs, []) = lhs.as_chunks::<32>() else { unreachable!() };
+        let (rhs, []) = rhs.as_chunks::<32>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][0].as_chunks::<32>() else {
             unreachable!()
         };
-        for (input, weight) in us_vals.iter().zip(output_weights.iter()) {
+        for ((lhs, rhs), weight) in lhs.iter().zip(rhs).zip(output_weights.iter()) {
             // Squared Clipped `ReLU` - Activation Function.
             // Note that this takes the i16s in the accumulator to i32s.
-            let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
-            output += input.cast::<i32>() * weight.cast::<i32>();
+            let lhs = i16x32::from_array(*lhs).simd_clamp(min, max);
+            let rhs = i16x32::from_array(*rhs).simd_clamp(min, max);
+            let weight = lhs * i16x32::from_array(*weight);
+            output += rhs.cast::<i32>() * weight.cast::<i32>();
         }
 
         // Not-Side-To-Move Accumulator -> Output.
-        let (them_vals, []) = them.vals.as_chunks::<32>() else { unreachable!() };
-        let (output_weights, []) = self.output_weights[output_bucket][1].vals.as_chunks::<32>() else {
+        let (lhs, rhs) = them.vals.split_at(HIDDEN_SIZE / 2);
+        let (lhs, []) = lhs.as_chunks::<32>() else { unreachable!() };
+        let (rhs, []) = rhs.as_chunks::<32>() else { unreachable!() };
+        let (output_weights, []) = self.output_weights[output_bucket][1].as_chunks::<32>() else {
             unreachable!()
         };
-        for (input, weight) in them_vals.iter().zip(output_weights.iter()) {
-            let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
-            output += input.cast::<i32>() * weight.cast::<i32>();
+        for ((lhs, rhs), weight) in lhs.iter().zip(rhs).zip(output_weights.iter()) {
+            // Squared Clipped `ReLU` - Activation Function.
+            // Note that this takes the i16s in the accumulator to i32s.
+            let lhs = i16x32::from_array(*lhs).simd_clamp(min, max);
+            let rhs = i16x32::from_array(*rhs).simd_clamp(min, max);
+            let weight = lhs * i16x32::from_array(*weight);
+            output += rhs.cast::<i32>() * weight.cast::<i32>();
         }
 
         let mut output = (output.reduce_sum() / i32::from(QA)) + i32::from(self.output_bias[output_bucket]);
