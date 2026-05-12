@@ -206,7 +206,9 @@ impl Thread {
             self.pv[ply].clear();
         }
 
-        self.seldepth = self.seldepth.max(ply);
+        if expected_pvnode {
+            self.seldepth = self.seldepth.max(ply);
+        }
 
         let mut best = self.eval(ply);
         if best >= beta {
@@ -407,7 +409,9 @@ impl Thread {
             self.pv[ply].clear();
         }
 
-        self.seldepth = self.seldepth.max(ply);
+        if expected_pvnode {
+            self.seldepth = self.seldepth.max(ply);
+        }
 
         // Draw by insufficient material
         if self.board[ply].insufficient_material() && ply > 0 {
@@ -450,7 +454,7 @@ impl Thread {
         let eval = self.eval(ply);
         if !self.board[ply].in_check() {
             let rfp_margin = 45 * depth;
-            if excluded_move.is_none() && depth <= 8 && eval - rfp_margin >= beta {
+            if excluded_move.is_none() && depth <= 7 && eval - rfp_margin >= beta {
                 return eval - rfp_margin;
             }
 
