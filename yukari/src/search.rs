@@ -197,7 +197,7 @@ impl Thread {
         (eval + corrhist).clamp(-MATE_VALUE + 501, MATE_VALUE - 501)
     }
 
-    pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
+    pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize, qs_ply: usize, tt: &[TtEntry]) -> i32 {
         let expected_pvnode = alpha != beta - 1;
 
         if self.pv.len() <= ply {
@@ -241,12 +241,14 @@ impl Thread {
         let mut moves = ArrayVec::new();
         self.board[ply].generate_quiesce(&mut moves);
 
+        if qs_ply == 0 {
+            self.board[ply].generate_quiet_checks(&mut moves);
+        }
+
         for m in &moves {
             if self.board[ply].static_exchange_evaluation(*m) < 0 {
                 continue;
             }
-
-            self.qnodes += 1;
 
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make(*m));
@@ -254,7 +256,9 @@ impl Thread {
                 self.board[ply + 1] = self.board[ply].make(*m);
             }
 
-            let score = -self.quiesce(-beta, -alpha, ply + 1, tt);
+            self.qnodes += 1;
+
+            let score = -self.quiesce(-beta, -alpha, ply + 1, qs_ply + 1, tt);
 
             if score > best {
                 best = score;
@@ -424,7 +428,7 @@ impl Thread {
         }
 
         if depth <= 0 {
-            return self.quiesce(alpha, beta, ply, tt);
+            return self.quiesce(alpha, beta, ply, 0, tt);
         }
 
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
@@ -460,7 +464,7 @@ impl Thread {
 
             let razor_margin = 250 * depth;
             if excluded_move.is_none() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
-                let score = self.quiesce(alpha, alpha + 1, ply, tt);
+                let score = self.quiesce(alpha, alpha + 1, ply, 0, tt);
                 if score <= alpha {
                     return score;
                 }

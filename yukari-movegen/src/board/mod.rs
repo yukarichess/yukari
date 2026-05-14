@@ -1,7 +1,7 @@
 use std::{
     convert::{TryFrom, TryInto},
     ffi::CString,
-    fmt::{Display, Write},
+    fmt::{Debug, Display, Write},
 };
 
 use colored::Colorize;
@@ -12,7 +12,7 @@ use crate::{
     chessmove::{Move, MoveType},
     colour::Colour,
     piece::Piece,
-    square::{File, Rank, Square, Square16x8},
+    square::{Direction, File, Rank, Square, Square16x8},
 };
 
 mod bitlist;
@@ -105,6 +105,83 @@ impl Display for Board {
         }
 
         writeln!(f, "{:016x}", self.hash())?;
+
+        Ok(())
+    }
+}
+
+impl Debug for Board {
+    #[allow(clippy::missing_inline_in_public_items)]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut empty_squares = 0;
+        for i in 0_u8..64_u8 {
+            let j = i ^ 56_u8;
+
+            if let (Some(piece), Some(colour)) = (
+                self.data.piece_from_square(j.try_into().expect("square somehow out of bounds")),
+                self.data.colour_from_square(j.try_into().expect("square somehow out of bounds")),
+            ) {
+                let c = match piece {
+                    Piece::Pawn => 'p',
+                    Piece::Knight => 'n',
+                    Piece::Bishop => 'b',
+                    Piece::Rook => 'r',
+                    Piece::Queen => 'q',
+                    Piece::King => 'k',
+                };
+
+                let c = if colour == Colour::White { c.to_ascii_uppercase() } else { c.to_ascii_lowercase() };
+
+                if empty_squares != 0 {
+                    write!(f, "{empty_squares}")?;
+                    empty_squares = 0;
+                }
+                write!(f, "{c}")?;
+            } else {
+                empty_squares += 1;
+            }
+
+            if j & 7 == 7 {
+                if empty_squares != 0 {
+                    write!(f, "{empty_squares}")?;
+                    empty_squares = 0;
+                }
+                if j / 8 != 0 {
+                    write!(f, "/")?;
+                }
+            }
+        }
+        if self.side == Colour::White {
+            write!(f, " w ")?;
+        } else {
+            write!(f, " b ")?;
+        }
+        let mut castling_rights = false;
+        if self.castle.0 {
+            write!(f, "K")?;
+            castling_rights = true;
+        }
+        if self.castle.1 {
+            write!(f, "Q")?;
+            castling_rights = true;
+        }
+        if self.castle.2 {
+            write!(f, "k")?;
+            castling_rights = true;
+        }
+        if self.castle.3 {
+            write!(f, "q")?;
+            castling_rights = true;
+        }
+        if !castling_rights {
+            write!(f, "-")?;
+        }
+        write!(f, " ")?;
+        if let Some(ep) = self.ep {
+            write!(f, "{ep}")?;
+        } else {
+            write!(f, "-")?;
+        }
 
         Ok(())
     }
@@ -704,6 +781,52 @@ impl Board {
         }
 
         self.generate_captures(v);
+    }
+
+    // Generate moves that check the enemy king
+    pub fn generate_quiet_checks(&self, v: &mut ArrayVec<[Move; 256]>) {
+        const DIRS: [Direction; 8] = [
+            Direction::North,
+            Direction::NorthEast,
+            Direction::East,
+            Direction::SouthEast,
+            Direction::South,
+            Direction::SouthWest,
+            Direction::West,
+            Direction::NorthWest,
+        ];
+
+        // If we're in check, don't even bother.
+        if self.in_check() {
+            return;
+        }
+
+        let sliders = self.data.piecemask().bishops() | self.data.piecemask().rooks() | self.data.piecemask().queens();
+        let enemy_king_square = self.data.king_square(!self.side);
+        let pininfo = pins::PinInfo::discover(self);
+
+        for dir in DIRS {
+            let mut sq = enemy_king_square.travel(dir);
+            while let Some(dest) = sq {
+                // Ignore captures and discovered checks (for now)
+                if let Some(_piece_index) = self.data.piece_index(dest) {
+                    break;
+                }
+
+                for attacker in self.data.attacks_to(dest, self.side).and(sliders) {
+                    // If moving here wouldn't cause a check, don't bother.
+                    if !dir.valid_for_slider(self.piece_from_bit(attacker)) {
+                        continue;
+                    }
+
+                    let from = self.square_of_piece(attacker);
+
+                    self.try_push_move(v, from, dest, MoveType::Normal, &pininfo);
+                }
+
+                sq = dest.travel(dir);
+            }
+        }
     }
 
     /// Generate a vector of moves on the board.

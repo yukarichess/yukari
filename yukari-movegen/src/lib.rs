@@ -21,16 +21,21 @@ pub fn perft(board: &Board, depth: u32) -> u64 {
     if depth == 0 {
         1
     } else if depth == 1 {
-        let moves: [Move; 256] = [Move::default(); 256];
-        let mut moves = ArrayVec::from(moves);
-        moves.set_len(0);
+        let mut moves = ArrayVec::new();
         board.generate(&mut moves);
         moves.len() as u64
     } else {
-        let moves: [Move; 256] = [Move::default(); 256];
-        let mut moves = ArrayVec::from(moves);
-        moves.set_len(0);
+        let mut moves = ArrayVec::new();
         board.generate(&mut moves);
+
+        {
+            let mut checks = ArrayVec::new();
+            board.generate_quiet_checks(&mut checks);
+
+            for check in checks {
+                assert!(moves.contains(&check), "check {check} not found on board:\n{board:?}");
+            }
+        }
 
         let mut count = 0;
         for m in moves {

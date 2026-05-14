@@ -60,9 +60,7 @@ pub fn perft_with_hash(board: &Board, depth: u32, tt: &[PerftEntry]) -> u64 {
             }
         }
 
-        let moves: [Move; 256] = [Move::default(); 256];
-        let mut moves = ArrayVec::from(moves);
-        moves.set_len(0);
+        let mut moves = ArrayVec::new();
         board.generate(&mut moves);
 
         let mut count = 0;
