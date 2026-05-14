@@ -47,7 +47,7 @@ impl Network {
             // Squared Clipped `ReLU` - Activation Function.
             // Note that this takes the i16s in the accumulator to i32s.
             let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
+            let weight = i16x32::from_array(*weight);
             output += input.cast::<i32>() * weight.cast::<i32>();
         }
 
@@ -58,11 +58,11 @@ impl Network {
         };
         for (input, weight) in them_vals.iter().zip(output_weights.iter()) {
             let input = i16x32::from_array(*input).simd_clamp(min, max);
-            let weight = input * i16x32::from_array(*weight);
+            let weight = i16x32::from_array(*weight);
             output += input.cast::<i32>() * weight.cast::<i32>();
         }
 
-        let mut output = (output.reduce_sum() / i32::from(QA)) + i32::from(self.output_bias[output_bucket]);
+        let mut output = output.reduce_sum() + i32::from(self.output_bias[output_bucket]);
 
         // Apply eval scale.
         output *= SCALE;
