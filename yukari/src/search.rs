@@ -210,7 +210,7 @@ impl Thread {
             self.seldepth = self.seldepth.max(ply);
         }
 
-        let mut best = self.eval(ply);
+        let mut best = if !self.board[ply].in_check() { self.eval(ply) } else { -MATE_VALUE };
         if best >= beta {
             return best;
         }
