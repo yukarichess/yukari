@@ -30,23 +30,22 @@ enum TtFlags {
 }
 
 #[derive(Default)]
-#[repr(align(16))]
+#[repr(align(32))]
 pub struct TtEntry {
-    key:  AtomicU64,
-    data: AtomicU64,
+    buckets: [AtomicU64; 4],
 }
 
 #[derive(Default, Clone, Copy)]
 struct TtData {
+    key: u16,
     flags: TtFlags,
     depth: u8,
     score: i16,
     m:     Option<Move>,
-    eval:  i16,
 }
 
-const _TT_ENTRY_IS_16_BYTE: () = assert!(std::mem::size_of::<TtEntry>() == 16);
-const _TT_DATA_IS_8_BYTE: () = assert!(std::mem::size_of::<TtData>() == 8);
+const _TT_ENTRY_IS_32_BYTE: () = assert!(std::mem::size_of::<TtEntry>() == 32);
+const _TT_DATA_IS_16_BYTE: () = assert!(std::mem::size_of::<TtData>() == 8);
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
 enum MoveOrder {
@@ -279,21 +278,26 @@ impl Thread {
     }
 
     fn probe_tt(&self, tt: &[TtEntry], board: &Board, ply: usize) -> Option<TtData> {
-        let entry = (board.hash() & ((tt.len() - 1) as u64)) as usize;
+        let entry = (((board.hash() as u128) * (tt.len() as u128)) >> 64) as usize;
         let entry = &tt[entry];
-        let entry_key = entry.key.load(atomic::Ordering::Acquire);
-        let entry_data = entry.data.load(atomic::Ordering::Acquire);
-        let mut entry: TtData = unsafe { std::mem::transmute(entry_data) };
 
-        if entry_key ^ entry_data == board.hash() {
-            if i32::from(entry.score) >= MATE_VALUE - 500 {
-                entry.score -= ply as i16;
-            }
-            if i32::from(entry.score) <= -MATE_VALUE + 500 {
-                entry.score += ply as i16;
-            }
-            return Some(entry);
+        let mut buckets = [TtData::default(); 4];
+        for (source, dest) in entry.buckets.iter().zip(&mut buckets) {
+            *dest = unsafe { std::mem::transmute(source.load(atomic::Ordering::Acquire)) };
         }
+
+        for mut bucket in buckets {
+            if bucket.key == (board.hash() & 0xFFFF) as u16 {
+                if i32::from(bucket.score) >= MATE_VALUE - 500 {
+                    bucket.score -= ply as i16;
+                }
+                if i32::from(bucket.score) <= -MATE_VALUE + 500 {
+                    bucket.score += ply as i16;
+                }
+                return Some(bucket);
+            }
+        }
+
         None
     }
 
@@ -302,7 +306,7 @@ impl Thread {
     fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {
         use core::arch::aarch64::{_PREFETCH_LOCALITY3, _PREFETCH_READ, _prefetch};
 
-        let entry = (board.hash_after(m) & ((tt.len() - 1) as u64)) as usize;
+        let entry = (((board.hash_after(m) as u128) * (tt.len() as u128)) >> 64) as usize;
         let entry = &tt[entry];
         unsafe { _prefetch(entry as *const _ as *const i8, _PREFETCH_READ, _PREFETCH_LOCALITY3) }
     }
@@ -312,7 +316,7 @@ impl Thread {
     fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {
         use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
 
-        let entry = (board.hash_after(m) & ((tt.len() - 1) as u64)) as usize;
+        let entry = (((board.hash_after(m) as u128) * (tt.len() as u128)) >> 64) as usize;
         let entry = &tt[entry];
         unsafe { _mm_prefetch::<_MM_HINT_T0>(entry as *const _ as *const i8) }
     }
@@ -322,8 +326,29 @@ impl Thread {
     fn prefetch_tt(&self, tt: &[TtEntry], board: &Board, m: Move) {}
 
     fn write_tt(&self, tt: &[TtEntry], board: &Board, ply: usize, mut data: TtData) {
-        let entry = (board.hash() & ((tt.len() - 1) as u64)) as usize;
+        let entry = (((board.hash() as u128) * (tt.len() as u128)) >> 64) as usize;
         let entry = &tt[entry];
+
+        let mut buckets = [TtData::default(); 4];
+        for (source, dest) in entry.buckets.iter().zip(&mut buckets) {
+            *dest = unsafe { std::mem::transmute(source.load(atomic::Ordering::Acquire)) };
+        }
+
+        let mut candidate = None;
+        let mut lowest_depth_entry = 0;
+        let mut lowest_depth = buckets[0].depth;
+        for n in 0..buckets.len() {
+            if buckets[n].key == (board.hash() & 0xFFFF) as u16 {
+                candidate = Some(n);
+                break;
+            }
+            if buckets[n].depth < lowest_depth {
+                lowest_depth = buckets[n].depth;
+                lowest_depth_entry = n;
+            }
+        }
+        let candidate = candidate.unwrap_or(lowest_depth_entry);
+
         if i32::from(data.score) >= MATE_VALUE - 500 {
             data.score += ply as i16;
         }
@@ -331,8 +356,7 @@ impl Thread {
             data.score -= ply as i16;
         }
         let data = unsafe { std::mem::transmute::<TtData, u64>(data) };
-        entry.key.store(board.hash() ^ data, atomic::Ordering::Release);
-        entry.data.store(data, atomic::Ordering::Release);
+        entry.buckets[candidate].store(data, atomic::Ordering::Release);
     }
 
     fn update_history(
@@ -665,6 +689,7 @@ impl Thread {
             self.keystack.pop();
 
             self.write_tt(tt, &self.board[ply], ply, TtData {
+                key:   (self.board[ply].hash() & 0xFFFF) as u16,
                 m:     best_move,
                 score: best as i16,
                 flags: if best >= beta {
@@ -675,7 +700,6 @@ impl Thread {
                     TtFlags::Upper
                 },
                 depth: depth as u8,
-                eval:  eval as i16,
             });
 
             if !self.board[ply].in_check()
