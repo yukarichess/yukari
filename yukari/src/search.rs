@@ -238,11 +238,13 @@ impl Thread {
             }
         }
 
+        let see_threshold = if best + 200 <= alpha { 1 } else { 0 };
+
         let mut moves = ArrayVec::new();
         self.board[ply].generate_quiesce(&mut moves);
 
         for m in &moves {
-            if self.board[ply].static_exchange_evaluation(*m) < 0 {
+            if self.board[ply].static_exchange_evaluation(*m) < see_threshold {
                 continue;
             }
 
