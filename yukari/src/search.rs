@@ -216,6 +216,7 @@ impl Thread {
         }
         alpha = alpha.max(best);
 
+        let mut generate_quiets = false;
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
         if let Some(entry) = tt_entry
             && !expected_pvnode
@@ -236,10 +237,19 @@ impl Thread {
                     }
                 },
             }
+
+            if let Some(m) = entry.m && !self.board[ply].in_check() && !m.is_capture() {
+                generate_quiets = true;
+            }
         }
 
         let mut moves = ArrayVec::new();
-        self.board[ply].generate_quiesce(&mut moves);
+
+        if generate_quiets {
+            self.board[ply].generate(&mut moves);
+        } else {
+            self.board[ply].generate_quiesce(&mut moves);
+        }
 
         for m in &moves {
             if self.board[ply].static_exchange_evaluation(*m) < 0 {
