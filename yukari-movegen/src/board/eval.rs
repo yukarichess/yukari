@@ -9,7 +9,7 @@ use crate::{Colour, File, Piece, Square};
 
 pub const HORIZONTAL_MIRROR: bool = true;
 const L1_SIZE: usize = 256;
-const L2_SIZE: usize = 16;
+const L2_SIZE: usize = 256;
 const OUTPUT_BUCKETS: usize = 8;
 const DIVISOR: u8 = 32_u8.div_ceil(OUTPUT_BUCKETS as u8);
 const SCALE: i32 = 400;
@@ -60,7 +60,7 @@ static NNUE: Network =
 
 impl Network {
     #[inline(never)]
-    fn forward_l1_half(&self, us: &Accumulator, output_bucket: OutputBucket, index: usize) -> I32xL2 {
+    fn forward_l1_half(&self, us: &Accumulator, output_bucket: OutputBucket, index: usize) -> [i32; L2_SIZE] {
         let mut layer1 = [0_i32; L2_SIZE];
 
         // Dot product weights with screlu-activated input accumulator.
@@ -80,37 +80,48 @@ impl Network {
             layer1[lane] = acc.reduce_sum();
         }
 
-        I32xL2::from_array(layer1)
+        layer1
     }
 
     #[inline]
-    fn forward_l1(&self, us: &Accumulator, them: &Accumulator, output_bucket: OutputBucket) -> F32xL2 {
-        let mut layer1 = I32xL2::splat(0);
+    fn forward_l1(&self, us: &Accumulator, them: &Accumulator, output_bucket: OutputBucket) -> [f32; L2_SIZE] {
+        let mut layer1 = [0.0_f32; L2_SIZE];
 
         // L1: Matrix multiply weights with screlu-activated input accumulator.
-        layer1 += self.forward_l1_half(us, output_bucket, 0);
-        layer1 += self.forward_l1_half(them, output_bucket, 1);
+        let layer1_us = self.forward_l1_half(us, output_bucket, 0);
+        let layer1_them = self.forward_l1_half(them, output_bucket, 1);
 
-        // L1: Remove extra QA introduced by screlu.
-        layer1 /= I32xL2::splat(QA.into());
+        for (((layer1, us), them), bias) in layer1.iter_mut().zip(layer1_us).zip(layer1_them).zip(self.layer1_bias[output_bucket]) {
+            // L1: Remove extra QA introduced by screlu.
+            let mut l1 = ((us + them) as f32) / f32::from(QA);
+            
+            // L1: Add bias
+            l1 += f32::from(bias);
+            
+            // L1: Cast to f32 and remove quantisation.
+            *layer1 = l1 / f32::from(QA * QB);
+        }
 
-        // L1: Add bias
-        // TODO: compiler doesn't know if `output_bucket` is in bounds.
-        layer1 += I16xL2::from_array(self.layer1_bias[output_bucket]).cast::<i32>();
-
-        // L1: Cast to f32 and remove quantisation.
-        layer1.cast::<f32>() / F32xL2::splat((QA * QB).into())
+        layer1
     }
 
     #[inline]
-    fn forward_l2(&self, layer1: F32xL2, output_bucket: OutputBucket) -> f32 {
+    fn forward_l2(&self, layer1: &[f32; L2_SIZE], output_bucket: OutputBucket) -> f32 {
         // L2: Matrix multiply weights with crelu-activated L1.
-        let layer1 = layer1.simd_clamp(F32xL2::splat(0.0), F32xL2::splat(1.0));
-        let weight = F32xL2::from_array(self.layer2_weights[output_bucket]);
-        let layer2 = (layer1 * weight).reduce_sum();
+        const N: usize = 64;
+        let (layer1, []) = layer1.as_chunks::<N>() else { unreachable!() };
+        let (weights, []) = self.layer2_weights[output_bucket].as_chunks::<N>() else { unreachable!() };
+        let mut layer2 = Simd::<f32, N>::splat(0.0);
+        for (layer1, weights) in layer1.iter().zip(weights) {
+            const ZERO_VEC: Simd<f32, N> = Simd::splat(0.0);
+            const ONE_VEC: Simd<f32, N> = Simd::splat(1.0);
+            let layer1 = Simd::from_array(*layer1).simd_clamp(ZERO_VEC, ONE_VEC);
+            let weights = Simd::from_array(*weights);
+            layer2 += layer1 * weights;
+        }
 
         // L2: Add bias
-        layer2 + self.layer2_bias[output_bucket]
+        layer2.reduce_sum() + self.layer2_bias[output_bucket]
     }
 
     /// Calculates the output of the network, starting from the already
@@ -118,7 +129,7 @@ impl Network {
     #[inline]
     pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, output_bucket: OutputBucket) -> i32 {
         let layer1 = self.forward_l1(us, them, output_bucket);
-        let mut layer2 = self.forward_l2(layer1, output_bucket);
+        let mut layer2 = self.forward_l2(&layer1, output_bucket);
 
         // Apply eval scale.
         layer2 *= SCALE as f32;

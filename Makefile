@@ -1,4 +1,4 @@
-NNUE = fti25c
+NNUE = fti25j2
 EVALFILE ?= ../../../$(NNUE).bin
 
 # If on Windows, add the .exe extension to the executable and use PowerShell instead of `sed`
