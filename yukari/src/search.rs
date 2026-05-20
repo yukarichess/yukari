@@ -559,6 +559,9 @@ impl Thread {
                     // The TT move seems uniquely good; extend.
                     if score < singular_beta {
                         extension += 1;
+                        if !expected_pvnode && score < singular_beta - 20 && tt_entry.depth as i32 >= depth - 2 {
+                            extension += 1;
+                        }
                     } else if tt_entry.score as i32 >= beta {
                         extension -= 1;
                     }
