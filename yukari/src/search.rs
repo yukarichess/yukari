@@ -12,6 +12,8 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Colour, Move, Piece};
 
+const MAX_PLY: usize = 240;
+
 const MATE_VALUE: i32 = 10_000;
 
 // TODO: when 50-move rule is implemented, this can be limited to searching from the last irreversible move.
@@ -199,6 +201,10 @@ impl Thread {
 
     pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
         let expected_pvnode = alpha != beta - 1;
+
+        if ply >= MAX_PLY {
+            return self.eval(ply);
+        }
 
         if self.pv.len() <= ply {
             self.pv.push(Vec::new());
@@ -402,6 +408,10 @@ impl Thread {
         &mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry], excluded_move: Option<Move>,
     ) -> i32 {
         let expected_pvnode = alpha != beta - 1;
+
+        if ply >= MAX_PLY {
+            return self.eval(ply);
+        }
 
         if self.pv.len() <= ply {
             self.pv.push(Vec::new());
