@@ -477,7 +477,7 @@ impl Thread {
             }
         }
 
-        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && eval >= beta {
+        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && depth <= 5 && eval >= beta {
             self.keystack.push(self.board[ply].hash());
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make_null());
