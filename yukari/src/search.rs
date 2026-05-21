@@ -138,22 +138,127 @@ impl MoveOrder {
 }
 
 #[derive(Clone)]
-pub struct SearchParams;
+pub struct MpcModel {
+    pub a:     f32,
+    pub sigma: i32,
+    pub s:     i32,
+}
+
+impl MpcModel {
+    pub fn display_xboard(&self, depth: usize, bucket: usize) {
+        println!("feature option=\"MpcS{}D{depth}B{bucket}A -string {:.3}\"", self.s, self.a);
+        println!("feature option=\"MpcS{}D{depth}B{bucket}Sigma -spin {} 0 200\"", self.s, self.sigma);
+    }
+
+    pub fn display_openbench(&self, depth: usize, bucket: usize) {
+        println!("MpcS{}D{depth}B{bucket}A, float, {}, 1.0, 1.1, 0.005, 0.002", self.s, self.a);
+        println!("MpcS{}D{depth}B{bucket}Sigma, int, {}, 0, 100, 5, 0.002", self.s, self.sigma);
+    }
+
+    pub fn display_rust(&self) {
+        println!("    MpcModel {{ a: {:.3}, sigma: {}, s: {} }},", self.a, self.sigma, self.s);
+    }
+
+    pub fn parse(&mut self, depth: usize, bucket: usize, name: &str, value: &str) {
+        let mut prefix = String::new();
+        write!(prefix, "MpcS{}D{depth}B{bucket}", self.s).unwrap();
+        if !name.starts_with(&prefix) {
+            return;
+        }
+        let name = &name[prefix.len()..];
+        if name == "A" {
+            self.a = value.parse::<f32>().unwrap();
+            println!("# {prefix}A = {}", self.a);
+        } else if name == "Sigma" {
+            self.sigma = value.parse::<i32>().unwrap();
+            println!("# {prefix}Sigma = {}", self.sigma);
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SearchParams {
+    pub mpc_model: [[MpcModel; 4]; 5],
+}
 
 impl Default for SearchParams {
     fn default() -> Self {
-        Self
+        Self {
+            mpc_model: [
+                [
+                    // depth: 1
+                    MpcModel { a: 1.039, sigma: 22, s: 0 },
+                    MpcModel { a: 1.056, sigma: 47, s: 0 },
+                    MpcModel { a: 1.019, sigma: 42, s: 0 },
+                    MpcModel { a: 1.018, sigma: 24, s: 0 },
+                ],
+                [
+                    // depth: 2
+                    MpcModel { a: 1.043, sigma: 48, s: 0 },
+                    MpcModel { a: 1.049, sigma: 68, s: 0 },
+                    MpcModel { a: 1.026, sigma: 47, s: 0 },
+                    MpcModel { a: 1.035, sigma: 36, s: 0 },
+                ],
+                [
+                    // depth: 3
+                    MpcModel { a: 1.067, sigma: 74, s: 0 },
+                    MpcModel { a: 1.092, sigma: 81, s: 0 },
+                    MpcModel { a: 1.048, sigma: 69, s: 0 },
+                    MpcModel { a: 1.054, sigma: 55, s: 0 },
+                ],
+                [
+                    // depth: 4
+                    MpcModel { a: 1.065, sigma: 65, s: 1 },
+                    MpcModel { a: 1.028, sigma: 76, s: 1 },
+                    MpcModel { a: 1.023, sigma: 71, s: 1 },
+                    MpcModel { a: 1.033, sigma: 56, s: 1 },
+                ],
+                [
+                    // depth: 5
+                    MpcModel { a: 1.088, sigma: 62, s: 1 },
+                    MpcModel { a: 1.055, sigma: 71, s: 1 },
+                    MpcModel { a: 1.050, sigma: 86, s: 1 },
+                    MpcModel { a: 1.035, sigma: 61, s: 1 },
+                ],
+            ],
+        }
     }
 }
 
 impl SearchParams {
-    pub fn display_xboard(&self) {}
+    pub fn display_xboard(&self) {
+        for depth in 0..=4 {
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].display_xboard(depth + 1, bucket);
+            }
+        }
+    }
 
-    pub fn display_openbench(&self) {}
+    pub fn display_openbench(&self) {
+        for depth in 0..=4 {
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].display_openbench(depth + 1, bucket);
+            }
+        }
+    }
 
-    pub fn display_rust(&self) {}
+    pub fn display_rust(&self) {
+        for depth in 0..=4 {
+            println!("[ // depth: {}", depth + 1);
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].display_rust();
+            }
+            println!("],")
+        }
+    }
 
-    pub fn parse(&mut self, name: &str, value: &str) {}
+    pub fn parse(&mut self, name: &str, value: &str) {
+        for depth in 0..=4 {
+            for bucket in 0..=3 {
+                self.mpc_model[depth][bucket].parse(depth + 1, bucket, name, value);
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -475,23 +580,28 @@ impl Thread {
                     return score;
                 }
             }
-        }
 
-        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && eval >= beta {
-            self.keystack.push(self.board[ply].hash());
-            if self.board.len() <= ply + 1 {
-                self.board.push(self.board[ply].make_null());
+            let mpc_model = if depth <= 5 {
+                let piece_count = (self.board[ply].data().piecemask().occupied().count_ones() as usize - 2) / 8;
+                self.params.mpc_model[(depth - 1) as usize][piece_count].clone()
             } else {
-                self.board[ply + 1] = self.board[ply].make_null();
-            }
-            self.path.push(None);
-            let reduction = if depth > 6 { 4 } else { 3 };
-            let score = -self.search(depth - 1 - reduction, -beta, -beta + 1, ply + 1, tt, None);
-            self.path.pop();
-            self.keystack.pop();
+                MpcModel { a: 0.0, sigma: 0, s: 0 }
+            };
 
-            if score >= beta {
-                return score;
+            if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth <= 5 {
+                let bound = ((beta + mpc_model.sigma) as f32 / mpc_model.a).round() as i32;
+                let score = self.search(mpc_model.s, bound - 1, bound, ply, tt, None);
+                if score >= bound {
+                    return beta;
+                }
+            }
+
+            if excluded_move.is_none() && alpha >= -1000 && beta <= 1000 && !expected_pvnode && depth == 1 {
+                let bound = ((alpha - mpc_model.sigma) as f32 / mpc_model.a).round() as i32;
+                let score = self.search(mpc_model.s, bound, bound + 1, ply, tt, None);
+                if score <= bound {
+                    return alpha;
+                }
             }
         }
 

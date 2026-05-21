@@ -278,7 +278,7 @@ impl Board {
         self.data.set_ep(self.ep, ep);
         self.ep = ep;
     }
-
+    
     /// Make a move on the board.
     ///
     /// # Panics

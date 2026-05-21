@@ -6,7 +6,10 @@ use std::{
 
 use crate::{
     Piece,
-    board::{bitlist::BitlistArray, piecemask::Piecemask},
+    board::{
+        bitlist::BitlistArray,
+        piecemask::Piecemask,
+    },
     colour::Colour,
     square::Square,
 };
