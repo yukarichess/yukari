@@ -139,10 +139,18 @@ impl Yukari {
         self.search.prepare(&self.board, stop_after, node_limit, &self.keystack);
 
         // Use a seperate backing data to record the current move set
-        let mut depth = 0;
+        let mut depth = 1;
         let mut score = 0;
         let mut valid_score = 0;
         let mut valid_depth = 0;
+
+        let mut moves = ArrayVec::new();
+        let mut p_move_is_best = ArrayVec::<[f32; 256]>::new();
+        self.board.generate(&mut moves);
+
+        for _ in 0..moves.len() {
+            p_move_is_best.push(1.0 / (moves.len() as f32));
+        }
 
         let mut pv = Vec::new();
         let max_depth = self.max_depth.unwrap_or(63);
@@ -212,7 +220,7 @@ impl Yukari {
             }
 
             // Modify time to search based on best move stability.
-            if matches!(self.tc.mode, TimeMode::Incremental { base: _, increment: _ }) && !pv.is_empty() && !best_pv.is_empty() {
+            /*if matches!(self.tc.mode, TimeMode::Incremental { base: _, increment: _ }) && !pv.is_empty() && !best_pv.is_empty() {
                 if pv[0] == best_pv[0] {
                     let soft_limit_diff = soft_limit - start;
                     soft_limit = start + soft_limit_diff.mul_f64(0.95);
@@ -220,12 +228,41 @@ impl Yukari {
                     let soft_limit_diff = soft_limit - start;
                     soft_limit = start + soft_limit_diff.mul_f64(1.1);
                 }
-            }
+            }*/
 
             // If we have a pv that's not just empty from bailing out use that as our best moves
             best_pv.clone_from(&pv);
             valid_score = score;
             valid_depth = depth;
+
+            if stop_after.is_some() && depth <= 16 {
+                let p_search_yields_best_move = &self.search.params.p_search_yields_best_move;
+
+                let depth = (depth - 1) as usize;
+
+                // best move: P(move M is best | search result yields move M at depth D)
+                let entry = moves.iter().position(|&x| x == pv[0]).unwrap();
+                p_move_is_best[entry] = (p_search_yields_best_move[depth] * p_move_is_best[entry]) / 
+                    (p_search_yields_best_move[depth] * p_move_is_best[entry] + (1.0 - p_search_yields_best_move[depth]) * (1.0 - p_move_is_best[entry]));
+                
+                for i in 0..moves.len() {
+                    if i == entry {
+                        continue;
+                    }
+                    p_move_is_best[i] = ((1.0 - p_search_yields_best_move[depth]) / ((moves.len() - 1) as f32) * p_move_is_best[i]) / 
+                        (p_search_yields_best_move[depth] * p_move_is_best[i] + (1.0 - p_search_yields_best_move[depth]) * (1.0 - p_move_is_best[i]));
+                }
+
+                let total_p = p_move_is_best.iter().copied().sum::<f32>();
+
+                for i in 0..moves.len() {
+                    println!("{}: {:.3}", self.board.to_san(moves[i]), 100.0*p_move_is_best[i] / total_p);
+                }
+
+                if p_move_is_best[entry] / total_p > 0.99 {
+                    break;
+                }
+            }
 
             if stop_after.is_some() && Instant::now() >= soft_limit {
                 break;
@@ -501,6 +538,7 @@ fn run() -> io::Result<()> {
                 println!("id author Hannah Ravensloft");
                 println!("option name Hash type spin default 16 min 1 max 8192");
                 println!("option name Threads type spin default 1 min 1 max 256"); // do we even have a limit?
+                engine.search.params.display_uci();
                 println!("uciok");
             },
             // This is where we send our features
@@ -644,22 +682,25 @@ fn run() -> io::Result<()> {
                 let (value, args) = args.split_once(' ').unwrap_or((args, ""));
                 assert_eq!(value, "value");
                 let (value, _) = args.split_once(' ').unwrap_or((args, ""));
-                let value = value.parse::<i32>().unwrap();
                 match name {
-                    "Hash" if value >= 1 => {
+                    "Hash" if value.parse::<i32>().unwrap() >= 1 => {
                         // UCIism. grumble grumble.
-                        engine.search.allocate_tt(value as usize);
-                        engine.hash_megabytes = value as usize;
+                        let value = value.parse::<usize>().unwrap();
+                        engine.search.allocate_tt(value);
+                        engine.hash_megabytes = value;
                     },
                     "Threads" => {
                         // UCIism, grumble grumble.
-                        engine.search = Search::new(value as usize);
+                        let value = value.parse::<usize>().unwrap();
+                        engine.search = Search::new(value);
                         engine.search.allocate_tt(engine.hash_megabytes);
                         engine.search.params = engine.params.clone();
-                        engine.threads = value as usize;
+                        engine.threads = value;
                     },
-                    _ => (),
+                    _ => {},
                 }
+                engine.search.params.parse(name, value);
+                engine.params = engine.search.params.clone();
             },
             "eval" => println!("{}", engine.board.eval(engine.board.side())),
             // Hard would turn on thinking during opponent's time, easy would turn it off

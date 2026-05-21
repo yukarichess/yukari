@@ -138,22 +138,73 @@ impl MoveOrder {
 }
 
 #[derive(Clone)]
-pub struct SearchParams;
+pub struct SearchParams {
+    pub p_search_yields_best_move: [f32; 16],
+}
 
 impl Default for SearchParams {
     fn default() -> Self {
-        Self
+        Self {
+            p_search_yields_best_move: [
+                0.001,
+                0.001,
+                0.001,
+                0.294_649_3,
+                0.351_203_92,
+                0.080_689_57,
+                0.326_818_38,
+                0.659_107_27,
+                0.464_219_96,
+                0.750_718_36,
+                0.917_433_74,
+                0.792_785_1,
+                0.719_566_35,
+                0.996_288_36,
+                0.914_146_6,
+                0.885_022_6
+            ],
+        }
     }
 }
 
 impl SearchParams {
-    pub fn display_xboard(&self) {}
+    pub fn display_xboard(&self) {
+        for depth in 0..16 {
+            println!("feature option=\"BayestmD{:02} -string {:.3}\"", depth + 1, self.p_search_yields_best_move[depth]);
+        }
+    }
 
-    pub fn display_openbench(&self) {}
+    pub fn display_uci(&self) {
+        for depth in 0..16 {
+            println!("option name BayestmD{:02} type string default {:.3}", depth + 1, self.p_search_yields_best_move[depth]);
+        }
+    }
 
-    pub fn display_rust(&self) {}
+    pub fn display_openbench(&self) {
+        for depth in 0..16 {
+            println!("BayestmD{:02}, float, {}, 0.001, 0.999, 0.05, 0.002", depth + 1, self.p_search_yields_best_move[depth]);
+        }
+    }
 
-    pub fn parse(&mut self, name: &str, value: &str) {}
+    pub fn display_rust(&self) {
+        print!("[");
+        for depth in 0..16 {
+            print!("{}, ", self.p_search_yields_best_move[depth]);
+        }
+        println!("]");
+    }
+
+    pub fn parse(&mut self, name: &str, value: &str) {
+        for depth in 0..16 {
+            let mut prefix = String::new();
+            write!(prefix, "BayestmD{:02}", depth + 1).unwrap();
+            if !name.starts_with(&prefix) {
+                continue;
+            }
+            self.p_search_yields_best_move[depth] = value.parse().unwrap();
+            println!("# {prefix} = {}", self.p_search_yields_best_move[depth]);
+        }
+    }
 }
 
 #[derive(Clone)]
