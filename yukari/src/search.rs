@@ -477,24 +477,6 @@ impl Thread {
             }
         }
 
-        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && eval >= beta {
-            self.keystack.push(self.board[ply].hash());
-            if self.board.len() <= ply + 1 {
-                self.board.push(self.board[ply].make_null());
-            } else {
-                self.board[ply + 1] = self.board[ply].make_null();
-            }
-            self.path.push(None);
-            let reduction = if depth > 6 { 4 } else { 3 };
-            let score = -self.search(depth - 1 - reduction, -beta, -beta + 1, ply + 1, tt, None);
-            self.path.pop();
-            self.keystack.pop();
-
-            if score >= beta {
-                return score;
-            }
-        }
-
         let mut moves = ArrayVec::new();
         self.board[ply].generate(&mut moves);
 
