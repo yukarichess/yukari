@@ -160,8 +160,8 @@ impl Yukari {
         let mut pv = ArrayVec::new();
         let max_depth = self.max_depth.unwrap_or(63);
         while depth <= max_depth {
-            let mut lower_bound = 50;
-            let mut upper_bound = 50;
+            let mut lower_bound = 25;
+            let mut upper_bound = 25;
             loop {
                 pv.set_len(0);
                 let lower_window = score - lower_bound;
@@ -341,8 +341,8 @@ impl Yukari {
             let mut keystack = Vec::new();
             let mut pv = ArrayVec::new();
             let mut score = 0;
-            let mut lower_bound = 50;
-            let mut upper_bound = 50;
+            let mut lower_bound = 25;
+            let mut upper_bound = 25;
             loop {
                 pv.set_len(0);
                 let lower_window = score - lower_bound;
