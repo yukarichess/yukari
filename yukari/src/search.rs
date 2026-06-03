@@ -747,11 +747,11 @@ impl<'a> Search<'a> {
 
             // Late Move Reduction
             if depth >= 3 && movecount >= 4 && !m.is_capture() {
-                let depth = (depth as f32).ln();
+                let depth_f32 = (depth as f32).ln();
                 let movecount = (movecount as f32).ln();
-                reduction += (depth * movecount).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32;
+                reduction += (depth_f32 * movecount).mul_add(self.params.lmr_mul, self.params.lmr_base) as i32; // credit: adam
                 reduction -= i32::from(expected_pvnode);
-                // credit: adam
+                reduction = reduction.clamp(1, depth - 1);
             }
 
             let mut child_pv = ArrayVec::new();
