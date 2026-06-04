@@ -727,6 +727,9 @@ impl<'a> Search<'a> {
                     if score < singular_beta {
                         // The TT move seems uniquely good; extend.
                         extension += 1;
+                        if !expected_pvnode && score < singular_beta - 50 && tt_entry.depth as i32 >= depth - 2 {
+                            extension += 1;
+                        }
                     } else if i32::from(tt_entry.score) >= beta {
                         extension -= 1;
                     }
