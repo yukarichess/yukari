@@ -562,9 +562,10 @@ impl Thread {
             self.prefetch_tt(tt, &self.board[ply], *m);
 
             // SEE Pruning
-            if !self.board[ply].in_check() && depth <= 2 && movecount > 1 && best > -MATE_VALUE + 500 {
+            if !self.board[ply].in_check() && depth <= 3 && movecount > 1 && best > -MATE_VALUE + 500 {
                 if !m.is_capture() {
-                    let threshold = -(depth as f32 * 0.0) as i32;
+                    static THRESHOLDS: [i32; 4] = [0, 0, 0, 0];
+                    let threshold = THRESHOLDS[depth as usize];
                     if self.board[ply].static_exchange_evaluation(*m) < threshold {
                         continue;
                     }
