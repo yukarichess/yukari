@@ -154,17 +154,17 @@ pub struct SearchParams {
 impl Default for SearchParams {
     fn default() -> Self {
         Self {
-            rfp_margin: 45.0,
-            razor_margin: 250.0,
-            see_pruning_quiet_margin: 0.0,
-            singular_beta_margin: 2.0,
-            singular_double_margin: 50,
-            singular_low_depth_margin: 25,
-            lmr_base: 1.0,
-            lmr_mul: 0.5,
-            lmr_pv: 1.0,
-            history_bonus_base: -300.0,
-            history_bonus_mul: 250.0,
+            rfp_margin: 45.158_22,
+            razor_margin: 241.711,
+            see_pruning_quiet_margin: -1.744_083_9,
+            singular_beta_margin: 2.174_403_7,
+            singular_double_margin: 54,
+            singular_low_depth_margin: 23,
+            lmr_base: 1.030_837_2,
+            lmr_mul: 0.554_797_05,
+            lmr_pv: 1.070_96,
+            history_bonus_base: -218.018_05,
+            history_bonus_mul: 297.116_46,
         }
     }
 }
