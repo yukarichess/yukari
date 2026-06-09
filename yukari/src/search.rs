@@ -629,16 +629,6 @@ impl Thread {
 
             self.prefetch_tt(tt, &self.board[ply], *m);
 
-            // SEE Pruning
-            if !self.board[ply].in_check() && depth <= 2 && movecount > 1 && best > -MATE_VALUE + 500 {
-                if !m.is_capture() {
-                    let threshold = (depth as f32 * self.params.see_pruning_quiet_margin) as i32;
-                    if self.board[ply].static_exchange_evaluation(*m) < threshold {
-                        continue;
-                    }
-                }
-            }
-
             let mut extension = 0;
 
             // Singular extension: is the TT move uniquely good?
