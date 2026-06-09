@@ -501,6 +501,7 @@ fn run() -> io::Result<()> {
                 println!("id author Hannah Ravensloft");
                 println!("option name Hash type spin default 16 min 1 max 8192");
                 println!("option name Threads type spin default 1 min 1 max 256"); // do we even have a limit?
+                engine.search.params.display_uci();
                 println!("uciok");
             },
             // This is where we send our features
@@ -644,14 +645,17 @@ fn run() -> io::Result<()> {
                 let (value, args) = args.split_once(' ').unwrap_or((args, ""));
                 assert_eq!(value, "value");
                 let (value, _) = args.split_once(' ').unwrap_or((args, ""));
-                let value = value.parse::<i32>().unwrap();
                 match name {
-                    "Hash" if value >= 1 => {
-                        // UCIism. grumble grumble.
-                        engine.search.allocate_tt(value as usize);
-                        engine.hash_megabytes = value as usize;
+                    "Hash" => {
+                        let value = value.parse::<i32>().unwrap();
+                        if value > 0 {
+                            // UCIism. grumble grumble.
+                            engine.search.allocate_tt(value as usize);
+                            engine.hash_megabytes = value as usize;
+                        }
                     },
                     "Threads" => {
+                        let value = value.parse::<i32>().unwrap();
                         // UCIism, grumble grumble.
                         engine.search = Search::new(value as usize);
                         engine.search.allocate_tt(engine.hash_megabytes);
@@ -660,6 +664,8 @@ fn run() -> io::Result<()> {
                     },
                     _ => (),
                 }
+                engine.search.params.parse(name, value);
+                engine.params = engine.search.params.clone();
             },
             "eval" => println!("{}", engine.board.eval(engine.board.side())),
             // Hard would turn on thinking during opponent's time, easy would turn it off

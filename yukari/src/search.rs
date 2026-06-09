@@ -39,7 +39,7 @@ pub struct TtEntry {
 
 #[derive(Default, Clone, Copy)]
 struct TtData {
-    key: u16,
+    key:   u16,
     flags: TtFlags,
     depth: u8,
     score: i16,
@@ -137,22 +137,90 @@ impl MoveOrder {
 }
 
 #[derive(Clone)]
-pub struct SearchParams;
+pub struct SearchParams {
+    rfp_margin: f32,
+    razor_margin: f32,
+    see_pruning_quiet_margin: f32,
+    singular_beta_margin: f32,
+    singular_double_margin: i32,
+    singular_low_depth_margin: i32,
+    lmr_base: f32,
+    lmr_mul: f32,
+    lmr_pv: f32,
+    history_bonus_base: f32,
+    history_bonus_mul: f32,
+}
 
 impl Default for SearchParams {
     fn default() -> Self {
-        Self
+        Self {
+            rfp_margin: 45.0,
+            razor_margin: 250.0,
+            see_pruning_quiet_margin: 0.0,
+            singular_beta_margin: 2.0,
+            singular_double_margin: 50,
+            singular_low_depth_margin: 25,
+            lmr_base: 1.0,
+            lmr_mul: 0.5,
+            lmr_pv: 1.0,
+            history_bonus_base: -300.0,
+            history_bonus_mul: 250.0,
+        }
     }
 }
 
 impl SearchParams {
     pub fn display_xboard(&self) {}
 
-    pub fn display_openbench(&self) {}
+    pub fn display_uci(&self) {
+        println!("option name rfp_margin type string default {}", self.rfp_margin);
+        println!("option name razor_margin type string default {}", self.razor_margin);
+        println!("option name see_pruning_quiet_margin type string default {}", self.see_pruning_quiet_margin);
+        println!("option name singular_beta_margin type string default {}", self.singular_beta_margin);
+        println!("option name singular_double_margin type spin default {} min 0 max 100", self.singular_double_margin);
+        println!("option name singular_low_depth_margin type spin default {} min 0 max 50", self.singular_low_depth_margin);
+        println!("option name lmr_base type string default {}", self.lmr_base);
+        println!("option name lmr_mul type string default {}", self.lmr_mul);
+        println!("option name lmr_pv type string default {}", self.lmr_pv);
+        println!("option name history_bonus_base type string default {}", self.history_bonus_base);
+        println!("option name history_bonus_mul type string default {}", self.history_bonus_mul);
+    }
+
+    pub fn display_openbench(&self) {
+        // name, type, current value, minimum value, maximum value, C_end, R_end
+        // C_end = (maximum value - minimum value) / 20
+        // R_end = 0.002
+        println!("rfp_margin, float, {}, 0.0, 90.0, 4.5, 0.002", self.rfp_margin);
+        println!("razor_margin, float, {}, 0.0, 500.0, 25.0, 0.002", self.razor_margin);
+        println!("see_pruning_quiet_margin, float, {}, -5.0, 5.0, 2.0, 0.002", self.see_pruning_quiet_margin);
+        println!("singular_beta_margin, float, {}, 0.0, 4.0, 0.2, 0.002", self.singular_beta_margin);
+        println!("singular_double_margin, int, {}, 0, 100, 5, 0.002", self.singular_double_margin);
+        println!("singular_low_depth_margin, int, {}, 0, 50, 2.5, 0.002", self.singular_low_depth_margin);
+        println!("lmr_base, float, {}, 0.0, 2.0, 0.1, 0.002", self.lmr_base);
+        println!("lmr_mul, float, {}, 0.0, 1.0, 0.05, 0.002", self.lmr_mul);
+        println!("lmr_pv, float, {}, 0.0, 2.0, 0.1, 0.002", self.lmr_pv);
+        println!("history_bonus_base, float, {}, -600.0, 0.0, 30.0, 0.002", self.history_bonus_base);
+        println!("history_bonus_mul, float, {}, 0.0, 500.0, 25.0, 0.002", self.history_bonus_mul);
+    }
 
     pub fn display_rust(&self) {}
 
-    pub fn parse(&mut self, name: &str, value: &str) {}
+    pub fn parse(&mut self, name: &str, value: &str) {
+        match name {
+            "rfp_margin" => self.rfp_margin = value.parse().unwrap(),
+            "razor_margin" => self.razor_margin = value.parse().unwrap(),
+            "see_pruning_quiet_margin" => self.see_pruning_quiet_margin = value.parse().unwrap(),
+            "singular_beta_margin" => self.singular_beta_margin = value.parse().unwrap(),
+            "singular_double_margin" => self.singular_double_margin = value.parse().unwrap(),
+            "singular_low_depth_margin" => self.singular_low_depth_margin = value.parse().unwrap(),
+            "lmr_base" => self.lmr_base = value.parse().unwrap(),
+            "lmr_mul" => self.lmr_mul = value.parse().unwrap(),
+            "lmr_pv" => self.lmr_pv = value.parse().unwrap(),
+            "history_bonus_base" => self.history_bonus_base = value.parse().unwrap(),
+            "history_bonus_mul" => self.history_bonus_mul = value.parse().unwrap(),
+            _ => (),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -487,12 +555,12 @@ impl Thread {
 
         let eval = self.eval(ply);
         if !self.board[ply].in_check() {
-            let rfp_margin = 45 * depth;
+            let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
             if excluded_move.is_none() && depth <= 7 && eval - rfp_margin >= beta {
                 return eval - rfp_margin;
             }
 
-            let razor_margin = 250 * depth;
+            let razor_margin = (depth as f32 * self.params.razor_margin) as i32;
             if excluded_move.is_none() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
                 let score = self.quiesce(alpha, alpha + 1, ply, tt);
                 if score <= alpha {
@@ -564,7 +632,7 @@ impl Thread {
             // SEE Pruning
             if !self.board[ply].in_check() && depth <= 2 && movecount > 1 && best > -MATE_VALUE + 500 {
                 if !m.is_capture() {
-                    let threshold = -(depth as f32 * 0.0) as i32;
+                    let threshold = (depth as f32 * self.params.see_pruning_quiet_margin) as i32;
                     if self.board[ply].static_exchange_evaluation(*m) < threshold {
                         continue;
                     }
@@ -580,7 +648,8 @@ impl Thread {
                 && Some(*m) == tt_entry.m
             {
                 if depth >= 7 && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower) && tt_entry.score.abs() < 9500 {
-                    let singular_beta = (i32::from(tt_entry.score) - depth * 2).max(-MATE_VALUE + 1);
+                    let singular_margin = (depth as f32 * self.params.singular_beta_margin) as i32;
+                    let singular_beta = (i32::from(tt_entry.score) - singular_margin).max(-MATE_VALUE + 1);
                     let singular_depth = (depth - 1) / 2;
                     let score = self.search(singular_depth, singular_beta - 1, singular_beta, ply, tt, Some(*m));
 
@@ -593,14 +662,21 @@ impl Thread {
                     // The TT move seems uniquely good; extend.
                     if score < singular_beta {
                         extension += 1;
-                        if !expected_pvnode && score < singular_beta - 50 && tt_entry.depth as i32 >= depth - 2 {
+                        if !expected_pvnode
+                            && score < singular_beta - self.params.singular_double_margin
+                            && tt_entry.depth as i32 >= depth - 2
+                        {
                             extension += 1;
                         }
                     } else if tt_entry.score as i32 >= beta {
                         extension -= 1;
                     }
                 // Low depth singular extension: Determine singularity by static eval vs alpha.
-                } else if !self.board[ply].in_check() && depth <= 7 && eval <= alpha - 25 && tt_entry.flags == TtFlags::Lower {
+                } else if !self.board[ply].in_check()
+                    && depth <= 7
+                    && eval <= alpha - self.params.singular_low_depth_margin
+                    && tt_entry.flags == TtFlags::Lower
+                {
                     extension += 1;
                 }
             }
@@ -627,11 +703,13 @@ impl Thread {
                 // Late Move Reduction
                 let mut reduction = 1;
                 if depth >= 3 && movecount >= 4 && !m.is_capture() {
+                    let mut reduction_f32 = reduction as f32;
                     let depth_f32 = (depth as f32).ln();
                     let movecount = (movecount as f32).ln();
-                    reduction += (depth_f32 * movecount).mul_add(0.5, 1.0) as i32; // credit: adam
-                    reduction -= i32::from(expected_pvnode);
-                    reduction = reduction.clamp(1, depth - 1);
+                    reduction_f32 += self.params.lmr_base;
+                    reduction_f32 += (depth_f32 * movecount) * self.params.lmr_mul; // credit: adam
+                    reduction_f32 -= f32::from(expected_pvnode) * self.params.lmr_pv;
+                    reduction = (reduction_f32 as i32).clamp(1, depth - 1);
                 }
 
                 score = -self.search(depth - reduction + extension, -alpha - 1, -alpha, ply + 1, tt, None);
@@ -681,7 +759,9 @@ impl Thread {
             }
 
             if score >= beta {
-                let bonus = 250 * depth - 300;
+                let mut bonus = self.params.history_bonus_base;
+                bonus += depth as f32 * self.params.history_bonus_mul;
+                let bonus = bonus as i32;
                 let last_m = *self.path.last().unwrap_or(&None);
                 let last_last_m = *self.path.iter().rev().nth(1).unwrap_or(&None);
                 if !m.is_capture() {
