@@ -187,7 +187,22 @@ static EN_PASSANT: [u64; 8] = [
 ];
 
 #[allow(clippy::unreadable_literal)]
-static CASTLING: [u64; 4] = [0x6BAC7137E9300828, 0x5052AF9C71893855, 0x27AF12CB40FB58AF, 0x4F5E259681F6B15E];
+static CASTLING: [u64; 16] = {
+    const BASE: [u64; 4] = [0x6BAC7137E9300828, 0x5052AF9C71893855, 0x27AF12CB40FB58AF, 0x4F5E259681F6B15E];
+    let mut table = [0u64; 16];
+    let mut mask = 0;
+    while mask < 16 {
+        let mut i = 0;
+        while i < 4 {
+            if mask & (1 << i) != 0 {
+                table[mask] ^= BASE[i];
+            }
+            i += 1;
+        }
+        mask += 1;
+    }
+    table
+};
 
 #[allow(clippy::unreadable_literal)]
 static COLOUR: u64 = 0x336C0DBD40089572;
@@ -219,11 +234,11 @@ impl Zobrist {
     }
 
     pub fn add_castling(kind: usize, hash: &mut u64) {
-        *hash ^= CASTLING[kind];
+        *hash ^= CASTLING[1 << kind];
     }
 
-    pub fn remove_castling(kind: usize, hash: &mut u64) {
-        *hash ^= CASTLING[kind];
+    pub fn remove_castling_mask(mask: u8, hash: &mut u64) {
+        *hash ^= CASTLING[mask as usize];
     }
 
     pub fn toggle_side(hash: &mut u64) {

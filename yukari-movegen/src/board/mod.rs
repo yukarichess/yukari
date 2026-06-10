@@ -16,6 +16,7 @@ use crate::{
 };
 
 mod bitlist;
+mod castling;
 mod data;
 mod eval;
 mod feature;
@@ -26,6 +27,7 @@ mod pins;
 mod zobrist;
 
 use bitlist::Bitlist;
+pub use castling::CastlingRights;
 use data::BoardData;
 pub use index::PieceIndex;
 
@@ -37,7 +39,7 @@ pub struct Board {
     /// The side to move.
     side:   Colour,
     /// Castling rights, if any.
-    castle: (bool, bool, bool, bool),
+    castle: CastlingRights,
     /// En-passant square, if any.
     ep:     Option<Square>,
 }
@@ -85,17 +87,17 @@ impl Display for Board {
         } else {
             writeln!(f, "Black to move.")?;
         }
-        if self.castle.0 {
-            write!(f, "K")?;
+        let mut any_castle = false;
+        for idx in 0..4 {
+            if let Some(sq) = self.castle.rook_square(idx) {
+                any_castle = true;
+                let letter = b'a' + u8::from(File::from(sq));
+                let letter = if idx < 2 { letter.to_ascii_uppercase() } else { letter };
+                write!(f, "{}", letter as char)?;
+            }
         }
-        if self.castle.1 {
-            write!(f, "Q")?;
-        }
-        if self.castle.2 {
-            write!(f, "k")?;
-        }
-        if self.castle.3 {
-            write!(f, "q")?;
+        if !any_castle {
+            write!(f, "-")?;
         }
         writeln!(f)?;
         if let Some(ep) = self.ep {
@@ -115,7 +117,7 @@ impl Board {
     #[must_use]
     #[inline]
     pub fn new() -> Self {
-        Self { side: Colour::White, castle: (false, false, false, false), ep: None, data: BoardData::new() }
+        Self { side: Colour::White, castle: CastlingRights::new(), ep: None, data: BoardData::new() }
     }
 
     #[allow(clippy::missing_panics_doc)]
@@ -130,8 +132,35 @@ impl Board {
     }
 
     #[must_use]
-    pub const fn castle(&self) -> &(bool, bool, bool, bool) {
-        &self.castle
+    pub const fn castle(&self) -> CastlingRights {
+        self.castle
+    }
+
+    #[must_use]
+    pub fn castling_king_dest(m: Move) -> Square {
+        let side = if Rank::from(m.from()) == Rank::One { Colour::White } else { Colour::Black };
+        CastlingRights::castling_destinations(side, m.kind()).0
+    }
+
+    fn outermost_rook(data: &BoardData, back: Rank, colour: Colour, files: impl Iterator<Item = u8>) -> Option<u8> {
+        let mut found = None;
+        for file in files {
+            let sq = Square::from_rank_file(back, File::try_from(file).unwrap());
+            if data.piece_from_square(sq) == Some(Piece::Rook) && data.colour_from_square(sq) == Some(colour) {
+                found = Some(file);
+            }
+        }
+        found
+    }
+
+    fn update_castling(&self, m: Move, castle: &mut CastlingRights) -> u8 {
+        let before = castle.availability();
+        if self.data.piece_from_square(m.from()) == Some(Piece::King) {
+            castle.king_moved(self.side);
+        }
+        castle.update_square(m.from(), self.side);
+        castle.update_square(m.dest(), !self.side);
+        before & !castle.availability()
     }
 
     /// Check if this board is illegal by seeing if the enemy king is attacked by friendly pieces.
@@ -221,32 +250,32 @@ impl Board {
         };
         idx += 2;
         c = fen[idx];
-        b.castle = (false, false, false, false);
+        b.castle = CastlingRights::new();
         if c == b'-' {
             idx += 1;
         } else {
-            if c == b'K' {
-                b.castle.0 = true;
-                b.data.add_castling(0);
+            while c != b' ' {
+                let colour = if c.is_ascii_uppercase() { Colour::White } else { Colour::Black };
+                let lower = c.to_ascii_lowercase();
+                let back = CastlingRights::back_rank(colour);
+                let king_file = u8::from(File::from(b.data.king_square(colour)));
+                let rook_file = match lower {
+                    b'k' => Self::outermost_rook(&b.data, back, colour, (king_file + 1)..8),
+                    b'q' => Self::outermost_rook(&b.data, back, colour, (0..king_file).rev()),
+                    b'a'..=b'h' => Some(lower - b'a'),
+                    _ => return None,
+                };
+                if let Some(rook_file) = rook_file {
+                    let index = if rook_file > king_file {
+                        CastlingRights::kingside_index(colour)
+                    } else {
+                        CastlingRights::queenside_index(colour)
+                    };
+                    b.castle.set(index, File::try_from(rook_file).unwrap());
+                    b.data.add_castling(index);
+                }
                 idx += 1;
                 c = fen[idx];
-            }
-            if c == b'Q' {
-                b.castle.1 = true;
-                b.data.add_castling(1);
-                idx += 1;
-                c = fen[idx];
-            }
-            if c == b'k' {
-                b.castle.2 = true;
-                b.data.add_castling(2);
-                idx += 1;
-                c = fen[idx];
-            }
-            if c == b'q' {
-                b.castle.3 = true;
-                b.data.add_castling(3);
-                idx += 1;
             }
         }
         idx += 1;
@@ -308,13 +337,14 @@ impl Board {
                     .unwrap_or_else(|| panic!("move {m} attempts to capture an empty square"));
                 b.data.remove_piece(piece_index, true);
             },
-            MoveType::KingsideCastle => {
-                let (rook_from, rook_to) = (m.dest().east().unwrap(), m.dest().west().unwrap());
-                b.data.move_piece(rook_from, rook_to);
-            },
-            MoveType::QueensideCastle => {
-                let (rook_from, rook_to) = (m.dest().west().unwrap().west().unwrap(), m.dest().east().unwrap());
-                b.data.move_piece(rook_from, rook_to);
+            MoveType::KingsideCastle | MoveType::QueensideCastle => {
+                let (king_to, rook_to) = CastlingRights::castling_destinations(b.side, m.kind());
+                let rook_index = b.data.piece_index(m.dest()).unwrap();
+                b.data.remove_piece(rook_index, true);
+                if m.from() != king_to {
+                    b.data.move_piece(m.from(), king_to);
+                }
+                b.data.add_piece(Piece::Rook, b.side, rook_to, true);
             },
             MoveType::EnPassant => {
                 let target_square = b.ep.unwrap().relative_south(b.side).unwrap();
@@ -323,15 +353,15 @@ impl Board {
             },
         }
 
-        b.data.move_piece(m.from(), m.dest());
+        if !matches!(m.kind(), MoveType::KingsideCastle | MoveType::QueensideCastle) {
+            b.data.move_piece(m.from(), m.dest());
+        }
 
         if m.is_promotion() {
             let piece_index = b.data.piece_index(m.dest()).unwrap();
             b.data.remove_piece(piece_index, true);
             b.data.add_piece(m.promotion_piece().unwrap(), b.side, m.dest(), true);
         }
-
-        //b.data.rebuild_accumulators();
 
         let candidate_ep = (|| {
             let MoveType::DoublePush = m.kind() else { return None };
@@ -344,54 +374,7 @@ impl Board {
         })();
         b.set_ep(candidate_ep);
 
-        let a1 = Square::from_rank_file(Rank::One, File::A);
-        let a8 = Square::from_rank_file(Rank::Eight, File::A);
-        let e1 = Square::from_rank_file(Rank::One, File::E);
-        let e8 = Square::from_rank_file(Rank::Eight, File::E);
-        let h1 = Square::from_rank_file(Rank::One, File::H);
-        let h8 = Square::from_rank_file(Rank::Eight, File::H);
-
-        if m.from() == e1 {
-            if b.castle.0 {
-                b.castle.0 = false;
-                b.data.remove_castling(0);
-            }
-            if b.castle.1 {
-                b.castle.1 = false;
-                b.data.remove_castling(1);
-            }
-        }
-
-        if m.from() == e8 {
-            if b.castle.2 {
-                b.castle.2 = false;
-                b.data.remove_castling(2);
-            }
-            if b.castle.3 {
-                b.castle.3 = false;
-                b.data.remove_castling(3);
-            }
-        }
-
-        if (m.from() == h1 || m.dest() == h1) && b.castle.0 {
-            b.castle.0 = false;
-            b.data.remove_castling(0);
-        }
-
-        if (m.from() == a1 || m.dest() == a1) && b.castle.1 {
-            b.castle.1 = false;
-            b.data.remove_castling(1);
-        }
-
-        if (m.from() == h8 || m.dest() == h8) && b.castle.2 {
-            b.castle.2 = false;
-            b.data.remove_castling(2);
-        }
-
-        if (m.from() == a8 || m.dest() == a8) && b.castle.3 {
-            b.castle.3 = false;
-            b.data.remove_castling(3);
-        }
+        b.data.remove_castling_mask(self.update_castling(m, &mut b.castle));
 
         b.side = !b.side;
         b.data.toggle_side();
@@ -754,35 +737,31 @@ impl Board {
             }
         }
 
-        // Kingside castling.
-        if (self.side == Colour::White && self.castle.0) || (self.side == Colour::Black && self.castle.2) {
-            let east1 = king_square.east().unwrap();
-            let east2 = east1.east().unwrap();
-            if self.data.attacks_to(king_square, !self.side).empty()
-                && !self.data.has_piece(east1)
-                && self.data.attacks_to(east1, !self.side).empty()
-                && !self.data.has_piece(east2)
-                && self.data.attacks_to(east2, !self.side).empty()
-            {
-                self.try_push_move(v, king_square, east2, MoveType::KingsideCastle, &pininfo);
+        for (index, kind) in [
+            (CastlingRights::kingside_index(self.side), MoveType::KingsideCastle),
+            (CastlingRights::queenside_index(self.side), MoveType::QueensideCastle),
+        ] {
+            let Some(rook_sq) = self.castle.rook_square(index) else { continue };
+            if pininfo.pins[self.data.piece_index(rook_sq).unwrap().into_inner() as usize].is_some() {
+                continue;
+            }
+            let (king_to, rook_to) = CastlingRights::castling_destinations(self.side, kind);
+            if self.castle_legal(king_square, rook_sq, king_to, rook_to) {
+                v.push(Move::new(king_square, rook_sq, kind));
             }
         }
+    }
 
-        // Queenside castling.
-        if (self.side == Colour::White && self.castle.1) || (self.side == Colour::Black && self.castle.3) {
-            let west1 = king_square.west().unwrap();
-            let west2 = west1.west().unwrap();
-            let west3 = west2.west().unwrap();
-            if self.data.attacks_to(king_square, !self.side).empty()
-                && !self.data.has_piece(west1)
-                && self.data.attacks_to(west1, !self.side).empty()
-                && !self.data.has_piece(west2)
-                && self.data.attacks_to(west2, !self.side).empty()
-                && !self.data.has_piece(west3)
-            {
-                self.try_push_move(v, king_square, west2, MoveType::QueensideCastle, &pininfo);
-            }
-        }
+    fn squares_between(a: Square, b: Square) -> impl Iterator<Item = Square> {
+        let (a, b) = (a.into_inner(), b.into_inner());
+        (a.min(b)..=a.max(b)).map(|sq| unsafe { Square::from_u8_unchecked(sq) })
+    }
+
+    fn castle_legal(&self, king_sq: Square, rook_sq: Square, king_to: Square, rook_to: Square) -> bool {
+        let clear = |a, b| Self::squares_between(a, b).all(|sq| sq == king_sq || sq == rook_sq || !self.data.has_piece(sq));
+        clear(king_sq, king_to)
+            && clear(rook_sq, rook_to)
+            && Self::squares_between(king_sq, king_to).all(|sq| self.data.attacks_to(sq, !self.side).empty())
     }
 
     #[must_use]
@@ -1002,15 +981,12 @@ impl Board {
                     &mut hash,
                 );
             },
-            MoveType::KingsideCastle => {
-                let (rook_from, rook_to) = (m.dest().east().unwrap(), m.dest().west().unwrap());
-                let piece_index = self.data.piece_index(rook_from).unwrap();
-                Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
-            },
-            MoveType::QueensideCastle => {
-                let (rook_from, rook_to) = (m.dest().west().unwrap().west().unwrap(), m.dest().east().unwrap());
-                let piece_index = self.data.piece_index(rook_from).unwrap();
-                Zobrist::move_piece(piece_index.colour(), self.data.piece_from_bit(piece_index), rook_from, rook_to, &mut hash);
+            MoveType::KingsideCastle | MoveType::QueensideCastle => {
+                let (king_to, rook_to) = CastlingRights::castling_destinations(self.side, m.kind());
+                let king_index = self.data.piece_index(m.from()).unwrap();
+                let rook_index = self.data.piece_index(m.dest()).unwrap();
+                Zobrist::move_piece(self.side, self.data.piece_from_bit(king_index), m.from(), king_to, &mut hash);
+                Zobrist::move_piece(self.side, self.data.piece_from_bit(rook_index), m.dest(), rook_to, &mut hash);
             },
             MoveType::EnPassant => {
                 let target_square = self.ep.unwrap().relative_south(self.side).unwrap();
@@ -1024,12 +1000,14 @@ impl Board {
             },
         }
 
-        let piece_index = self.data.piece_index(m.from()).unwrap();
-        Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from(), m.dest(), &mut hash);
+        if !matches!(m.kind(), MoveType::KingsideCastle | MoveType::QueensideCastle) {
+            let piece_index = self.data.piece_index(m.from()).unwrap();
+            Zobrist::move_piece(self.side, self.piece_from_bit(piece_index), m.from(), m.dest(), &mut hash);
 
-        if m.is_promotion() {
-            Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), m.dest(), &mut hash);
-            Zobrist::add_piece(self.side, m.promotion_piece().unwrap(), m.dest(), &mut hash);
+            if m.is_promotion() {
+                Zobrist::remove_piece(self.side, self.data.piece_from_bit(piece_index), m.dest(), &mut hash);
+                Zobrist::add_piece(self.side, m.promotion_piece().unwrap(), m.dest(), &mut hash);
+            }
         }
 
         let candidate_ep = (|| {
@@ -1043,46 +1021,8 @@ impl Board {
         })();
         Zobrist::set_ep(self.ep, candidate_ep, &mut hash);
 
-        let a1 = Square::from_rank_file(Rank::One, File::A);
-        let a8 = Square::from_rank_file(Rank::Eight, File::A);
-        let e1 = Square::from_rank_file(Rank::One, File::E);
-        let e8 = Square::from_rank_file(Rank::Eight, File::E);
-        let h1 = Square::from_rank_file(Rank::One, File::H);
-        let h8 = Square::from_rank_file(Rank::Eight, File::H);
-
-        if m.from() == e1 {
-            if self.castle.0 {
-                Zobrist::remove_castling(0, &mut hash);
-            }
-            if self.castle.1 {
-                Zobrist::remove_castling(1, &mut hash);
-            }
-        }
-
-        if m.from() == e8 {
-            if self.castle.2 {
-                Zobrist::remove_castling(2, &mut hash);
-            }
-            if self.castle.3 {
-                Zobrist::remove_castling(3, &mut hash);
-            }
-        }
-
-        if (m.from() == h1 || m.dest() == h1) && self.castle.0 {
-            Zobrist::remove_castling(0, &mut hash);
-        }
-
-        if (m.from() == a1 || m.dest() == a1) && self.castle.1 {
-            Zobrist::remove_castling(1, &mut hash);
-        }
-
-        if (m.from() == h8 || m.dest() == h8) && self.castle.2 {
-            Zobrist::remove_castling(2, &mut hash);
-        }
-
-        if (m.from() == a8 || m.dest() == a8) && self.castle.3 {
-            Zobrist::remove_castling(3, &mut hash);
-        }
+        let mut new_castle = self.castle;
+        Zobrist::remove_castling_mask(self.update_castling(m, &mut new_castle), &mut hash);
 
         Zobrist::toggle_side(&mut hash);
         hash

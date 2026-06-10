@@ -450,8 +450,8 @@ impl BoardData {
     }
 
     /// Remove castling rights.
-    pub fn remove_castling(&mut self, kind: usize) {
-        Zobrist::remove_castling(kind, &mut self.hash_other);
+    pub fn remove_castling_mask(&mut self, mask: u8) {
+        Zobrist::remove_castling_mask(mask, &mut self.hash_other);
     }
 
     /// Toggle side to move.

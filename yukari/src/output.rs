@@ -1,7 +1,15 @@
 use std::time::Duration;
 
 use colored::Colorize;
-use yukari_movegen::{Board, Move};
+use yukari_movegen::{Board, Move, MoveType};
+
+#[must_use]
+pub fn move_to_uci(m: Move, chess960: bool) -> String {
+    if !chess960 && matches!(m.kind(), MoveType::KingsideCastle | MoveType::QueensideCastle) {
+        return format!("{}{}", m.from(), Board::castling_king_dest(m));
+    }
+    format!("{m}")
+}
 
 const NORMALISE_A: [f64; 4] = [102.66983070_f64, -222.01728527, 41.66355835, 311.16910753];
 const NORMALISE_B: [f64; 4] = [9.81632640_f64, -23.57246193, 67.77015515, 42.50511876];
@@ -149,7 +157,7 @@ impl Output for Xboard {
         }
         print!("{depth} {score} {} {nodes}", time.as_millis() / 10);
         for m in pv {
-            print!(" {m}");
+            print!(" {}", move_to_uci(*m, false));
         }
         if success {
             println!();
@@ -161,7 +169,9 @@ impl Output for Xboard {
     }
 }
 
-pub struct Uci;
+pub struct Uci {
+    pub chess960: bool,
+}
 
 impl Output for Uci {
     fn complete(
@@ -189,7 +199,7 @@ impl Output for Uci {
         if !pv.is_empty() {
             print!(" pv");
             for m in pv {
-                print!(" {m}");
+                print!(" {}", move_to_uci(*m, self.chess960));
             }
         }
         println!();
