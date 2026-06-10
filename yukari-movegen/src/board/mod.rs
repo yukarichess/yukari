@@ -142,17 +142,6 @@ impl Board {
         CastlingRights::castling_destinations(side, m.kind()).0
     }
 
-    fn outermost_rook(data: &BoardData, back: Rank, colour: Colour, files: impl Iterator<Item = u8>) -> Option<u8> {
-        let mut found = None;
-        for file in files {
-            let sq = Square::from_rank_file(back, File::try_from(file).unwrap());
-            if data.piece_from_square(sq) == Some(Piece::Rook) && data.colour_from_square(sq) == Some(colour) {
-                found = Some(file);
-            }
-        }
-        found
-    }
-
     fn update_castling(&self, m: Move, castle: &mut CastlingRights) -> u8 {
         let before = castle.availability();
         if self.data.piece_from_square(m.from()) == Some(Piece::King) {
@@ -258,20 +247,30 @@ impl Board {
                 let colour = if c.is_ascii_uppercase() { Colour::White } else { Colour::Black };
                 let lower = c.to_ascii_lowercase();
                 let back = CastlingRights::back_rank(colour);
-                let king_file = u8::from(File::from(b.data.king_square(colour)));
-                let rook_file = match lower {
-                    b'k' => Self::outermost_rook(&b.data, back, colour, (king_file + 1)..8),
-                    b'q' => Self::outermost_rook(&b.data, back, colour, (0..king_file).rev()),
-                    b'a'..=b'h' => Some(lower - b'a'),
+                let king_sq = b.data.king_square(colour);
+                let king_file = u8::from(File::from(king_sq));
+
+                let to_square = |file| Square::from_rank_file(back, File::try_from(file).unwrap());
+                let is_rook =
+                    |sq| b.data.piece_from_square(sq) == Some(Piece::Rook) && b.data.colour_from_square(sq) == Some(colour);
+
+                let kingside_files = ((king_file + 1)..8).rev();
+                let queenside_files = 0..king_file;
+
+                let rook_sq = match lower {
+                    b'k' => kingside_files.map(to_square).find(|&sq| is_rook(sq)),
+                    b'q' => queenside_files.map(to_square).find(|&sq| is_rook(sq)),
+                    b'a'..=b'h' => Some(to_square(lower - b'a')),
                     _ => return None,
                 };
-                if let Some(rook_file) = rook_file {
-                    let index = if rook_file > king_file {
+
+                if let Some(rook_sq) = rook_sq {
+                    let index = if rook_sq > king_sq {
                         CastlingRights::kingside_index(colour)
                     } else {
                         CastlingRights::queenside_index(colour)
                     };
-                    b.castle.set(index, File::try_from(rook_file).unwrap());
+                    b.castle.set(index, rook_sq);
                     b.data.add_castling(index);
                 }
                 idx += 1;
@@ -1234,6 +1233,51 @@ mod tests {
             .into_iter()
             .find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom)
             .unwrap()
+    }
+
+    #[test]
+    fn xfen() {
+        use crate::Square;
+        let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
+        for i in 0..4 {
+            assert_eq!(board.castle().rook_square(i).unwrap(), [Square::H1, Square::A1, Square::H8, Square::A8][i]);
+        }
+    }
+
+    #[test]
+    fn shredder_fen() {
+        for (xfen, shredder) in [
+            // all possible castling rights
+            ("rkr5/8/8/8/8/8/8/RKR5 w KQkq - 0 1", "rkr5/8/8/8/8/8/8/RKR5 w CAca - 0 1"),
+            ("rk1r4/8/8/8/8/8/8/RK1R4 w KQkq - 0 1", "rk1r4/8/8/8/8/8/8/RK1R4 w DAda - 0 1"),
+            ("rk2r3/8/8/8/8/8/8/RK2R3 w KQkq - 0 1", "rk2r3/8/8/8/8/8/8/RK2R3 w EAea - 0 1"),
+            ("rk3r2/8/8/8/8/8/8/RK3R2 w KQkq - 0 1", "rk3r2/8/8/8/8/8/8/RK3R2 w FAfa - 0 1"),
+            ("rk4r1/8/8/8/8/8/8/RK4R1 w KQkq - 0 1", "rk4r1/8/8/8/8/8/8/RK4R1 w GAga - 0 1"),
+            ("rk5r/8/8/8/8/8/8/RK5R w KQkq - 0 1", "rk5r/8/8/8/8/8/8/RK5R w HAha - 0 1"),
+            ("1rkr4/8/8/8/8/8/8/1RKR4 w KQkq - 0 1", "1rkr4/8/8/8/8/8/8/1RKR4 w DBdb - 0 1"),
+            ("1rk1r3/8/8/8/8/8/8/1RK1R3 w KQkq - 0 1", "1rk1r3/8/8/8/8/8/8/1RK1R3 w EBeb - 0 1"),
+            ("1rk2r2/8/8/8/8/8/8/1RK2R2 w KQkq - 0 1", "1rk2r2/8/8/8/8/8/8/1RK2R2 w FBfb - 0 1"),
+            ("1rk3r1/8/8/8/8/8/8/1RK3R1 w KQkq - 0 1", "1rk3r1/8/8/8/8/8/8/1RK3R1 w GBgb - 0 1"),
+            ("1rk4r/8/8/8/8/8/8/1RK4R w KQkq - 0 1", "1rk4r/8/8/8/8/8/8/1RK4R w HBhb - 0 1"),
+            ("2rkr3/8/8/8/8/8/8/2RKR3 w KQkq - 0 1", "2rkr3/8/8/8/8/8/8/2RKR3 w ECec - 0 1"),
+            ("2rk1r2/8/8/8/8/8/8/2RK1R2 w KQkq - 0 1", "2rk1r2/8/8/8/8/8/8/2RK1R2 w FCfc - 0 1"),
+            ("2rk2r1/8/8/8/8/8/8/2RK2R1 w KQkq - 0 1", "2rk2r1/8/8/8/8/8/8/2RK2R1 w GCgc - 0 1"),
+            ("2rk3r/8/8/8/8/8/8/2RK3R w KQkq - 0 1", "2rk3r/8/8/8/8/8/8/2RK3R w HChc - 0 1"),
+            ("3rkr2/8/8/8/8/8/8/3RKR2 w KQkq - 0 1", "3rkr2/8/8/8/8/8/8/3RKR2 w FDfd - 0 1"),
+            ("3rk1r1/8/8/8/8/8/8/3RK1R1 w KQkq - 0 1", "3rk1r1/8/8/8/8/8/8/3RK1R1 w GDgd - 0 1"),
+            ("3rk2r/8/8/8/8/8/8/3RK2R w KQkq - 0 1", "3rk2r/8/8/8/8/8/8/3RK2R w HDhd - 0 1"),
+            ("4rkr1/8/8/8/8/8/8/4RKR1 w KQkq - 0 1", "4rkr1/8/8/8/8/8/8/4RKR1 w GEge - 0 1"),
+            ("4rk1r/8/8/8/8/8/8/4RK1R w KQkq - 0 1", "4rk1r/8/8/8/8/8/8/4RK1R w HEhe - 0 1"),
+            ("5rkr/8/8/8/8/8/8/5RKR w KQkq - 0 1", "5rkr/8/8/8/8/8/8/5RKR w HFhf - 0 1"),
+            // should pick outermost rooks when there are extra rooks
+            ("rr1k1r1r/8/8/8/8/8/8/RR1K1R1R w KQkq - 0 1", "rr1k1r1r/8/8/8/8/8/8/RR1K1R1R w HAha - 0 1"),
+            ("1rrkrr2/8/8/8/8/8/8/1RRKRR2 w KQkq - 0 1", "1rrkrr2/8/8/8/8/8/8/1RRKRR2 w FBfb - 0 1"),
+        ] {
+            let from_xfen = Board::from_fen(xfen).unwrap();
+            let from_shredder = Board::from_fen(shredder).unwrap();
+            assert_eq!(from_xfen.castle(), from_shredder.castle());
+            assert_eq!(from_xfen.hash(), from_shredder.hash());
+        }
     }
 
     #[test]
