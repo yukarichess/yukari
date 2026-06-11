@@ -143,6 +143,7 @@ pub struct SearchParams {
     see_pruning_quiet_margin: f32,
     singular_beta_margin: f32,
     singular_double_margin: i32,
+    singular_triple_margin: i32,
     singular_low_depth_margin: i32,
     lmr_base: f32,
     lmr_mul: f32,
@@ -154,17 +155,18 @@ pub struct SearchParams {
 impl Default for SearchParams {
     fn default() -> Self {
         Self {
-            rfp_margin: 45.158_22,
-            razor_margin: 241.711,
-            see_pruning_quiet_margin: -1.744_083_9,
-            singular_beta_margin: 2.174_403_7,
-            singular_double_margin: 54,
-            singular_low_depth_margin: 23,
-            lmr_base: 1.030_837_2,
-            lmr_mul: 0.554_797_05,
-            lmr_pv: 1.070_96,
-            history_bonus_base: -218.018_05,
-            history_bonus_mul: 297.116_46,
+            rfp_margin: 49.103_645,
+            razor_margin: 331.816_47,
+            see_pruning_quiet_margin: -0.366_779_83,
+            singular_beta_margin: 1.649_481_8,
+            singular_double_margin: 78,
+            singular_triple_margin: 384,
+            singular_low_depth_margin: 25,
+            lmr_base: 1.014_000_4,
+            lmr_mul: 0.548_246_1,
+            lmr_pv: 1.147_785_8,
+            history_bonus_base: -201.544_16,
+            history_bonus_mul: 299.397_2,
         }
     }
 }
@@ -178,6 +180,7 @@ impl SearchParams {
         println!("option name see_pruning_quiet_margin type string default {}", self.see_pruning_quiet_margin);
         println!("option name singular_beta_margin type string default {}", self.singular_beta_margin);
         println!("option name singular_double_margin type spin default {} min 0 max 100", self.singular_double_margin);
+        println!("option name singular_triple_margin type spin default {} min 300 max 500", self.singular_triple_margin);
         println!("option name singular_low_depth_margin type spin default {} min 0 max 50", self.singular_low_depth_margin);
         println!("option name lmr_base type string default {}", self.lmr_base);
         println!("option name lmr_mul type string default {}", self.lmr_mul);
@@ -195,6 +198,7 @@ impl SearchParams {
         println!("see_pruning_quiet_margin, float, {}, -5.0, 5.0, 2.0, 0.002", self.see_pruning_quiet_margin);
         println!("singular_beta_margin, float, {}, 0.0, 4.0, 0.2, 0.002", self.singular_beta_margin);
         println!("singular_double_margin, int, {}, 0, 100, 5, 0.002", self.singular_double_margin);
+        println!("singular_triple_margin, int, {}, 300, 500, 10, 0.002", self.singular_triple_margin);
         println!("singular_low_depth_margin, int, {}, 0, 50, 2.5, 0.002", self.singular_low_depth_margin);
         println!("lmr_base, float, {}, 0.0, 2.0, 0.1, 0.002", self.lmr_base);
         println!("lmr_mul, float, {}, 0.0, 1.0, 0.05, 0.002", self.lmr_mul);
@@ -212,6 +216,7 @@ impl SearchParams {
             "see_pruning_quiet_margin" => self.see_pruning_quiet_margin = value.parse().unwrap(),
             "singular_beta_margin" => self.singular_beta_margin = value.parse().unwrap(),
             "singular_double_margin" => self.singular_double_margin = value.parse().unwrap(),
+            "singular_triple_margin" => self.singular_triple_margin = value.parse().unwrap(),
             "singular_low_depth_margin" => self.singular_low_depth_margin = value.parse().unwrap(),
             "lmr_base" => self.lmr_base = value.parse().unwrap(),
             "lmr_mul" => self.lmr_mul = value.parse().unwrap(),
@@ -668,10 +673,10 @@ impl Thread {
                     if score < singular_beta {
                         extension += 1;
                         if !expected_pvnode
-                            && score < singular_beta - self.params.singular_double_margin
                             && tt_entry.depth as i32 >= depth - 2
                         {
-                            extension += 1;
+                            extension += i32::from(score < singular_beta - self.params.singular_double_margin);
+                            extension += i32::from(score < singular_beta - self.params.singular_triple_margin);
                         }
                     } else if tt_entry.score as i32 >= beta {
                         extension -= 1;
