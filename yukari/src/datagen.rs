@@ -6,7 +6,7 @@ use std::{
 
 use rand::seq::IteratorRandom;
 use tinyvec::ArrayVec;
-use yukari_movegen::{Board, Colour, File, Move, MoveType, Piece, Rank, Square};
+use yukari_movegen::{Board, Colour, Move, MoveType, Piece, Square};
 
 use crate::search;
 
@@ -47,11 +47,6 @@ struct MarlinFormat {
 
 impl From<&Board> for MarlinFormat {
     fn from(board: &Board) -> Self {
-        let a1 = Square::from_rank_file(Rank::One, File::A);
-        let a8 = Square::from_rank_file(Rank::Eight, File::A);
-        let h1 = Square::from_rank_file(Rank::One, File::H);
-        let h8 = Square::from_rank_file(Rank::Eight, File::H);
-
         let mut this = Self {
             occupancy:       0,
             pieces:          [0; 16],
@@ -67,11 +62,8 @@ impl From<&Board> for MarlinFormat {
             let Some(piece_idx) = board.data().piece_index(square) else { continue };
 
             let piece = board.piece_from_bit(piece_idx);
-            let unmoved_rook = piece == Piece::Rook
-                && ((board.castle().0 && square == h1)
-                    || (board.castle().1 && square == a1)
-                    || (board.castle().2 && square == h8)
-                    || (board.castle().3 && square == a8));
+            let castle = board.castle();
+            let unmoved_rook = piece == Piece::Rook && (0..4).any(|idx| castle.rook_square(idx) == Some(square));
 
             // marlinformat uses piece code 6 ("unmoved rook") to mark castling rights.
             let code = if unmoved_rook { 6 } else { piece as u8 };
@@ -107,22 +99,7 @@ struct ViriMove(u16);
 
 impl From<Move> for ViriMove {
     fn from(m: Move) -> Self {
-        let (from, dest) = if matches!(m.kind(), MoveType::KingsideCastle | MoveType::QueensideCastle) {
-            // convert from yukari's "king two squares" castling to viridithas' "king takes rook" castling.
-            let rank = Rank::from(m.dest());
-            let file = File::from(m.dest());
-            let from = u16::from(m.from().into_inner());
-            let dest = match (rank, file) {
-                (Rank::One, File::G) => u16::from(Square::from_rank_file(Rank::One, File::H).into_inner()),
-                (Rank::One, File::C) => u16::from(Square::from_rank_file(Rank::One, File::A).into_inner()),
-                (Rank::Eight, File::G) => u16::from(Square::from_rank_file(Rank::Eight, File::H).into_inner()),
-                (Rank::Eight, File::C) => u16::from(Square::from_rank_file(Rank::Eight, File::A).into_inner()),
-                _ => panic!("unrecognised castling to-square"),
-            };
-            (from, dest)
-        } else {
-            (u16::from(m.from().into_inner()), u16::from(m.dest().into_inner()))
-        };
+        let (from, dest) = (u16::from(m.from().into_inner()), u16::from(m.dest().into_inner()));
         let prom = match m.promotion_piece() {
             None => 0,
             Some(Piece::Knight) => 0,

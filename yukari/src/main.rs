@@ -17,7 +17,7 @@ use yukari::{
     is_repetition_draw,
     output::{self, Output},
 };
-use yukari_movegen::{Board, Colour, Move, Piece, Square};
+use yukari_movegen::{Board, Colour, Move, MoveType, Piece, Square};
 
 #[derive(Clone, Copy, Debug)]
 enum Mode {
@@ -49,6 +49,7 @@ pub struct Yukari {
     threads: usize,
     hash_megabytes: usize,
     params: SearchParams,
+    chess960: bool,
 }
 
 impl Yukari {
@@ -69,6 +70,7 @@ impl Yukari {
             threads,
             hash_megabytes,
             params: params.clone(),
+            chess960: false,
         };
         this.search.allocate_tt(hash_megabytes);
         this.search.params = params;
@@ -115,8 +117,16 @@ impl Yukari {
         moves.set_len(0);
         self.board.generate(&mut moves);
         moves
-            .into_iter()
+            .iter()
+            .copied()
             .find(|&m| m.from() == from && m.dest() == dest && m.promotion_piece() == prom)
+            .or_else(|| {
+                moves.iter().copied().find(|&m| {
+                    matches!(m.kind(), MoveType::KingsideCastle | MoveType::QueensideCastle)
+                        && m.from() == from
+                        && Board::castling_king_dest(m) == dest
+                })
+            })
     }
 
     /// Real search, falls back to dumb search in extreme time constraints
@@ -162,7 +172,7 @@ impl Yukari {
                 let output: &mut dyn output::Output = match protocol {
                     Protocol::Human => &mut output::Human,
                     Protocol::Xboard => &mut output::Xboard,
-                    Protocol::Uci => &mut output::Uci,
+                    Protocol::Uci => &mut output::Uci { chess960: self.chess960 },
                 };
 
                 if score <= alpha {
@@ -241,7 +251,7 @@ impl Yukari {
         let output: &mut dyn output::Output = match protocol {
             Protocol::Human => &mut output::Human,
             Protocol::Xboard => &mut output::Xboard,
-            Protocol::Uci => &mut output::Uci,
+            Protocol::Uci => &mut output::Uci { chess960: self.chess960 },
         };
 
         output.complete(
@@ -501,6 +511,7 @@ fn run() -> io::Result<()> {
                 println!("id author Hannah Ravensloft");
                 println!("option name Hash type spin default 16 min 1 max 8192");
                 println!("option name Threads type spin default 1 min 1 max 256"); // do we even have a limit?
+                println!("option name UCI_Chess960 type check default false");
                 engine.search.params.display_uci();
                 println!("uciok");
             },
@@ -646,6 +657,7 @@ fn run() -> io::Result<()> {
                 assert_eq!(value, "value");
                 let (value, _) = args.split_once(' ').unwrap_or((args, ""));
                 match name {
+                    "UCI_Chess960" => engine.chess960 = value.eq_ignore_ascii_case("true"),
                     "Hash" => {
                         let value = value.parse::<i32>().unwrap();
                         if value > 0 {
@@ -752,13 +764,13 @@ fn run() -> io::Result<()> {
                 // Choose the top move
                 let m = pv[0];
                 if uci {
-                    println!("bestmove {m}");
+                    println!("bestmove {}", output::move_to_uci(m, engine.chess960));
                     engine.mode = Mode::Force;
                 } else {
                     // We must actually make the move locally too
                     engine.board = engine.board.make(m);
                     engine.board.data().verify_accumulators();
-                    println!("move {m}");
+                    println!("move {}", output::move_to_uci(m, false));
                     if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                         println!("1/2-1/2 {{Draw by repetition}}");
                     }
@@ -810,7 +822,7 @@ fn run() -> io::Result<()> {
                             let m = pv[0];
                             // We must actually make the move locally too
                             engine.board = engine.board.make(m);
-                            println!("move {m}");
+                            println!("move {}", output::move_to_uci(m, false));
                             if is_repetition_draw(&engine.keystack, engine.board.hash()) {
                                 println!("1/2-1/2 {{Draw by repetition}}");
                             }
