@@ -664,7 +664,7 @@ impl Thread {
                         extension += 1;
                         if !expected_pvnode
                             && score < singular_beta - self.params.singular_double_margin
-                            && tt_entry.depth as i32 >= depth - 2
+                            && tt_entry.depth as i32 >= depth - 3
                         {
                             extension += 1;
                         }
