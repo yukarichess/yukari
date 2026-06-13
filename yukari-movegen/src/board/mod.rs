@@ -42,6 +42,8 @@ pub struct Board {
     castle: CastlingRights,
     /// En-passant square, if any.
     ep:     Option<Square>,
+    /// Fifty-move counter.
+    fifty:  u8,
 }
 
 impl Default for Board {
@@ -117,7 +119,7 @@ impl Board {
     #[must_use]
     #[inline]
     pub fn new() -> Self {
-        Self { side: Colour::White, castle: CastlingRights::new(), ep: None, data: BoardData::new() }
+        Self { side: Colour::White, castle: CastlingRights::new(), ep: None, data: BoardData::new(), fifty: 0 }
     }
 
     #[allow(clippy::missing_panics_doc)]
@@ -131,6 +133,7 @@ impl Board {
         Self::dfrc(scharnagl, scharnagl)
     }
 
+    #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn dfrc(scharnagl_white: usize, scharnagl_black: usize) -> Self {
         static N5N: [(usize, usize); 10] = [
@@ -361,6 +364,16 @@ impl Board {
             b.set_ep(Some(Square::from_rank_file(rank, file)));
         }
 
+        idx += 1;
+        c = fen[idx];
+        b.fifty = 0;
+        while c != b' ' {
+            b.fifty *= 10;
+            b.fifty += c - b'0';
+            idx += 1;
+            c = fen[idx];
+        }
+
         b.data.rebuild_attacks();
         b.data.rebuild_accumulators();
 
@@ -389,6 +402,13 @@ impl Board {
     #[allow(clippy::too_many_lines)]
     pub fn make(&self, m: Move) -> Self {
         let mut b = self.clone();
+
+        if b.data.piece_from_square(m.from()).unwrap() == Piece::Pawn || m.is_capture() {
+            b.fifty = 0;
+        } else {
+            b.fifty += 1;
+        }
+
         match m.kind() {
             MoveType::PromotionKnight
             | MoveType::PromotionBishop
@@ -1269,6 +1289,11 @@ impl Board {
         }
 
         false
+    }
+
+    #[must_use]
+    pub fn fifty(&self) -> u8 {
+        self.fifty
     }
 }
 

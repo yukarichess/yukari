@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::seq::IteratorRandom;
 use rand::Rng;
 use tinyvec::ArrayVec;
@@ -308,6 +309,12 @@ impl<'a, T: Write> DataGen<'a, T> {
             let hash = yukari_board.hash();
             let reps = keystack.iter().filter(|k| **k == hash).take(3).count();
             if reps == 3 {
+                self.emit(game, MarlinWdl::Draw);
+                return Some(positions);
+            }
+
+            // Fifty-move rule.
+            if yukari_board.fifty() == 100 {
                 self.emit(game, MarlinWdl::Draw);
                 return Some(positions);
             }

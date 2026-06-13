@@ -317,8 +317,8 @@ impl Yukari {
             // Mate and stalemate positions
             "6k1/3b3r/1p1p4/p1n2p2/1PPNpP1q/P3Q1p1/1R1RB1P1/5K2 b - - 0 1",
             "r2r1n2/pp2bk2/2p1p2p/3q4/3PN1QP/2P3R1/P4PP1/5RK1 w - - 0 1",
-            "8/8/8/8/8/6k1/6p1/6K1 w - -",
-            "7k/7P/6K1/8/3B4/8/8/8 b - -",
+            "8/8/8/8/8/6k1/6p1/6K1 w - - 0 1",
+            "7k/7P/6K1/8/3B4/8/8/8 b - - 0 1",
         ];
 
         let mut nodes = 0;
@@ -452,11 +452,17 @@ fn run() -> io::Result<()> {
             let f = Mutex::new(f);
 
             let positions = AtomicUsize::new(0);
-            let games_done = AtomicUsize::new(0);
-            let style = ProgressStyle::with_template("[{bar:40.magenta/red}] {pos:>6}/{len:6} ({per_sec} games/s)")
+            let positions_style = ProgressStyle::with_template("[{bar:40.magenta/red}] {len:>13} ({per_sec} positions/s)")
                 .unwrap()
                 .progress_chars("━╸ ");
-            let progress = indicatif::ProgressBar::new(GAMES as u64).with_style(style);
+            let games_done = AtomicUsize::new(0);
+            let games_style = ProgressStyle::with_template("[{bar:40.magenta/red}] {pos:>6}/{len:6} ({per_sec} games/s)")
+                .unwrap()
+                .progress_chars("━╸ ");
+
+            let multiprogress = indicatif::MultiProgress::new();
+            let positions_progress = multiprogress.add(indicatif::ProgressBar::no_length().with_style(positions_style));
+            let games_progress = multiprogress.add(indicatif::ProgressBar::new(GAMES as u64).with_style(games_style));
 
             let n_workers = std::thread::available_parallelism().map_or(1, |n| n.get());
 
@@ -471,14 +477,18 @@ fn run() -> io::Result<()> {
                                 if g >= GAMES {
                                     break;
                                 }
-                                positions.fetch_add(dg.play_one(), Ordering::SeqCst);
-                                progress.inc(1);
+                                let position_count = dg.play_one();
+                                positions.fetch_add(position_count, Ordering::SeqCst);
+                                positions_progress.inc(position_count as u64);
+                                games_progress.inc(1);
                             }
                         })
                         .unwrap();
                 }
             });
-            progress.finish();
+            positions_progress.finish();
+            games_progress.finish();
+            multiprogress.clear().unwrap();
 
             println!("{GAMES} games, {} positions", positions.load(Ordering::SeqCst));
 

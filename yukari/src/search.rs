@@ -525,6 +525,11 @@ impl Thread {
             return 0;
         }
 
+        // Fifty-move rule
+        if self.board[ply].fifty() >= 100 && ply > 0 {
+            return 0;
+        }
+
         if depth <= 0 {
             return self.quiesce(alpha, beta, ply, tt);
         }
