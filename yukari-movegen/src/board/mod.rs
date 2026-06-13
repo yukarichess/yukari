@@ -127,6 +127,79 @@ impl Board {
     }
 
     #[must_use]
+    pub fn frc(scharnagl: usize) -> Self {
+        Self::dfrc(scharnagl, scharnagl)
+    }
+
+    #[must_use]
+    pub fn dfrc(scharnagl_white: usize, scharnagl_black: usize) -> Self {
+        static N5N: [(usize, usize); 10] = [
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (1, 1),
+            (1, 2),
+            (1, 3),
+            (2, 2),
+            (2, 3),
+            (3, 3)
+        ];
+
+        let place = |back_rank: &mut [Option<Piece>; 8], piece: Piece, mut n: usize| -> usize {
+            for (i, sq) in back_rank.iter_mut().enumerate() {
+                if sq.is_some() {
+                    continue;
+                }
+                if n == 0 {
+                    *sq = Some(piece);
+                    return i;
+                }
+                n -= 1;
+            }
+            unreachable!()
+        };
+
+        let back_rank = |scharnagl: usize, white: bool| {
+            let mut back_rank = [None; 8];
+            let (n2, b1) = (scharnagl / 4, scharnagl % 4);
+            back_rank[2*b1 + 1] = Some(Piece::Bishop);
+            let (n3, b2) = (n2 / 4, n2 % 4);
+            back_rank[2*b2] = Some(Piece::Bishop);
+            let (n4, q) = (n3 / 6, n3 % 6);
+            // queen goes in the `q`th free square.
+            place(&mut back_rank, Piece::Queen, q);
+            let (n1, n2) = N5N[n4];
+            place(&mut back_rank, Piece::Knight, n1);
+            place(&mut back_rank, Piece::Knight, n2);
+            let queenside_rook = place(&mut back_rank, Piece::Rook, 0);
+            place(&mut back_rank, Piece::King, 0);
+            let kingside_rook = place(&mut back_rank, Piece::Rook, 0);
+            let mut final_back_rank = String::new();
+            for back_rank in back_rank {
+                match back_rank.unwrap() {
+                    Piece::Pawn => final_back_rank.push(if white { 'P' } else { 'p' }),
+                    Piece::Knight => final_back_rank.push(if white { 'N' } else { 'n' }),
+                    Piece::Bishop => final_back_rank.push(if white { 'B' } else { 'b' }),
+                    Piece::Rook => final_back_rank.push(if white { 'R' } else { 'r' }),
+                    Piece::Queen => final_back_rank.push(if white { 'Q' } else { 'q' }),
+                    Piece::King => final_back_rank.push(if white { 'K' } else { 'k' }),
+                }
+            }
+            (final_back_rank, queenside_rook, kingside_rook)
+        };
+
+        let (white_back_rank, white_queenside_rook, white_kingside_rook) = back_rank(scharnagl_white, true);
+        let white_queenside_rook = (b'A' + white_queenside_rook as u8) as char;
+        let white_kingside_rook = (b'A' + white_kingside_rook as u8) as char;
+        let (black_back_rank, black_queenside_rook, black_kingside_rook) = back_rank(scharnagl_black, false);
+        let black_queenside_rook = (b'a' + black_queenside_rook as u8) as char;
+        let black_kingside_rook = (b'a' + black_kingside_rook as u8) as char;
+
+        Self::from_fen(&format!("{black_back_rank}/pppppppp/8/8/8/8/PPPPPPPP/{white_back_rank} w {white_kingside_rook}{white_queenside_rook}{black_kingside_rook}{black_queenside_rook} - 0 1")).unwrap()
+    }
+
+    #[must_use]
     pub const fn data(&self) -> &BoardData {
         &self.data
     }

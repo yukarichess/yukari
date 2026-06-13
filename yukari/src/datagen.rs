@@ -5,6 +5,7 @@ use std::{
 };
 
 use rand::seq::IteratorRandom;
+use rand::Rng;
 use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Colour, Move, MoveType, Piece, Square};
 
@@ -250,7 +251,7 @@ impl<'a, T: Write> DataGen<'a, T> {
     }
 
     fn play_game(&mut self) -> Option<usize> {
-        let mut yukari_board = Board::startpos();
+        let mut yukari_board = Board::dfrc(self.rng.random_range(0..960), self.rng.random_range(0..960));
         let mut keystack = vec![yukari_board.hash()];
 
         // Opening: eight random moves.
