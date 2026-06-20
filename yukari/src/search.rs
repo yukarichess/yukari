@@ -439,11 +439,12 @@ impl Thread {
     }
 
     fn update_history(
-        &mut self, ply: usize, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move, bonus: i32,
+        &mut self, ply: usize, m: Move, bonus: i32,
     ) {
         const HISTORY_MAX: i32 = 16384;
         let board = &self.board[ply];
         let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
+        
         // History Heuristic
         {
             let coloured_piece =
@@ -452,6 +453,14 @@ impl Thread {
             let bonus = bonus - i32::from(*history) * bonus.abs() / HISTORY_MAX;
             *history += bonus as i16;
         }
+    }
+
+    fn update_continuation_history(
+        &mut self, ply: usize, last_last_m: Option<(Piece, Move)>, last_m: Option<(Piece, Move)>, m: Move, bonus: i32,
+    ) {
+        const HISTORY_MAX: i32 = 16384;
+        let board = &self.board[ply];
+        let bonus = bonus.clamp(-HISTORY_MAX, HISTORY_MAX);
 
         // N-2 Continuation History (Follow Up History)
         if let Some((last_piece, last_m)) = last_last_m {
@@ -480,7 +489,7 @@ impl Thread {
         }
     }
 
-    fn update_corrhist(&mut self, ply: usize, depth: i32, diff: i32) {
+    fn update_eval_correlation_history(&mut self, ply: usize, depth: i32, diff: i32) {
         const CORRHIST_GRAIN: i32 = 256;
         const CORRHIST_WEIGHT_SCALE: i32 = 256;
         const CORRHIST_MAX: i32 = 256 * 32;
@@ -725,6 +734,16 @@ impl Thread {
                 score = -self.search(depth - reduction + extension, -alpha - 1, -alpha, ply + 1, tt, None);
                 if score > alpha && score < beta {
                     score = -self.search(depth - 1 + extension, -beta, -alpha, ply + 1, tt, None);
+
+                    if !m.is_capture() && (score <= alpha || score >= beta) {
+                        let mut bonus = self.params.history_bonus_base;
+                        bonus += depth as f32 * self.params.history_bonus_mul;
+                        let bonus = bonus as i32;
+                        let last_m = *self.path.last().unwrap_or(&None);
+                        let last_last_m = *self.path.iter().rev().nth(1).unwrap_or(&None);
+
+                        self.update_continuation_history(ply, last_last_m, last_m, *m, if score <= alpha { -bonus } else { bonus });
+                    }
                 }
             }
 
@@ -779,9 +798,11 @@ impl Thread {
                         if m.is_capture() {
                             continue;
                         }
-                        self.update_history(ply, last_last_m, last_m, m, -bonus);
+                        self.update_history(ply, m, -bonus);
+                        self.update_continuation_history(ply, last_last_m, last_m, m, -bonus);
                     }
-                    self.update_history(ply, last_last_m, last_m, *m, bonus);
+                    self.update_history(ply, *m, bonus);
+                    self.update_continuation_history(ply, last_last_m, last_m, *m, bonus);
                 }
 
                 break;
@@ -809,7 +830,7 @@ impl Thread {
                 && !best_move.unwrap().is_capture()
                 && (raised_alpha || (best >= beta && best >= eval) || (best <= alpha && best <= eval))
             {
-                self.update_corrhist(ply, depth, best - eval);
+                self.update_eval_correlation_history(ply, depth, best - eval);
             }
         }
 
