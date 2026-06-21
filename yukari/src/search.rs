@@ -774,9 +774,9 @@ impl Thread {
                 let bonus = bonus as i32;
                 let last_m = *self.path.last().unwrap_or(&None);
                 let last_last_m = *self.path.iter().rev().nth(1).unwrap_or(&None);
-                if !m.is_capture() {
+                if !m.is_capture() && !m.is_promotion() {
                     for (m, _) in moves.into_iter().take(movecount) {
-                        if m.is_capture() {
+                        if m.is_capture() || m.is_promotion() {
                             continue;
                         }
                         self.update_history(ply, last_last_m, last_m, m, -bonus);
