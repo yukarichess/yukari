@@ -171,13 +171,13 @@ pub fn index_threat(
         //print!("attacker = {attacker}, victim = {victim}, from = {}, to = {}, ", from_square, to_square);
     }
 
+    let from_square = from_square.into_inner() as usize ^ crate::board::eval::Eval::mirror(king);
+    let to_square = to_square.into_inner() as usize ^ crate::board::eval::Eval::mirror(king);
+
     if friendly == attacking_enemy && to_square > from_square && to_piece == from_piece {
         //println!("SEMIËXCLUDED");
         return None;
     }
-
-    let from_square = from_square.into_inner() as usize ^ crate::board::eval::Eval::mirror(king);
-    let to_square = to_square.into_inner() as usize ^ crate::board::eval::Eval::mirror(king);
 
     let pawn_threat = || {
         let to_piece = to_piece as usize;
