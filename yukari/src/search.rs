@@ -651,6 +651,7 @@ impl Thread {
             }
 
             let mut extension = 0;
+            let mut reduction = 1;
 
             // Singular extension: is the TT move uniquely good?
             if let Some(tt_entry) = tt_entry
@@ -702,6 +703,11 @@ impl Thread {
                 self.board[ply + 1] = self.board[ply].make(*m);
             }
 
+            // Internal iterative reduction: if we have no/unconfident TT move in a PV node, reduce.
+            if expected_pvnode && (tt_entry.is_none() || i32::from(tt_entry.unwrap().depth) + 3 < depth) && depth >= 3 {
+                reduction += 1;
+            }
+
             // Check extension: does this move give check?
             if extension == 0 && self.board[ply + 1].in_check() {
                 extension += 1;
@@ -709,10 +715,9 @@ impl Thread {
 
             let mut score;
             if movecount == 0 {
-                score = -self.search(depth - 1 + extension, -beta, -alpha, ply + 1, tt, None);
+                score = -self.search(depth - reduction + extension, -beta, -alpha, ply + 1, tt, None);
             } else {
                 // Late Move Reduction
-                let mut reduction = 1;
                 if depth >= 3 && movecount >= 4 && !m.is_capture() {
                     let mut reduction_f32 = reduction as f32;
                     let depth_f32 = (depth as f32).ln();
