@@ -587,7 +587,8 @@ impl Thread {
                 self.board[ply + 1] = self.board[ply].make_null();
             }
             self.path.push(None);
-            let reduction = if depth > 6 { 4 } else { 3 };
+            let mut reduction = if depth > 6 { 4 } else { 3 };
+            reduction += ((eval - beta) / 200).max(0);
             let score = -self.search(depth - 1 - reduction, -beta, -beta + 1, ply + 1, tt, None);
             self.path.pop();
             self.keystack.pop();
