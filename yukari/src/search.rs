@@ -247,6 +247,7 @@ struct Thread {
     corrhist_p:   [[i32; 16384]; 2],
     corrhist_kbn: [[i32; 16384]; 2],
     path:         Vec<Option<(Piece, Move)>>,
+    nmr_ply:      Option<usize>,
 }
 
 impl Thread {
@@ -579,7 +580,7 @@ impl Thread {
             }
         }
 
-        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && eval >= beta {
+        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && eval >= beta && self.nmr_ply != Some(ply) {
             self.keystack.push(self.board[ply].hash());
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make_null());
@@ -594,7 +595,16 @@ impl Thread {
             self.keystack.pop();
 
             if score >= beta {
-                return score;
+                if self.nmr_ply.is_some() {
+                    return score;
+                } else {
+                    self.nmr_ply = Some(ply);
+                    let score = self.search(depth / 2, alpha, beta, ply, tt, None);
+                    self.nmr_ply = None;
+                    if score >= beta {
+                        return score;
+                    }
+                }
             }
         }
 
@@ -861,6 +871,7 @@ impl Search {
                 corrhist_p:   [[0; _]; _],
                 corrhist_kbn: [[0; _]; _],
                 path:         vec![],
+                nmr_ply:      None,
             };
             threads
         ];
