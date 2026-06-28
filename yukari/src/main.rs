@@ -159,9 +159,9 @@ impl Yukari {
         'depth_loop: while depth <= max_depth {
             let mut lower_margin = 25;
             let mut upper_margin = 25;
+            let mut alpha = score - lower_margin;
+            let mut beta = score + upper_margin;
             loop {
-                let alpha = score - lower_margin;
-                let beta = score + upper_margin;
                 score = self.search.search(depth, alpha, beta, &mut pv);
 
                 // If we have bailed out stop the loop
@@ -177,6 +177,8 @@ impl Yukari {
 
                 if score <= alpha {
                     lower_margin *= 2;
+                    beta = (alpha + beta) / 2;
+                    alpha = score - lower_margin;
                     output.complete(
                         &self.board,
                         depth,
@@ -193,6 +195,8 @@ impl Yukari {
 
                 if score >= beta {
                     upper_margin *= 2;
+                    alpha = score - lower_margin;
+                    beta = score + upper_margin;
                     output.complete(
                         &self.board,
                         depth,
@@ -336,15 +340,17 @@ impl Yukari {
             for depth in 1..=9 {
                 let mut lower_margin = 25;
                 let mut upper_margin = 25;
+                let mut alpha = score - lower_margin;
+                let mut beta = score + upper_margin;
                 loop {
-                    let alpha = score - lower_margin;
-                    let beta = score + upper_margin;
                     score = self.search.search(depth, alpha, beta, &mut pv);
 
                     let mut output = output::Xboard;
 
                     if score <= alpha {
                         lower_margin *= 2;
+                        beta = (alpha + beta) / 2;
+                        alpha = score - lower_margin;
                         output.complete(
                             &self.board,
                             depth,
@@ -361,6 +367,8 @@ impl Yukari {
 
                     if score >= beta {
                         upper_margin *= 2;
+                        alpha = score - lower_margin;
+                        beta = score + upper_margin;
                         output.complete(
                             &self.board,
                             depth,
