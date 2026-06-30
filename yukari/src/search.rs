@@ -681,7 +681,7 @@ impl Thread {
                             extension += i32::from(score < singular_beta - self.params.singular_triple_margin);
                         }
                     } else if tt_entry.score as i32 >= beta {
-                        extension -= 1;
+                        extension -= 2;
                     }
                 // Low depth singular extension: Determine singularity by static eval vs alpha.
                 } else if !self.board[ply].in_check()
