@@ -680,7 +680,7 @@ impl Thread {
                             extension += i32::from(score < singular_beta - self.params.singular_double_margin);
                             extension += i32::from(score < singular_beta - self.params.singular_triple_margin);
                         }
-                    } else if tt_entry.score as i32 >= beta {
+                    } else if tt_entry.score as i32 >= beta || tt_entry.score as i32 <= alpha {
                         extension -= 1;
                     }
                 // Low depth singular extension: Determine singularity by static eval vs alpha.
