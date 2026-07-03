@@ -138,7 +138,8 @@ impl MoveOrder {
 
 #[derive(Clone)]
 pub struct SearchParams {
-    rfp_margin: f32,
+    rfp_margin_linear: f32,
+    rfp_margin_quadratic: f32,
     razor_margin: f32,
     see_pruning_quiet_margin: f32,
     singular_beta_margin: f32,
@@ -155,18 +156,19 @@ pub struct SearchParams {
 impl Default for SearchParams {
     fn default() -> Self {
         Self {
-            rfp_margin: 49.103_645,
-            razor_margin: 331.816_47,
-            see_pruning_quiet_margin: -0.366_779_83,
-            singular_beta_margin: 1.649_481_8,
-            singular_double_margin: 78,
-            singular_triple_margin: 384,
-            singular_low_depth_margin: 25,
-            lmr_base: 1.014_000_4,
-            lmr_mul: 0.548_246_1,
-            lmr_pv: 1.147_785_8,
-            history_bonus_base: -201.544_16,
-            history_bonus_mul: 299.397_2,
+            rfp_margin_linear: 40.514_374,
+            rfp_margin_quadratic: 0.255_554_02,
+            razor_margin: 302.829_77,
+            see_pruning_quiet_margin: -1.912_763_8,
+            singular_beta_margin: 1.760_823_6,
+            singular_double_margin: 60,
+            singular_triple_margin: 386,
+            singular_low_depth_margin: 28,
+            lmr_base: 0.674_822_4,
+            lmr_mul: 0.665_213_94,
+            lmr_pv: 0.987_558_96,
+            history_bonus_base: -210.223_88,
+            history_bonus_mul: 223.525_4,
         }
     }
 }
@@ -175,7 +177,8 @@ impl SearchParams {
     pub fn display_xboard(&self) {}
 
     pub fn display_uci(&self) {
-        println!("option name rfp_margin type string default {}", self.rfp_margin);
+        println!("option name rfp_margin_linear type string default {}", self.rfp_margin_linear);
+        println!("option name rfp_margin_quadratic type string default {}", self.rfp_margin_quadratic);
         println!("option name razor_margin type string default {}", self.razor_margin);
         println!("option name see_pruning_quiet_margin type string default {}", self.see_pruning_quiet_margin);
         println!("option name singular_beta_margin type string default {}", self.singular_beta_margin);
@@ -193,7 +196,8 @@ impl SearchParams {
         // name, type, current value, minimum value, maximum value, C_end, R_end
         // C_end = (maximum value - minimum value) / 20
         // R_end = 0.002
-        println!("rfp_margin, float, {}, 0.0, 90.0, 4.5, 0.002", self.rfp_margin);
+        println!("rfp_margin_linear, float, {}, 0.0, 90.0, 4.5, 0.002", self.rfp_margin_linear);
+        println!("rfp_margin_quadratic, float, {}, 0.0, 10.0, 0.5, 0.002", self.rfp_margin_quadratic);
         println!("razor_margin, float, {}, 0.0, 500.0, 25.0, 0.002", self.razor_margin);
         println!("see_pruning_quiet_margin, float, {}, -5.0, 5.0, 2.0, 0.002", self.see_pruning_quiet_margin);
         println!("singular_beta_margin, float, {}, 0.0, 4.0, 0.2, 0.002", self.singular_beta_margin);
@@ -211,7 +215,8 @@ impl SearchParams {
 
     pub fn parse(&mut self, name: &str, value: &str) {
         match name {
-            "rfp_margin" => self.rfp_margin = value.parse().unwrap(),
+            "rfp_margin_linear" => self.rfp_margin_linear = value.parse().unwrap(),
+            "rfp_margin_quadratic" => self.rfp_margin_quadratic = value.parse().unwrap(),
             "razor_margin" => self.razor_margin = value.parse().unwrap(),
             "see_pruning_quiet_margin" => self.see_pruning_quiet_margin = value.parse().unwrap(),
             "singular_beta_margin" => self.singular_beta_margin = value.parse().unwrap(),
@@ -565,7 +570,8 @@ impl Thread {
 
         let eval = self.eval(ply);
         if !self.board[ply].in_check() {
-            let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
+            let depth_f32 = depth as f32;
+            let rfp_margin = (depth_f32 * self.params.rfp_margin_linear + depth_f32 * depth_f32 * self.params.rfp_margin_quadratic) as i32;
             if excluded_move.is_none() && depth <= 7 && eval - rfp_margin >= beta {
                 return eval - rfp_margin;
             }
