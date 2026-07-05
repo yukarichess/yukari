@@ -250,7 +250,11 @@ struct Thread {
 }
 
 impl Thread {
-    fn eval(&self, ply: usize) -> i32 {
+    fn raw_static_eval(&self, ply: usize) -> i32 {
+        self.board[ply].eval(self.board[ply].side())
+    }
+
+    fn static_eval(&self, raw_static_eval: i32, ply: usize) -> i32 {
         const CORRHIST_GRAIN: i32 = 256;
 
         /*if !self.board[ply].data().verify_accumulators() {
@@ -261,21 +265,20 @@ impl Thread {
             panic!("accumulator mismatch");
         }*/
 
-        let eval = self.board[ply].eval(self.board[ply].side());
-
         // pawns
         let entry_p = self.corrhist_p[self.board[ply].side() as usize][self.board[ply].hash_pawns() as usize & 16383];
         // kings, bishops, knights
         let entry_kbn = self.corrhist_kbn[self.board[ply].side() as usize][self.board[ply].data().hash_kbn() as usize & 16383];
         let corrhist = (entry_p + entry_kbn) / CORRHIST_GRAIN;
-        (eval + corrhist).clamp(-MATE_VALUE + 501, MATE_VALUE - 501)
+        (raw_static_eval + corrhist).clamp(-MATE_VALUE + 501, MATE_VALUE - 501)
     }
 
     pub fn quiesce(&mut self, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry]) -> i32 {
         let expected_pvnode = alpha != beta - 1;
+        let raw_static_eval = self.raw_static_eval(ply);
 
         if ply >= MAX_PLY {
-            return self.eval(ply);
+            return self.static_eval(raw_static_eval, ply);
         }
 
         if self.pv.len() <= ply {
@@ -288,7 +291,7 @@ impl Thread {
             self.seldepth = self.seldepth.max(ply);
         }
 
-        let mut best = self.eval(ply);
+        let mut best = self.static_eval(raw_static_eval, ply);
         if best >= beta {
             return best;
         }
@@ -505,9 +508,10 @@ impl Thread {
         &mut self, depth: i32, mut alpha: i32, beta: i32, ply: usize, tt: &[TtEntry], excluded_move: Option<Move>,
     ) -> i32 {
         let expected_pvnode = alpha != beta - 1;
+        let raw_static_eval = self.raw_static_eval(ply);
 
         if ply >= MAX_PLY {
-            return self.eval(ply);
+            return self.static_eval(raw_static_eval, ply);
         }
 
         if self.pv.len() <= ply {
@@ -539,39 +543,50 @@ impl Thread {
             return self.quiesce(alpha, beta, ply, tt);
         }
 
+        let static_eval = self.static_eval(raw_static_eval, ply);
+        let mut tt_adjusted_eval = static_eval;
+
         let tt_entry = self.probe_tt(tt, &self.board[ply], ply);
         if let Some(entry) = tt_entry
             && excluded_move.is_none()
-            && !expected_pvnode
-            && i32::from(entry.depth) >= depth
         {
             let score = i32::from(entry.score);
             match entry.flags {
                 TtFlags::Exact => {
-                    return score;
+                    if !expected_pvnode && i32::from(entry.depth) >= depth {
+                        return score;
+                    }
+                    if score.abs() < MATE_VALUE - 500 {
+                        tt_adjusted_eval = score;
+                    }
                 },
                 TtFlags::Upper => {
-                    if score <= alpha {
+                    if !expected_pvnode && i32::from(entry.depth) >= depth && score <= alpha {
                         return score;
+                    }
+                    if score.abs() < MATE_VALUE - 500 {
+                        tt_adjusted_eval = tt_adjusted_eval.min(score);
                     }
                 },
                 TtFlags::Lower => {
-                    if score >= beta {
+                    if !expected_pvnode && i32::from(entry.depth) >= depth && score >= beta {
                         return score;
+                    }
+                    if score.abs() < MATE_VALUE - 500 {
+                        tt_adjusted_eval = tt_adjusted_eval.max(score);
                     }
                 },
             }
         }
 
-        let eval = self.eval(ply);
         if !self.board[ply].in_check() {
             let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
-            if excluded_move.is_none() && depth <= 7 && eval - rfp_margin >= beta {
-                return eval - rfp_margin;
+            if excluded_move.is_none() && depth <= 7 && tt_adjusted_eval - rfp_margin >= beta {
+                return tt_adjusted_eval - rfp_margin;
             }
 
             let razor_margin = (depth as f32 * self.params.razor_margin) as i32;
-            if excluded_move.is_none() && depth == 1 && alpha.abs() < 2000 && eval + razor_margin <= alpha {
+            if excluded_move.is_none() && depth == 1 && alpha.abs() < 2000 && static_eval + razor_margin <= alpha {
                 let score = self.quiesce(alpha, alpha + 1, ply, tt);
                 if score <= alpha {
                     return score;
@@ -579,7 +594,7 @@ impl Thread {
             }
         }
 
-        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && eval >= beta {
+        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && static_eval >= beta {
             self.keystack.push(self.board[ply].hash());
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make_null());
@@ -588,7 +603,7 @@ impl Thread {
             }
             self.path.push(None);
             let mut reduction = if depth > 6 { 4 } else { 3 };
-            reduction += ((eval - beta) / 200).max(0);
+            reduction += ((static_eval - beta) / 200).max(0);
             let score = -self.search(depth - 1 - reduction, -beta, -beta + 1, ply + 1, tt, None);
             self.path.pop();
             self.keystack.pop();
@@ -659,7 +674,7 @@ impl Thread {
                 && ply > 0
                 && Some(*m) == tt_entry.m
             {
-                if depth >= 7 && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower) && tt_entry.score.abs() < 9500 {
+                if depth >= 7 && matches!(tt_entry.flags, TtFlags::Exact | TtFlags::Lower) && i32::from(tt_entry.score.abs()) < MATE_VALUE - 500 {
                     let singular_margin = (depth as f32 * self.params.singular_beta_margin) as i32;
                     let singular_beta = (i32::from(tt_entry.score) - singular_margin).max(-MATE_VALUE + 1);
                     let singular_depth = (depth - 1) / 2;
@@ -686,7 +701,7 @@ impl Thread {
                 // Low depth singular extension: Determine singularity by static eval vs alpha.
                 } else if !self.board[ply].in_check()
                     && depth <= 7
-                    && eval <= alpha - self.params.singular_low_depth_margin
+                    && static_eval <= alpha - self.params.singular_low_depth_margin
                     && tt_entry.flags == TtFlags::Lower
                 {
                     extension += 1;
@@ -813,9 +828,9 @@ impl Thread {
 
             if !self.board[ply].in_check()
                 && !best_move.unwrap().is_capture()
-                && (raised_alpha || (best >= beta && best >= eval) || (best <= alpha && best <= eval))
+                && (raised_alpha || (best >= beta && best >= static_eval) || (best <= alpha && best <= static_eval))
             {
-                self.update_corrhist(ply, depth, best - eval);
+                self.update_corrhist(ply, depth, best - static_eval);
             }
         }
 
