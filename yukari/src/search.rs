@@ -566,7 +566,7 @@ impl Thread {
         let eval = self.eval(ply);
         if !self.board[ply].in_check() {
             let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
-            if excluded_move.is_none() && depth <= 7 && eval - rfp_margin >= beta {
+            if excluded_move.is_none() && depth <= 8 && eval - rfp_margin >= beta {
                 return eval - rfp_margin;
             }
 
