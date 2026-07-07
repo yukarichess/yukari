@@ -296,7 +296,7 @@ impl Thread {
 
         let mut best = self.static_eval(self.raw_static_eval(ply), ply);
         if best >= beta {
-            return best;
+            return (best + beta) / 2;
         }
         alpha = alpha.max(best);
 
