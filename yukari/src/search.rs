@@ -231,22 +231,24 @@ impl SearchParams {
 #[derive(Clone)]
 #[repr(align(64))]
 struct Thread {
-    params:       SearchParams,
-    nodes:        u64,
-    qnodes:       u64,
-    seldepth:     usize,
-    stop:         Arc<AtomicBool>,
-    stop_after:   Option<Instant>,
-    node_limit:   Option<u64>,
-    board:        Vec<Board>,
-    pv:           Vec<Vec<Move>>,
-    keystack:     Vec<u64>,
-    index:        usize,
-    history:      [[[i16; 64]; 64]; 12],
-    conthist:     [[i16; 2 * 6 * 64]; 2 * 6 * 64],
-    corrhist_p:   [[i32; 16384]; 2],
-    corrhist_kbn: [[i32; 16384]; 2],
-    path:         Vec<Option<(Piece, Move)>>,
+    params:           SearchParams,
+    nodes:            u64,
+    qnodes:           u64,
+    seldepth:         usize,
+    stop:             Arc<AtomicBool>,
+    stop_after:       Option<Instant>,
+    node_limit:       Option<u64>,
+    board:            Vec<Board>,
+    pv:               Vec<Vec<Move>>,
+    keystack:         Vec<u64>,
+    index:            usize,
+    history:          [[[i16; 64]; 64]; 12],
+    conthist:         [[i16; 768]; 768],
+    corrhist_p:       [[i32; 16384]; 2],
+    corrhist_kbn:     [[i32; 16384]; 2],
+    corrhist_kqrbn_w: [[i32; 16384]; 2],
+    corrhist_kqrbn_b: [[i32; 16384]; 2],
+    path:             Vec<Option<(Piece, Move)>>,
 }
 
 impl Thread {
@@ -269,7 +271,9 @@ impl Thread {
         let entry_p = self.corrhist_p[self.board[ply].side() as usize][self.board[ply].hash_pawns() as usize & 16383];
         // kings, bishops, knights
         let entry_kbn = self.corrhist_kbn[self.board[ply].side() as usize][self.board[ply].data().hash_kbn() as usize & 16383];
-        let corrhist = (entry_p + entry_kbn) / CORRHIST_GRAIN;
+        let entry_kqrbn_w = self.corrhist_kqrbn_w[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::White) as usize & 16383];
+        let entry_kqrbn_b = self.corrhist_kqrbn_b[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::Black) as usize & 16383];
+        let corrhist = (entry_p + entry_kbn + entry_kqrbn_w + entry_kqrbn_b) / CORRHIST_GRAIN;
         (raw_static_eval + corrhist).clamp(-MATE_VALUE + 501, MATE_VALUE - 501)
     }
 
@@ -494,6 +498,20 @@ impl Thread {
         let entry_p = &mut self.corrhist_p[self.board[ply].side() as usize][self.board[ply].data().hash_pawns() as usize & 16383];
 
         *entry_p = ((*entry_p * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
+            .clamp(-CORRHIST_MAX, CORRHIST_MAX);
+
+        // nonpawns (white)
+        let entry_kqrbn_w =
+            &mut self.corrhist_kqrbn_w[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::White) as usize & 16383];
+
+        *entry_kqrbn_w = ((*entry_kqrbn_w * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
+            .clamp(-CORRHIST_MAX, CORRHIST_MAX);
+
+        // nonpawns (black)
+        let entry_kqrbn_b =
+            &mut self.corrhist_kqrbn_b[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::Black) as usize & 16383];
+
+        *entry_kqrbn_b = ((*entry_kqrbn_b * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
 
         // kings, bishops, knights
@@ -846,22 +864,24 @@ impl Search {
         };
         this.threads = vec![
             Thread {
-                params:       this.params.clone(),
-                nodes:        0,
-                qnodes:       0,
-                seldepth:     0,
-                board:        vec![],
-                pv:           vec![],
-                keystack:     vec![],
-                stop:         Arc::clone(&this.stop),
-                stop_after:   None,
-                node_limit:   None,
-                index:        0,
-                history:      [[[0; _]; _]; _],
-                conthist:     [[0; _]; _],
-                corrhist_p:   [[0; _]; _],
-                corrhist_kbn: [[0; _]; _],
-                path:         vec![],
+                params:           this.params.clone(),
+                nodes:            0,
+                qnodes:           0,
+                seldepth:         0,
+                board:            vec![],
+                pv:               vec![],
+                keystack:         vec![],
+                stop:             Arc::clone(&this.stop),
+                stop_after:       None,
+                node_limit:       None,
+                index:            0,
+                history:          [[[0; _]; _]; _],
+                conthist:         [[0; _]; _],
+                corrhist_p:       [[0; _]; _],
+                corrhist_kbn:     [[0; _]; _],
+                corrhist_kqrbn_w: [[0; _]; _],
+                corrhist_kqrbn_b: [[0; _]; _],
+                path:             vec![],
             };
             threads
         ];
