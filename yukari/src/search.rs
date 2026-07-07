@@ -588,7 +588,7 @@ impl Thread {
         if !self.board[ply].in_check() {
             let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
             if excluded_move.is_none() && depth <= 7 && static_eval - rfp_margin >= beta {
-                return static_eval - rfp_margin;
+                return (static_eval + beta) / 2;
             }
 
             let razor_margin = (depth as f32 * self.params.razor_margin) as i32;
