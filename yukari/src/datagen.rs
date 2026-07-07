@@ -5,8 +5,7 @@ use std::{
 };
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use rand::seq::IteratorRandom;
-use rand::Rng;
+use rand::{Rng, seq::IteratorRandom};
 use tinyvec::ArrayVec;
 use yukari_movegen::{Board, Colour, Move, MoveType, Piece, Square};
 
