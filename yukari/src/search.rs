@@ -587,7 +587,7 @@ impl Thread {
         let static_eval = self.static_eval(raw_static_eval, ply);
         if !self.board[ply].in_check() {
             let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
-            if excluded_move.is_none() && depth <= 7 && static_eval - rfp_margin >= beta {
+            if excluded_move.is_none() && depth <= 7 && static_eval - rfp_margin >= beta && beta.abs() < MATE_VALUE - 500 {
                 return static_eval - rfp_margin;
             }
 
@@ -598,24 +598,24 @@ impl Thread {
                     return score;
                 }
             }
-        }
 
-        if excluded_move.is_none() && !expected_pvnode && !self.board[ply].in_check() && depth >= 2 && static_eval >= beta {
-            self.keystack.push(self.board[ply].hash());
-            if self.board.len() <= ply + 1 {
-                self.board.push(self.board[ply].make_null());
-            } else {
-                self.board[ply + 1] = self.board[ply].make_null();
-            }
-            self.path.push(None);
-            let mut reduction = if depth > 6 { 4 } else { 3 };
-            reduction += ((static_eval - beta) / 200).max(0);
-            let score = -self.search(depth - 1 - reduction, -beta, -beta + 1, ply + 1, tt, None);
-            self.path.pop();
-            self.keystack.pop();
+            if excluded_move.is_none() && !expected_pvnode && depth >= 2 && static_eval >= beta {
+                self.keystack.push(self.board[ply].hash());
+                if self.board.len() <= ply + 1 {
+                    self.board.push(self.board[ply].make_null());
+                } else {
+                    self.board[ply + 1] = self.board[ply].make_null();
+                }
+                self.path.push(None);
+                let mut reduction = if depth > 6 { 4 } else { 3 };
+                reduction += ((static_eval - beta) / 200).max(0);
+                let score = -self.search(depth - 1 - reduction, -beta, -beta + 1, ply + 1, tt, None);
+                self.path.pop();
+                self.keystack.pop();
 
-            if score >= beta {
-                return score;
+                if score >= beta {
+                    return score;
+                }
             }
         }
 
