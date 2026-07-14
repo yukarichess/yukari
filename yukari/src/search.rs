@@ -585,21 +585,21 @@ impl Thread {
 
         let raw_static_eval = self.raw_static_eval(ply);
         let static_eval = self.static_eval(raw_static_eval, ply);
-        if !self.board[ply].in_check() {
+        if excluded_move.is_none() && !self.board[ply].in_check() && !expected_pvnode {
             let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
-            if excluded_move.is_none() && depth <= 7 && static_eval - rfp_margin >= beta && beta.abs() < MATE_VALUE - 500 {
+            if depth <= 7 && static_eval - rfp_margin >= beta && beta.abs() < MATE_VALUE - 500 {
                 return static_eval - rfp_margin;
             }
 
             let razor_margin = (depth as f32 * self.params.razor_margin) as i32;
-            if excluded_move.is_none() && depth == 1 && alpha.abs() < 2000 && static_eval + razor_margin <= alpha {
+            if depth == 1 && static_eval + razor_margin <= alpha && alpha.abs() < 2000 {
                 let score = self.quiesce(alpha, alpha + 1, ply, tt);
                 if score <= alpha {
                     return score;
                 }
             }
 
-            if excluded_move.is_none() && !expected_pvnode && depth >= 2 && static_eval >= beta {
+            if depth >= 2 && static_eval >= beta {
                 self.keystack.push(self.board[ply].hash());
                 if self.board.len() <= ply + 1 {
                     self.board.push(self.board[ply].make_null());
