@@ -39,17 +39,17 @@ pub enum Protocol {
 
 /// The main engine state
 pub struct Yukari {
-    board: Board,
-    tc: TimeControl,
-    max_depth: Option<i32>,
+    board:            Board,
+    tc:               TimeControl,
+    max_depth:        Option<i32>,
     nodes_per_second: Option<u32>,
-    mode: Mode,
-    keystack: Vec<u64>,
-    search: Search,
-    threads: usize,
-    hash_megabytes: usize,
-    params: SearchParams,
-    chess960: bool,
+    mode:             Mode,
+    keystack:         Vec<u64>,
+    search:           Search,
+    threads:          usize,
+    hash_megabytes:   usize,
+    params:           SearchParams,
+    chess960:         bool,
 }
 
 impl Yukari {

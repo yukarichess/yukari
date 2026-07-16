@@ -1,8 +1,7 @@
 use std::{
     cmp::Ordering,
-    fmt::Write,
     sync::{
-        Arc,
+        Arc, Weak,
         atomic::{self, AtomicBool, AtomicU64},
     },
     time::Instant,
@@ -232,8 +231,8 @@ impl SearchParams {
 #[repr(align(64))]
 struct Thread {
     params:           SearchParams,
-    nodes:            u64,
-    qnodes:           u64,
+    nodes:            Arc<AtomicU64>,
+    qnodes:           Arc<AtomicU64>,
     seldepth:         usize,
     stop:             Arc<AtomicBool>,
     stop_after:       Option<Instant>,
@@ -271,8 +270,10 @@ impl Thread {
         let entry_p = self.corrhist_p[self.board[ply].side() as usize][self.board[ply].hash_pawns() as usize & 16383];
         // kings, bishops, knights
         let entry_kbn = self.corrhist_kbn[self.board[ply].side() as usize][self.board[ply].data().hash_kbn() as usize & 16383];
-        let entry_kqrbn_w = self.corrhist_kqrbn_w[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::White) as usize & 16383];
-        let entry_kqrbn_b = self.corrhist_kqrbn_b[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::Black) as usize & 16383];
+        let entry_kqrbn_w = self.corrhist_kqrbn_w[self.board[ply].side() as usize]
+            [self.board[ply].data().hash_nonpawn(Colour::White) as usize & 16383];
+        let entry_kqrbn_b = self.corrhist_kqrbn_b[self.board[ply].side() as usize]
+            [self.board[ply].data().hash_nonpawn(Colour::Black) as usize & 16383];
         let corrhist = (entry_p + entry_kbn + entry_kqrbn_w + entry_kqrbn_b) / CORRHIST_GRAIN;
         (raw_static_eval + corrhist).clamp(-MATE_VALUE + 501, MATE_VALUE - 501)
     }
@@ -330,7 +331,7 @@ impl Thread {
                 continue;
             }
 
-            self.qnodes += 1;
+            self.qnodes.fetch_add(1, atomic::Ordering::Relaxed);
 
             if self.board.len() <= ply + 1 {
                 self.board.push(self.board[ply].make(*m));
@@ -501,15 +502,15 @@ impl Thread {
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
 
         // nonpawns (white)
-        let entry_kqrbn_w =
-            &mut self.corrhist_kqrbn_w[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::White) as usize & 16383];
+        let entry_kqrbn_w = &mut self.corrhist_kqrbn_w[self.board[ply].side() as usize]
+            [self.board[ply].data().hash_nonpawn(Colour::White) as usize & 16383];
 
         *entry_kqrbn_w = ((*entry_kqrbn_w * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
 
         // nonpawns (black)
-        let entry_kqrbn_b =
-            &mut self.corrhist_kqrbn_b[self.board[ply].side() as usize][self.board[ply].data().hash_nonpawn(Colour::Black) as usize & 16383];
+        let entry_kqrbn_b = &mut self.corrhist_kqrbn_b[self.board[ply].side() as usize]
+            [self.board[ply].data().hash_nonpawn(Colour::Black) as usize & 16383];
 
         *entry_kqrbn_b = ((*entry_kqrbn_b * (CORRHIST_WEIGHT_SCALE - weight) + diff * weight) / CORRHIST_WEIGHT_SCALE)
             .clamp(-CORRHIST_MAX, CORRHIST_MAX);
@@ -712,7 +713,7 @@ impl Thread {
                 }
             }
 
-            self.nodes += 1;
+            self.nodes.fetch_add(1, atomic::Ordering::Relaxed);
 
             self.path.push(Some((self.board[ply].piece_from_square(m.from()).unwrap(), *m)));
 
@@ -768,12 +769,12 @@ impl Thread {
 
             if self.index == 0 {
                 if let Some(node_limit) = self.node_limit
-                    && self.nodes + self.qnodes >= node_limit
+                    && self.nodes.load(atomic::Ordering::Relaxed) + self.qnodes.load(atomic::Ordering::Relaxed) >= node_limit
                 {
                     self.stop.store(true, atomic::Ordering::Release);
                 }
 
-                if self.nodes.trailing_zeros() >= 10
+                if self.nodes.load(atomic::Ordering::Relaxed).trailing_zeros() >= 10
                     && let Some(time) = self.stop_after
                     && Instant::now() >= time
                 {
@@ -865,8 +866,8 @@ impl Search {
         this.threads = vec![
             Thread {
                 params:           this.params.clone(),
-                nodes:            0,
-                qnodes:           0,
+                nodes:            Arc::new(0.into()),
+                qnodes:           Arc::new(0.into()),
                 seldepth:         0,
                 board:            vec![],
                 pv:               vec![],
@@ -893,8 +894,8 @@ impl Search {
         self.stop.store(false, atomic::Ordering::Release);
         for (index, thread) in self.threads.iter_mut().enumerate() {
             thread.params = self.params.clone();
-            thread.nodes = 0;
-            thread.qnodes = 0;
+            thread.nodes = Arc::new(0.into());
+            thread.qnodes = Arc::new(0.into());
             thread.seldepth = 0;
             thread.stop_after = stop_after;
             thread.node_limit = node_limit;
@@ -937,12 +938,12 @@ impl Search {
 
     #[must_use]
     pub fn nodes(&self) -> u64 {
-        self.threads.iter().map(|thread| thread.nodes).sum()
+        self.threads.iter().map(|thread| thread.nodes.load(atomic::Ordering::Relaxed)).sum()
     }
 
     #[must_use]
     pub fn qnodes(&self) -> u64 {
-        self.threads.iter().map(|thread| thread.qnodes).sum()
+        self.threads.iter().map(|thread| thread.qnodes.load(atomic::Ordering::Relaxed)).sum()
     }
 
     #[must_use]
