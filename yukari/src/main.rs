@@ -221,17 +221,6 @@ impl Yukari {
                 break;
             }
 
-            // Modify time to search based on best move stability.
-            if matches!(self.tc.mode, TimeMode::Incremental { base: _, increment: _ }) && !pv.is_empty() && !best_pv.is_empty() {
-                if pv[0] == best_pv[0] {
-                    let soft_limit_diff = soft_limit - start;
-                    soft_limit = start + soft_limit_diff.mul_f64(0.95);
-                } else {
-                    let soft_limit_diff = soft_limit - start;
-                    soft_limit = start + soft_limit_diff.mul_f64(1.1);
-                }
-            }
-
             // If we have a pv that's not just empty from bailing out use that as our best moves
             best_pv.clone_from(&pv);
             valid_score = score;
