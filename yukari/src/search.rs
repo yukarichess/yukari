@@ -149,6 +149,7 @@ pub struct SearchParams {
     lmr_pv: f32,
     history_bonus_base: f32,
     history_bonus_mul: f32,
+    lazy_eval_margin: i32,
 }
 
 impl Default for SearchParams {
@@ -166,6 +167,7 @@ impl Default for SearchParams {
             lmr_pv: 1.147_785_8,
             history_bonus_base: -201.544_16,
             history_bonus_mul: 299.397_2,
+            lazy_eval_margin: 100,
         }
     }
 }
@@ -186,6 +188,7 @@ impl SearchParams {
         println!("option name lmr_pv type string default {}", self.lmr_pv);
         println!("option name history_bonus_base type string default {}", self.history_bonus_base);
         println!("option name history_bonus_mul type string default {}", self.history_bonus_mul);
+        println!("option name lazy_eval_margin type spin default {} min 0 max 200", self.lazy_eval_margin);
     }
 
     pub fn display_openbench(&self) {
@@ -204,6 +207,7 @@ impl SearchParams {
         println!("lmr_pv, float, {}, 0.0, 2.0, 0.1, 0.002", self.lmr_pv);
         println!("history_bonus_base, float, {}, -600.0, 0.0, 30.0, 0.002", self.history_bonus_base);
         println!("history_bonus_mul, float, {}, 0.0, 500.0, 25.0, 0.002", self.history_bonus_mul);
+        println!("lazy_eval_margin, int, {}, 0.0, 200.0, 10.0, 0.002", self.lazy_eval_margin);
     }
 
     pub fn display_rust(&self) {}
@@ -222,6 +226,7 @@ impl SearchParams {
             "lmr_pv" => self.lmr_pv = value.parse().unwrap(),
             "history_bonus_base" => self.history_bonus_base = value.parse().unwrap(),
             "history_bonus_mul" => self.history_bonus_mul = value.parse().unwrap(),
+            "lazy_eval_margin" => self.lazy_eval_margin = value.parse().unwrap(),
             _ => (),
         }
     }
@@ -251,8 +256,13 @@ struct Thread {
 }
 
 impl Thread {
-    fn raw_static_eval(&self, ply: usize) -> i32 {
-        self.board[ply].eval(self.board[ply].side())
+    fn raw_static_eval(&mut self, ply: usize, alpha: i32, beta: i32) -> i32 {
+        let colour = self.board[ply].side();
+        let lazy_eval = self.board[ply].eval_small(colour);
+        if lazy_eval > beta + self.params.lazy_eval_margin || lazy_eval < alpha - self.params.lazy_eval_margin {
+            return lazy_eval;
+        }
+        self.board[ply].eval_big(colour)
     }
 
     fn static_eval(&self, raw_static_eval: i32, ply: usize) -> i32 {
@@ -282,7 +292,8 @@ impl Thread {
         let expected_pvnode = alpha != beta - 1;
 
         if ply >= MAX_PLY {
-            return self.static_eval(self.raw_static_eval(ply), ply);
+            let raw_static_eval = self.raw_static_eval(ply, alpha, beta);
+            return self.static_eval(raw_static_eval, ply);
         }
 
         if self.pv.len() <= ply {
@@ -295,7 +306,8 @@ impl Thread {
             self.seldepth = self.seldepth.max(ply);
         }
 
-        let mut best = self.static_eval(self.raw_static_eval(ply), ply);
+        let raw_static_eval = self.raw_static_eval(ply, alpha, beta);
+        let mut best = self.static_eval(raw_static_eval, ply);
         if best >= beta {
             return best;
         }
@@ -528,7 +540,8 @@ impl Thread {
         let expected_pvnode = alpha != beta - 1;
 
         if ply >= MAX_PLY {
-            return self.static_eval(self.raw_static_eval(ply), ply);
+            let raw_static_eval = self.raw_static_eval(ply, alpha, beta);
+            return self.static_eval(raw_static_eval, ply);
         }
 
         if self.pv.len() <= ply {
@@ -584,7 +597,7 @@ impl Thread {
             }
         }
 
-        let raw_static_eval = self.raw_static_eval(ply);
+        let raw_static_eval = self.raw_static_eval(ply, alpha, beta);
         let static_eval = self.static_eval(raw_static_eval, ply);
         if excluded_move.is_none() && !self.board[ply].in_check() && !expected_pvnode {
             let rfp_margin = (depth as f32 * self.params.rfp_margin) as i32;
@@ -892,6 +905,7 @@ impl Search {
     pub fn prepare(&mut self, board: &Board, stop_after: Option<Instant>, node_limit: Option<u64>, keystack: &[u64]) {
         self.stop_after = stop_after;
         self.stop.store(false, atomic::Ordering::Release);
+        let board = board.clone();
         for (index, thread) in self.threads.iter_mut().enumerate() {
             thread.params = self.params.clone();
             thread.nodes = Arc::new(0.into());

@@ -1,5 +1,7 @@
-NNUE = fti27-wye
-EVALFILE ?= ../../../$(NNUE).bin
+NNUE_BIG = fti27-wye
+NNUE_SMALL = fti29
+EVALFILE ?= ../../../$(NNUE_BIG).bin
+EVALFILE_SMALL ?= ../../../$(NNUE_SMALL).bin
 
 # If on Windows, add the .exe extension to the executable and use PowerShell instead of `sed`
 ifeq ($(OS),Windows_NT)
@@ -23,7 +25,7 @@ endif
 
 
 # Compile an executable for use with OpenBench
-openbench: $(NNUE).bin
+openbench: $(NNUE_BIG).bin $(NNUE_SMALL).bin
 	@echo $(NAME)
 	@echo Compiling $(EXE) for OpenBench
 	@echo "triple: $(TRIPLE)"
@@ -34,6 +36,7 @@ openbench: $(NNUE).bin
 	echo "rustflags = \"-C target-cpu=native\"" >> .cargo/config.toml
 	echo "[env]" >> .cargo/config.toml
 	echo "EVALFILE = \"$(EVALFILE)\"" >> .cargo/config.toml
+	echo "EVALFILE_SMALL = \"$(EVALFILE_SMALL)\"" >> .cargo/config.toml
 	cargo pgo instrument
 	cargo pgo run -- bench
 	cargo pgo optimize
@@ -44,8 +47,11 @@ clean:
 	@echo Removing $(EXE)
 	rm $(EXE)
 
-$(NNUE).bin:
-	curl -L https://github.com/yukarichess/yukari-nets/releases/download/$(NNUE)/$(NNUE).bin -o $(NNUE).bin
+$(NNUE_BIG).bin:
+	curl -L https://github.com/yukarichess/yukari-nets/releases/download/$(NNUE_BIG)/$(NNUE_BIG).bin -o $(NNUE_BIG).bin
+
+$(NNUE_SMALL).bin:
+	curl -L https://github.com/yukarichess/yukari-nets/releases/download/$(NNUE_SMALL)/$(NNUE_SMALL).bin -o $(NNUE_SMALL).bin
 
 .PHONY: openbench clean
 

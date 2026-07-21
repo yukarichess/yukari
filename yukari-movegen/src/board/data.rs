@@ -460,8 +460,13 @@ impl BoardData {
     }
 
     /// Evaluation from the perspective of `colour`.
-    pub fn eval(&self, colour: Colour) -> i32 {
-        self.eval.get(self.piecemask().occupied().count_ones() as usize, colour)
+    pub fn eval_small(&mut self, colour: Colour) -> i32 {
+        self.eval.get_small(self.piecemask().occupied().count_ones() as usize, colour)
+    }
+
+    /// Evaluation from the perspective of `colour`.
+    pub fn eval_big(&mut self, colour: Colour) -> i32 {
+        self.eval.get_big(self.piecemask().occupied().count_ones() as usize, colour)
     }
 
     /// Rebuild the attack set for the board.

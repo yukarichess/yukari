@@ -1121,8 +1121,13 @@ impl Board {
     }
 
     #[must_use]
-    pub fn eval(&self, colour: Colour) -> i32 {
-        self.data.eval(colour)
+    pub fn eval_small(&mut self, colour: Colour) -> i32 {
+        self.data.eval_small(colour)
+    }
+
+    #[must_use]
+    pub fn eval_big(&mut self, colour: Colour) -> i32 {
+        self.data.eval_big(colour)
     }
 
     #[must_use]

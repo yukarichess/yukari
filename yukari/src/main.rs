@@ -689,7 +689,7 @@ fn run() -> io::Result<()> {
                 engine.search.params.parse(name, value);
                 engine.params = engine.search.params.clone();
             },
-            "eval" => println!("{}", engine.board.eval(engine.board.side())),
+            "eval" => println!("small: {}\tbig: {}", engine.board.eval_small(engine.board.side()), engine.board.eval_big(engine.board.side())),
             // Hard would turn on thinking during opponent's time, easy would turn it off
             // we don't do it, so it's unimportant
             "hard" | "easy" => {},

@@ -1,11 +1,14 @@
 use std::simd::{cmp::SimdOrd, i8x32, i16x32, i32x32, num::SimdInt};
 
+use tinyvec::ArrayVec;
+
 use super::feature;
 use crate::{Colour, File, Piece, Square};
 
 pub const HORIZONTAL_MIRROR: bool = true;
 const INPUTS: usize = (2 * 6 * 64) + 2 * feature::MAX_OFFSET;
-const HIDDEN_SIZE: usize = 512;
+const HIDDEN_SIZE_BIG: usize = 512;
+const HIDDEN_SIZE_SMALL: usize = 32;
 const OUTPUT_BUCKETS: usize = 8;
 const DIVISOR: usize = 32_usize.div_ceil(OUTPUT_BUCKETS);
 const SCALE: i32 = 400;
@@ -14,25 +17,27 @@ const QB: i16 = 64;
 
 /// This is the quantised format that yukari uses.
 #[repr(C)]
-pub struct Network {
+pub struct Network<const WIDTH: usize> {
     /// Column-Major `HIDDEN_SIZE x INPUTS` matrix.
-    feature_threat_weights: [[i8; HIDDEN_SIZE]; 60144],
-    feature_pst_weights:    [Accumulator; 768],
+    feature_threat_weights: [[i8; WIDTH]; 60144],
+    feature_pst_weights:    [Accumulator<WIDTH>; 768],
     /// Vector with dimension `HIDDEN_SIZE`.
-    feature_bias:           Accumulator,
-    /// Row-Major `OUTPUT_BUCKETS x (2 * HIDDEN_SIZE)` matrix.
-    output_weights:         [[Accumulator; 2]; OUTPUT_BUCKETS],
+    feature_bias:           Accumulator<WIDTH>,
+    /// Row-Major `OUTPUT_BUCKETS x (2 * WIDTH)` matrix.
+    output_weights:         [[Accumulator<WIDTH>; 2]; OUTPUT_BUCKETS],
     /// Scalar output biases.
     output_bias:            [i16; OUTPUT_BUCKETS],
 }
 
-static NNUE: Network =
-    unsafe { std::mem::transmute::<[u8; std::mem::size_of::<Network>()], Network>(*include_bytes!(env!("EVALFILE"))) };
+static NNUE_BIG: Network<HIDDEN_SIZE_BIG> =
+    unsafe { std::mem::transmute::<[u8; std::mem::size_of::<Network<HIDDEN_SIZE_BIG>>()], Network<HIDDEN_SIZE_BIG>>(*include_bytes!(env!("EVALFILE"))) };
+static NNUE_SMALL: Network<HIDDEN_SIZE_SMALL> =
+    unsafe { std::mem::transmute::<[u8; std::mem::size_of::<Network<HIDDEN_SIZE_SMALL>>()], Network<HIDDEN_SIZE_SMALL>>(*include_bytes!(env!("EVALFILE_SMALL"))) };
 
-impl Network {
+impl<const WIDTH: usize> Network<WIDTH> {
     /// Calculates the output of the network, starting from the already
     /// calculated hidden layer (done efficiently during makemoves).
-    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, output_bucket: usize) -> i32 {
+    pub fn evaluate(&self, us: &Accumulator<WIDTH>, them: &Accumulator<WIDTH>, output_bucket: usize) -> i32 {
         // Initialise output with bias.
         let mut output = i32x32::splat(0);
         let min = i16x32::splat(0);
@@ -76,20 +81,20 @@ impl Network {
 /// Note the `align(64)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C, align(64))]
-pub struct Accumulator {
-    vals: [i16; HIDDEN_SIZE],
+pub struct Accumulator<const WIDTH: usize> {
+    vals: [i16; WIDTH],
 }
 
-impl Accumulator {
+impl<const WIDTH: usize> Accumulator<WIDTH> {
     /// Initialised with bias so we can just efficiently
     /// operate on it afterwards.
-    pub const fn new(net: &Network) -> Self {
+    pub const fn new(net: &Network<WIDTH>) -> Self {
         net.feature_bias
     }
 
     /// Add a feature to an accumulator.
     #[inline(never)]
-    pub fn add_feature(&mut self, feature_idx: usize, net: &Network) {
+    pub fn add_feature(&mut self, feature_idx: usize, net: &Network<WIDTH>) {
         let (acc_chunks, []) = self.vals.as_chunks_mut::<32>() else { unreachable!() };
         if feature_idx < 768 {
             let (weight_chunks, []) = net.feature_pst_weights[feature_idx].vals.as_chunks::<32>() else { unreachable!() };
@@ -107,7 +112,7 @@ impl Accumulator {
 
     /// Remove a feature from an accumulator.
     #[inline(never)]
-    pub fn remove_feature(&mut self, feature_idx: usize, net: &Network) {
+    pub fn remove_feature(&mut self, feature_idx: usize, net: &Network<WIDTH>) {
         let (acc_chunks, []) = self.vals.as_chunks_mut::<32>() else { unreachable!() };
         if feature_idx < 768 {
             let (weight_chunks, []) = net.feature_pst_weights[feature_idx].vals.as_chunks::<32>() else { unreachable!() };
@@ -125,30 +130,104 @@ impl Accumulator {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LazyAccumulator<const WIDTH: usize> {
+    acc: Accumulator<WIDTH>,
+    pending_add: ArrayVec<[u16; 64]>,
+    pending_sub: ArrayVec<[u16; 64]>,
+}
+
+impl<const WIDTH: usize> LazyAccumulator<WIDTH> {
+    pub fn new(net: &Network<WIDTH>) -> Self {
+        Self {
+            acc: Accumulator::new(net),
+            pending_add: ArrayVec::new(),
+            pending_sub: ArrayVec::new(),
+        }
+    }
+
+    pub fn clear(&mut self, net: &Network<WIDTH>) {
+        self.acc = Accumulator::new(net);
+        self.pending_add.clear();
+        self.pending_sub.clear();
+    }
+
+    pub fn acc(&self) -> &Accumulator<WIDTH> {
+        &self.acc
+    }
+
+    pub fn add_feature(&mut self, feature_idx: usize, net: &Network<WIDTH>) {
+        if self.pending_add.len() == self.pending_add.capacity() - 1 {
+            self.fast_forward(net);
+        }
+        self.pending_add.push(feature_idx as u16);
+    }
+
+    pub fn remove_feature(&mut self, feature_idx: usize, net: &Network<WIDTH>) {
+        if self.pending_sub.len() == self.pending_sub.capacity() - 1 {
+            self.fast_forward(net);
+        }
+        self.pending_sub.push(feature_idx as u16);
+    }
+
+    pub fn fast_forward(&mut self, net: &Network<WIDTH>) {
+        for &feature_idx in &self.pending_add {
+            self.acc.add_feature(feature_idx.into(), net);
+        }
+        for &feature_idx in &self.pending_sub {
+            self.acc.remove_feature(feature_idx.into(), net);
+        }
+        self.pending_add.clear();
+        self.pending_sub.clear();
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Eval {
-    white: Accumulator,
-    black: Accumulator,
+    white_small: LazyAccumulator<HIDDEN_SIZE_SMALL>,
+    black_small: LazyAccumulator<HIDDEN_SIZE_SMALL>,
+    white_big: LazyAccumulator<HIDDEN_SIZE_BIG>,
+    black_big: LazyAccumulator<HIDDEN_SIZE_BIG>,
 }
 
 impl Eval {
     pub fn new() -> Self {
-        Self { white: Accumulator::new(&NNUE), black: Accumulator::new(&NNUE) }
+        Self { 
+            white_small: LazyAccumulator::new(&NNUE_SMALL), 
+            black_small: LazyAccumulator::new(&NNUE_SMALL),
+            white_big: LazyAccumulator::new(&NNUE_BIG), 
+            black_big: LazyAccumulator::new(&NNUE_BIG),
+        }
     }
 
     pub fn reset_colour(&mut self, colour: Colour) {
         if colour == Colour::White {
-            self.white = Accumulator::new(&NNUE);
+            self.white_small.clear(&NNUE_SMALL);
+            self.white_big.clear(&NNUE_BIG);
         } else {
-            self.black = Accumulator::new(&NNUE);
+            self.black_small.clear(&NNUE_SMALL);
+            self.black_big.clear(&NNUE_BIG);
         }
     }
 
-    pub fn get(&self, piece_count: usize, colour: Colour) -> i32 {
+    pub fn get_small(&mut self, piece_count: usize, colour: Colour) -> i32 {
         let output_bucket = (piece_count - 2) / DIVISOR;
+        self.white_small.fast_forward(&NNUE_SMALL);
+        self.black_small.fast_forward(&NNUE_SMALL);
         if colour == Colour::White {
-            NNUE.evaluate(&self.white, &self.black, output_bucket)
+            NNUE_SMALL.evaluate(self.white_small.acc(), self.black_small.acc(), output_bucket)
         } else {
-            NNUE.evaluate(&self.black, &self.white, output_bucket)
+            NNUE_SMALL.evaluate(self.black_small.acc(), self.white_small.acc(), output_bucket)
+        }
+    }
+
+    pub fn get_big(&mut self, piece_count: usize, colour: Colour) -> i32 {
+        let output_bucket = (piece_count - 2) / DIVISOR;
+        self.white_big.fast_forward(&NNUE_BIG);
+        self.black_big.fast_forward(&NNUE_BIG);
+        if colour == Colour::White {
+            NNUE_BIG.evaluate(self.white_big.acc(), self.black_big.acc(), output_bucket)
+        } else {
+            NNUE_BIG.evaluate(self.black_big.acc(), self.white_big.acc(), output_bucket)
         }
     }
 
@@ -160,11 +239,13 @@ impl Eval {
         &mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool,
     ) {
         if white_acc {
-            self.white
-                .add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+            let feature_idx = feature::index_pst(piece, square, white_king, colour == Colour::White);
+            self.white_small.add_feature(feature_idx, &NNUE_SMALL);
+            self.white_big.add_feature(feature_idx, &NNUE_BIG);
         } else {
-            self.black
-                .add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+            let feature_idx = feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black);
+            self.black_small.add_feature(feature_idx, &NNUE_SMALL);
+            self.black_big.add_feature(feature_idx, &NNUE_BIG);
         }
     }
 
@@ -188,7 +269,8 @@ impl Eval {
             ) else {
                 return;
             };
-            self.white.add_feature(feature_idx, &NNUE);
+            self.white_small.add_feature(feature_idx, &NNUE_SMALL);
+            self.white_big.add_feature(feature_idx, &NNUE_BIG);
         } else {
             //print!("+ ");
             let Some(feature_idx) = feature::index_threat(
@@ -203,15 +285,19 @@ impl Eval {
             ) else {
                 return;
             };
-            self.black.add_feature(feature_idx, &NNUE);
+            self.black_small.add_feature(feature_idx, &NNUE_SMALL);
+            self.black_big.add_feature(feature_idx, &NNUE_BIG);
         }
     }
 
     pub fn add_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        self.white
-            .add_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
-        self.black
-            .add_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+        let feature_idx = feature::index_pst(piece, square, white_king, colour == Colour::White);
+        self.white_small.add_feature(feature_idx, &NNUE_SMALL);
+        self.white_big.add_feature(feature_idx, &NNUE_BIG);
+
+        let feature_idx = feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black);
+        self.black_small.add_feature(feature_idx, &NNUE_SMALL);
+        self.black_big.add_feature(feature_idx, &NNUE_BIG);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -244,11 +330,13 @@ impl Eval {
             true,
         );
 
-        if let Some(white_feature_idx) = white_feature_idx {
-            self.white.add_feature(white_feature_idx, &NNUE);
+        if let Some(feature_idx) = white_feature_idx {
+            self.white_small.add_feature(feature_idx, &NNUE_SMALL);
+            self.white_big.add_feature(feature_idx, &NNUE_BIG);
         }
-        if let Some(black_feature_idx) = black_feature_idx {
-            self.black.add_feature(black_feature_idx, &NNUE);
+        if let Some(feature_idx) = black_feature_idx {
+            self.black_small.add_feature(feature_idx, &NNUE_SMALL);
+            self.black_big.add_feature(feature_idx, &NNUE_BIG);
         }
     }
 
@@ -256,11 +344,13 @@ impl Eval {
         &mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square, white_acc: bool,
     ) {
         if white_acc {
-            self.white
-                .remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
+            let feature_idx = feature::index_pst(piece, square, white_king, colour == Colour::White);
+            self.white_small.remove_feature(feature_idx, &NNUE_SMALL);
+            self.white_big.remove_feature(feature_idx, &NNUE_BIG);
         } else {
-            self.black
-                .remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+            let feature_idx = feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black);
+            self.black_small.remove_feature(feature_idx, &NNUE_SMALL);
+            self.black_big.remove_feature(feature_idx, &NNUE_BIG);
         }
     }
 
@@ -284,7 +374,8 @@ impl Eval {
             ) else {
                 return;
             };
-            self.white.remove_feature(feature_idx, &NNUE);
+            self.white_small.remove_feature(feature_idx, &NNUE_SMALL);
+            self.white_big.remove_feature(feature_idx, &NNUE_BIG);
         } else {
             //print!("- ");
             let Some(feature_idx) = feature::index_threat(
@@ -299,15 +390,19 @@ impl Eval {
             ) else {
                 return;
             };
-            self.black.remove_feature(feature_idx, &NNUE);
+            self.black_small.remove_feature(feature_idx, &NNUE_SMALL);
+            self.black_big.remove_feature(feature_idx, &NNUE_BIG);
         }
     }
 
     pub fn remove_piece(&mut self, piece: Piece, square: Square, colour: Colour, white_king: Square, black_king: Square) {
-        self.white
-            .remove_feature(feature::index_pst(piece, square, white_king, colour == Colour::White), &NNUE);
-        self.black
-            .remove_feature(feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black), &NNUE);
+        let feature_idx = feature::index_pst(piece, square, white_king, colour == Colour::White);
+        self.white_small.remove_feature(feature_idx, &NNUE_SMALL);
+        self.white_big.remove_feature(feature_idx, &NNUE_BIG);
+
+        let feature_idx = feature::index_pst(piece, square.flip(), black_king, colour == Colour::Black);
+        self.black_small.remove_feature(feature_idx, &NNUE_SMALL);
+        self.black_big.remove_feature(feature_idx, &NNUE_BIG);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -340,11 +435,13 @@ impl Eval {
             true,
         );
 
-        if let Some(white_feature_idx) = white_feature_idx {
-            self.white.remove_feature(white_feature_idx, &NNUE);
+        if let Some(feature_idx) = white_feature_idx {
+            self.white_small.remove_feature(feature_idx, &NNUE_SMALL);
+            self.white_big.remove_feature(feature_idx, &NNUE_BIG);
         }
-        if let Some(black_feature_idx) = black_feature_idx {
-            self.black.remove_feature(black_feature_idx, &NNUE);
+        if let Some(feature_idx) = black_feature_idx {
+            self.black_small.remove_feature(feature_idx, &NNUE_SMALL);
+            self.black_big.remove_feature(feature_idx, &NNUE_BIG);
         }
     }
 
